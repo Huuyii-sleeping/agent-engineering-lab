@@ -1,0 +1,14 @@
+# <type>(<scope>): <subject>
+#
+# types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
+# scope: optional, e.g. git, auth, api
+# subject: imperative, lowercase preferred, no trailing period
+#
+# body (optional):
+# - what changed
+# - why it changed
+#
+# footer (optional):
+# BREAKING CHANGE: <description>
+# Closes #123
+
