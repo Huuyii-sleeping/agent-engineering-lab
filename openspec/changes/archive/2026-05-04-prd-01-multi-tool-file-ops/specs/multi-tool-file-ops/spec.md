@@ -1,0 +1,38 @@
+﻿## ADDED Requirements
+
+### Requirement: Agent SHALL provide workspace-scoped file read/write/edit tools
+系统 SHALL 提供 `read_file(path, limit?)`、`write_file(path, content)`、`edit_file(path, old_text, new_text)` 三个文件工具，并允许模型在同一轮工具调用流程中使用。
+
+#### Scenario: 在工作区内读取文件
+- **WHEN** 模型调用 `read_file` 且 `path` 位于工作区内
+- **THEN** 系统返回文件内容（若提供 `limit` 则按限制截断返回）
+
+#### Scenario: 在工作区内写入文件
+- **WHEN** 模型调用 `write_file` 且 `path` 位于工作区内
+- **THEN** 系统覆盖写入 `content` 并返回成功结果
+
+#### Scenario: 在工作区内精确编辑文件
+- **WHEN** 模型调用 `edit_file` 且文件中存在 `old_text`
+- **THEN** 系统仅替换第一个精确匹配片段并返回成功结果
+
+### Requirement: File tools MUST enforce safe path boundary
+所有文件工具 MUST 在执行前进行路径安全校验；任何越界路径 MUST 被拒绝且不得触发实际文件读写。
+
+#### Scenario: 相对路径越界被拒绝
+- **WHEN** 模型传入包含 `..` 导致越过工作区根目录的路径
+- **THEN** 系统返回明确错误并拒绝执行
+
+#### Scenario: 绝对路径越界被拒绝
+- **WHEN** 模型传入不在工作区根目录下的绝对路径
+- **THEN** 系统返回明确错误并拒绝执行
+
+### Requirement: Main loop behavior MUST remain compatible with PRD-00
+扩展文件工具后，主循环 MUST 继续遵守 PRD-00 的 tool-calling 契约，不得引入流程回归。
+
+#### Scenario: 无工具调用时正常结束
+- **WHEN** 模型响应不包含工具调用
+- **THEN** 主循环立即结束当前轮次
+
+#### Scenario: 多工具调用按顺序执行并回填
+- **WHEN** 模型响应包含一个或多个工具调用（含 `bash` 与文件工具）
+- **THEN** 系统按顺序执行并逐条回填 `role: tool` 消息后进入下一轮

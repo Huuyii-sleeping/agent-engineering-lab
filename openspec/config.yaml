@@ -1,0 +1,21 @@
+schema: spec-driven
+
+context: |
+  文档默认语言：简体中文。
+  输出风格：工程化、可执行、简洁明确。
+  项目策略：采用小步迭代，每次只实现一个增量 PRD 的 In Scope。
+  术语约定：必要英文术语可保留，但正文优先中文表达。
+
+rules:
+  proposal:
+    - 使用简体中文撰写正文。
+    - 明确写出 In Scope 与 Out of Scope，避免范围膨胀。
+  specs:
+    - 使用简体中文撰写需求描述与场景内容。
+    - 保留 OpenSpec 规范要求的结构标题与关键字格式（如 ADDED Requirements、Requirement、Scenario、WHEN、THEN）。
+  design:
+    - 使用简体中文，优先写清决策理由、风险与取舍。
+    - 决策项需包含备选方案与不采用原因。
+  tasks:
+    - 使用简体中文，任务拆分为可在单次会话内完成的小步。
+    - 保持可追踪格式：- [ ] X.Y ...

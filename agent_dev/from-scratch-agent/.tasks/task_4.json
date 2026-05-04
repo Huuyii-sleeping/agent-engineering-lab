@@ -1,0 +1,8 @@
+{
+  "id": 4,
+  "subject": "创建并编辑文件",
+  "description": "新建 tmp/todo_test.txt，写入 \"step1\"，再编辑成 \"step1_done\"，最后读取文件内容。",
+  "status": "pending",
+  "blockedBy": [],
+  "owner": ""
+}

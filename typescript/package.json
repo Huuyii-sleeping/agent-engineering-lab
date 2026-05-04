@@ -1,0 +1,21 @@
+{
+  "name": "agent-typescript",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx 01_agent_loop.ts",
+    "start:02": "tsx 02_tool_use.ts",
+    "start:03": "tsx 03_todo_write.ts",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "dotenv": "^16.5.0",
+    "openai": "^6.34.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.8.0"
+  }
+}
