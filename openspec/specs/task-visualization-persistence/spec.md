@@ -1,5 +1,8 @@
-﻿## ADDED Requirements
+# task-visualization-persistence Specification
 
+## Purpose
+TBD - created by archiving change prd-02-task-visualization-persistence. Update Purpose after archive.
+## Requirements
 ### Requirement: Agent SHALL provide todo visualization with strict status constraints
 系统 SHALL 提供 `todo(items)` 工具，用于维护会话内任务列表并可视化输出状态。
 
@@ -36,3 +39,4 @@
 #### Scenario: 完成任务自动清理依赖
 - **WHEN** 任务 A 状态更新为 `completed`
 - **THEN** 其他任务 `blockedBy` 中的 A 自动移除并持久化写回
+
