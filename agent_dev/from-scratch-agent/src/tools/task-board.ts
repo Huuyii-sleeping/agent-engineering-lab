@@ -12,6 +12,7 @@ type Task = {
   status: TaskStatus;
   blockedBy: number[];
   owner: string;
+  worktree: string | null;
 };
 
 function toTaskError(code: string, message: string): string {
@@ -54,9 +55,18 @@ class TaskManager {
   private async load(taskId: number): Promise<Task> {
     const raw = await readFile(this.taskPath(taskId), "utf8").catch(() => "");
     if (!raw) {
-      throw new Error(`任务 ${taskId} 未找到`);
+      throw new Error(`task ${taskId} not found`);
     }
-    return JSON.parse(raw) as Task;
+    const parsed = JSON.parse(raw) as Partial<Task>;
+    return {
+      id: Number(parsed.id),
+      subject: String(parsed.subject ?? ""),
+      description: String(parsed.description ?? ""),
+      status: (parsed.status as TaskStatus) ?? "pending",
+      blockedBy: Array.isArray(parsed.blockedBy) ? parsed.blockedBy.map((n) => Number(n)) : [],
+      owner: String(parsed.owner ?? ""),
+      worktree: parsed.worktree ? String(parsed.worktree) : null,
+    };
   }
 
   private async save(task: Task): Promise<void> {
@@ -68,7 +78,7 @@ class TaskManager {
     const subject = String(subjectArg ?? "").trim();
     const description = String(descriptionArg ?? "");
     if (!subject) {
-      return toTaskError("INVALID_ARGUMENT", "task_create 需要 subject");
+      return toTaskError("INVALID_ARGUMENT", "task_create requires subject");
     }
     const task: Task = {
       id: this.nextId,
@@ -77,6 +87,7 @@ class TaskManager {
       status: "pending",
       blockedBy: [],
       owner: "",
+      worktree: null,
     };
     await this.save(task);
     this.nextId += 1;
@@ -87,7 +98,7 @@ class TaskManager {
     await this.ensureInit();
     const taskId = Number(taskIdArg);
     if (!Number.isInteger(taskId) || taskId <= 0) {
-      return toTaskError("INVALID_ARGUMENT", "task_get 需要正整数 task_id");
+      return toTaskError("INVALID_ARGUMENT", "task_get requires positive task_id");
     }
     try {
       return JSON.stringify(await this.load(taskId), null, 2);
@@ -113,11 +124,12 @@ class TaskManager {
     statusArg: unknown,
     addBlockedByArg: unknown,
     removeBlockedByArg: unknown,
+    worktreeArg?: unknown,
   ): Promise<string> {
     await this.ensureInit();
     const taskId = Number(taskIdArg);
     if (!Number.isInteger(taskId) || taskId <= 0) {
-      return toTaskError("INVALID_ARGUMENT", "task_update 需要正整数 task_id");
+      return toTaskError("INVALID_ARGUMENT", "task_update requires positive task_id");
     }
 
     let task: Task;
@@ -130,7 +142,7 @@ class TaskManager {
     if (statusArg !== undefined) {
       const status = String(statusArg);
       if (status !== "pending" && status !== "in_progress" && status !== "completed") {
-        return toTaskError("INVALID_ARGUMENT", `无效状态: ${status}`);
+        return toTaskError("INVALID_ARGUMENT", `invalid status ${status}`);
       }
       task.status = status as TaskStatus;
       if (status === "completed") {
@@ -152,6 +164,11 @@ class TaskManager {
       task.blockedBy = task.blockedBy.filter((id) => !removeBlockedBy.includes(id));
     }
 
+    if (worktreeArg !== undefined) {
+      const wt = String(worktreeArg ?? "").trim();
+      task.worktree = wt || null;
+    }
+
     await this.save(task);
     return JSON.stringify(task, null, 2);
   }
@@ -162,17 +179,60 @@ class TaskManager {
     files.sort((a, b) => Number(a.match(/\d+/)?.[0] ?? 0) - Number(b.match(/\d+/)?.[0] ?? 0));
 
     if (files.length === 0) {
-      return "暂无任务。";
+      return "No tasks.";
     }
 
     const lines: string[] = [];
     for (const file of files) {
       const task = JSON.parse(await readFile(path.join(this.dir, file), "utf8")) as Task;
       const marker = task.status === "pending" ? "[ ]" : task.status === "in_progress" ? "[>]" : "[x]";
-      const blocked = task.blockedBy.length > 0 ? ` (被阻塞: ${JSON.stringify(task.blockedBy)})` : "";
-      lines.push(`${marker} #${task.id}: ${task.subject}${blocked}`);
+      const blocked = task.blockedBy.length > 0 ? ` blockedBy=${JSON.stringify(task.blockedBy)}` : "";
+      const wt = task.worktree ? ` worktree=${task.worktree}` : "";
+      lines.push(`${marker} #${task.id}: ${task.subject}${blocked}${wt}`);
     }
     return lines.join("\n");
+  }
+
+  async scanUnclaimedTasks(): Promise<string> {
+    await this.ensureInit();
+    const files = (await readdir(this.dir)).filter((f) => /^task_(\d+)\.json$/.test(f));
+    const unclaimed: Task[] = [];
+    for (const file of files) {
+      const task = JSON.parse(await readFile(path.join(this.dir, file), "utf8")) as Task;
+      const owner = String(task.owner ?? "").trim();
+      if (!owner && task.status !== "completed") {
+        unclaimed.push(task);
+      }
+    }
+    unclaimed.sort((a, b) => a.id - b.id);
+    return JSON.stringify({ ok: true, tasks: unclaimed }, null, 2);
+  }
+
+  async claimTask(taskIdArg: unknown, ownerArg: unknown): Promise<string> {
+    await this.ensureInit();
+    const taskId = Number(taskIdArg);
+    const owner = String(ownerArg ?? "").trim();
+    if (!Number.isInteger(taskId) || taskId <= 0) {
+      return toTaskError("INVALID_ARGUMENT", "claim_task requires positive task_id");
+    }
+    if (!owner) {
+      return toTaskError("INVALID_ARGUMENT", "claim_task requires owner");
+    }
+    let task: Task;
+    try {
+      task = await this.load(taskId);
+    } catch (error) {
+      return toTaskError("TASK_NOT_FOUND", error instanceof Error ? error.message : String(error));
+    }
+    if (task.owner && task.owner !== owner) {
+      return toTaskError("TASK_ALREADY_CLAIMED", `task ${taskId} already claimed by ${task.owner}`);
+    }
+    task.owner = owner;
+    if (task.status === "pending") {
+      task.status = "in_progress";
+    }
+    await this.save(task);
+    return JSON.stringify({ ok: true, task }, null, 2);
   }
 }
 
@@ -183,7 +243,7 @@ export const TASK_TOOLS: ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "task_create",
-      description: "创建一个新任务。",
+      description: "Create a task.",
       parameters: {
         type: "object",
         properties: {
@@ -198,7 +258,7 @@ export const TASK_TOOLS: ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "task_update",
-      description: "更新任务状态或依赖关系。",
+      description: "Update task status/dependencies/worktree.",
       parameters: {
         type: "object",
         properties: {
@@ -206,6 +266,7 @@ export const TASK_TOOLS: ChatCompletionTool[] = [
           status: { type: "string", enum: ["pending", "in_progress", "completed"] },
           addBlockedBy: { type: "array", items: { type: "integer" } },
           removeBlockedBy: { type: "array", items: { type: "integer" } },
+          worktree: { type: "string" },
         },
         required: ["task_id"],
       },
@@ -215,7 +276,7 @@ export const TASK_TOOLS: ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "task_list",
-      description: "列出所有任务摘要。",
+      description: "List task summary.",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -223,7 +284,7 @@ export const TASK_TOOLS: ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "task_get",
-      description: "按 ID 获取任务详情。",
+      description: "Get task by id.",
       parameters: {
         type: "object",
         properties: { task_id: { type: "integer" } },
@@ -242,8 +303,9 @@ export async function runTaskUpdate(
   status: unknown,
   addBlockedBy: unknown,
   removeBlockedBy: unknown,
+  worktree?: unknown,
 ): Promise<string> {
-  return TASKS.update(taskId, status, addBlockedBy, removeBlockedBy);
+  return TASKS.update(taskId, status, addBlockedBy, removeBlockedBy, worktree);
 }
 
 export async function runTaskList(): Promise<string> {
@@ -252,4 +314,12 @@ export async function runTaskList(): Promise<string> {
 
 export async function runTaskGet(taskId: unknown): Promise<string> {
   return TASKS.get(taskId);
+}
+
+export async function runScanUnclaimedTasks(): Promise<string> {
+  return TASKS.scanUnclaimedTasks();
+}
+
+export async function runClaimTask(taskId: unknown, owner: unknown): Promise<string> {
+  return TASKS.claimTask(taskId, owner);
 }

@@ -6,6 +6,7 @@ import { COMPACT_THRESHOLD_TOKENS, compactMessages, estimateTokensFromMessages }
 import { previewToolCall, runToolByName } from "./tools/index.js";
 import { drainSubagentNotifications } from "./tools/subagent.js";
 import { drainTeamNotifications } from "./tools/team.js";
+import { runAutonomyTick } from "./tools/autonomy.js";
 
 export type AgentRuntimeState = {
   roundsWithoutTodo: number;
@@ -62,6 +63,16 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
   };
 
   while (true) {
+    try {
+      const autonomyRaw = await runAutonomyTick();
+      const autonomy = JSON.parse(autonomyRaw) as { ok?: boolean; action?: string; taskId?: number };
+      if (autonomy.ok && autonomy.action === "claimed") {
+        console.log(`\u001b[36m[autonomy]\u001b[0m claimed task #${autonomy.taskId ?? "?"}`);
+      }
+    } catch {
+      // keep agent loop resilient if autonomy tick fails
+    }
+
     const estimatedTokens = estimateTokensFromMessages(messages);
     if (estimatedTokens > COMPACT_THRESHOLD_TOKENS) {
       const compactResult = await compactMessages({ messages }, "auto");

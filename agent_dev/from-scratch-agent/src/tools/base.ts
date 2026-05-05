@@ -1,9 +1,21 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
+import {
+  runAutonomyMarkActive,
+  runAutonomySetOwner,
+  runAutonomyStatus,
+  runAutonomyTick,
+} from "./autonomy.js";
 import { BASH_TOOLS, readCommandArgs, runBash } from "./bash.js";
 import { BACKGROUND_TOOLS, runBackgroundRun, runCheckBackground } from "./background-task.js";
 import { CONTEXT_TOOLS, type CompactRuntimeContext, runCompact, runEstimateTokens } from "./context-compact.js";
 import { FILE_TOOLS, runEditFile, runReadFile, runWriteFile } from "./file-tools.js";
-import { TASK_TOOLS, runTaskCreate, runTaskGet, runTaskList, runTaskUpdate } from "./task-board.js";
+import {
+  TASK_TOOLS,
+  runTaskCreate,
+  runTaskGet,
+  runTaskList,
+  runTaskUpdate,
+} from "./task-board.js";
 import {
   TEAM_TOOLS,
   runTeamAddTeammate,
@@ -19,6 +31,14 @@ import {
   runTeamShutdownResponse,
 } from "./team.js";
 import { TODO_TOOLS, runTodo } from "./todo.js";
+import {
+  WORKTREE_TOOLS,
+  runWorktreeCreate,
+  runWorktreeKeep,
+  runWorktreeList,
+  runWorktreeRemove,
+  runWorktreeRun,
+} from "./worktree.js";
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<string>;
 
@@ -38,7 +58,7 @@ const BASE_HANDLERS: Record<string, ToolHandler> = {
   todo: async (args) => runTodo(args.items),
   task_create: async (args) => runTaskCreate(args.subject, args.description),
   task_update: async (args) =>
-    runTaskUpdate(args.task_id, args.status, args.addBlockedBy, args.removeBlockedBy),
+    runTaskUpdate(args.task_id, args.status, args.addBlockedBy, args.removeBlockedBy, args.worktree),
   task_list: async () => runTaskList(),
   task_get: async (args) => runTaskGet(args.task_id),
   estimate_tokens: async () => runEstimateTokens(runtimeContext),
@@ -59,6 +79,15 @@ const BASE_HANDLERS: Record<string, ToolHandler> = {
   team_list_teammates: async () => runTeamListTeammates(),
   team_read_inbox: async (args) => runTeamReadInbox(args.teammate_id),
   team_list_requests: async () => runTeamListRequests(),
+  worktree_create: async (args) => runWorktreeCreate(args.name),
+  worktree_list: async () => runWorktreeList(),
+  worktree_run: async (args) => runWorktreeRun(args.name, args.command),
+  worktree_keep: async (args) => runWorktreeKeep(args.name),
+  worktree_remove: async (args) => runWorktreeRemove(args.name),
+  autonomy_set_owner: async (args) => runAutonomySetOwner(args.owner),
+  autonomy_status: async () => runAutonomyStatus(),
+  autonomy_tick: async () => runAutonomyTick(),
+  autonomy_mark_active: async () => runAutonomyMarkActive(),
 };
 
 export const BASE_TOOLS: ChatCompletionTool[] = [
@@ -69,6 +98,43 @@ export const BASE_TOOLS: ChatCompletionTool[] = [
   ...CONTEXT_TOOLS,
   ...BACKGROUND_TOOLS,
   ...TEAM_TOOLS,
+  ...WORKTREE_TOOLS,
+  {
+    type: "function",
+    function: {
+      name: "autonomy_set_owner",
+      description: "Set autonomous owner identity.",
+      parameters: {
+        type: "object",
+        properties: { owner: { type: "string" } },
+        required: ["owner"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "autonomy_status",
+      description: "Get autonomy runtime status.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "autonomy_tick",
+      description: "Run one autonomy poll cycle and attempt claim.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "autonomy_mark_active",
+      description: "Mark runtime active and reset idle timeout.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
 ];
 
 let runtimeContext: CompactRuntimeContext | undefined;
