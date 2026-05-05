@@ -16,7 +16,7 @@ type AutonomyRuntime = {
   currentTaskId: number | null;
 };
 
-let runtime: AutonomyRuntime = {
+const runtime: AutonomyRuntime = {
   status: "idle",
   owner: "main",
   lastActiveAt: Date.now(),

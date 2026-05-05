@@ -7,16 +7,28 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "dev": "tsx src/main.ts",
-    "test:regression": "tsx src/smoke/prd13-regression.ts"
+    "test:regression": "tsx src/smoke/prd13-regression.ts",
+    "test": "vitest run",
+    "lint": "eslint . --ext .ts",
+    "format": "prettier --write \"src/**/*.ts\" \"*.json\" \"*.md\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"*.json\" \"*.md\"",
+    "release:check": "npm run lint && npm run test && npm run build && npm run test:regression"
   },
   "dependencies": {
     "dotenv": "^17.2.0",
-    "openai": "^6.0.0"
+    "openai": "^6.0.0",
+    "pino": "^9.3.2"
   },
   "devDependencies": {
+    "@eslint/js": "^9.8.0",
     "@types/node": "^24.0.0",
+    "eslint": "^9.8.0",
+    "globals": "^15.9.0",
+    "prettier": "^3.3.3",
     "tsx": "^4.20.0",
-    "typescript": "^5.9.0"
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.2.0",
+    "vitest": "^2.0.5"
   },
   "packageManager": "pnpm@10.18.3+sha512.bbd16e6d7286fd7e01f6b3c0b3c932cda2965c06a908328f74663f10a9aea51f1129eea615134bf992831b009eabe167ecb7008b597f40ff9bc75946aadfb08d"
 }
