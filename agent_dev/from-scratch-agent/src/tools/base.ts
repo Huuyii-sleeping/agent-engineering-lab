@@ -30,6 +30,16 @@ import {
   runTeamShutdownRequest,
   runTeamShutdownResponse,
 } from "./team.js";
+import {
+  SECURITY_TOOLS,
+  enforceSecurityGate,
+  runSecurityApprove,
+  runSecurityCheck,
+  runSecurityListApprovals,
+  runSecurityReject,
+  runSecurityReloadPolicy,
+  runSecurityRequestApproval,
+} from "./security.js";
 import { TODO_TOOLS, runTodo } from "./todo.js";
 import {
   WORKTREE_TOOLS,
@@ -79,6 +89,12 @@ const BASE_HANDLERS: Record<string, ToolHandler> = {
   team_list_teammates: async () => runTeamListTeammates(),
   team_read_inbox: async (args) => runTeamReadInbox(args.teammate_id),
   team_list_requests: async () => runTeamListRequests(),
+  security_check: async (args) => runSecurityCheck(args.tool, args.args_json),
+  security_request_approval: async (args) => runSecurityRequestApproval(args.tool, args.args_json),
+  security_approve: async (args) => runSecurityApprove(args.request_id),
+  security_reject: async (args) => runSecurityReject(args.request_id),
+  security_list_approvals: async (args) => runSecurityListApprovals(args.status),
+  security_reload_policy: async () => runSecurityReloadPolicy(),
   worktree_create: async (args) => runWorktreeCreate(args.name),
   worktree_list: async () => runWorktreeList(),
   worktree_run: async (args) => runWorktreeRun(args.name, args.command),
@@ -98,6 +114,7 @@ export const BASE_TOOLS: ChatCompletionTool[] = [
   ...CONTEXT_TOOLS,
   ...BACKGROUND_TOOLS,
   ...TEAM_TOOLS,
+  ...SECURITY_TOOLS,
   ...WORKTREE_TOOLS,
   {
     type: "function",
@@ -171,6 +188,10 @@ export async function runBaseToolByName(name: string, argumentsJson: string): Pr
     return BASE_UNKNOWN_TOOL;
   }
   const args = parseToolArgs(argumentsJson);
+  const gate = await enforceSecurityGate(name, args);
+  if (!gate.ok) {
+    return gate.blocked;
+  }
   try {
     return await handler(args);
   } catch (error) {

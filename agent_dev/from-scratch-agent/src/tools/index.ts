@@ -1,5 +1,6 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { BASE_TOOLS, BASE_UNKNOWN_TOOL, previewBaseToolCall, runBaseToolByName } from "./base.js";
+import { enforceSecurityGate } from "./security.js";
 import {
   SUBAGENT_TOOLS,
   runSubagentClose,
@@ -50,6 +51,10 @@ export async function runToolByName(name: string, argumentsJson: string): Promis
   const subagentHandler = SUBAGENT_HANDLERS[name];
   if (subagentHandler) {
     const args = parseToolArgs(argumentsJson);
+    const gate = await enforceSecurityGate(name, args);
+    if (!gate.ok) {
+      return gate.blocked;
+    }
     try {
       return await subagentHandler(args);
     } catch (error) {

@@ -8,11 +8,12 @@
     "start": "node dist/main.js",
     "dev": "tsx src/main.ts",
     "test:regression": "tsx src/smoke/prd13-regression.ts",
+    "test:security": "tsx src/smoke/prd07-security-smoke.ts",
     "test": "vitest run",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"src/**/*.ts\" \"*.json\" \"*.md\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"*.json\" \"*.md\"",
-    "release:check": "npm run lint && npm run test && npm run build && npm run test:regression"
+    "release:check": "npm run lint && npm run test && npm run build && npm run test:regression && npm run test:security"
   },
   "dependencies": {
     "dotenv": "^17.2.0",

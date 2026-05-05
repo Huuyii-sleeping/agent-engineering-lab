@@ -1,5 +1,8 @@
-﻿## ADDED Requirements
+# multi-tool-file-ops Specification
 
+## Purpose
+Define workspace-scoped file operations and safe tool-calling behavior.
+## Requirements
 ### Requirement: Agent SHALL provide workspace-scoped file read/write/edit tools
 系统 SHALL 提供 `read_file(path, limit?)`、`write_file(path, content)`、`edit_file(path, old_text, new_text)` 三个文件工具，并允许模型在同一轮工具调用流程中使用。
 
@@ -36,3 +39,15 @@
 #### Scenario: 多工具调用按顺序执行并回填
 - **WHEN** 模型响应包含一个或多个工具调用（含 `bash` 与文件工具）
 - **THEN** 系统按顺序执行并逐条回填 `role: tool` 消息后进入下一轮
+
+### Requirement: Tool execution MUST pass through policy evaluation
+所有工具调用 MUST 在执行前经过统一策略评估，并基于评估结果执行放行、拦截或审批流程。
+
+#### Scenario: 高风险命令无审批被拦截
+- **WHEN** 调用高风险 `bash` 命令且无有效审批
+- **THEN** 返回结构化错误并阻止执行
+
+#### Scenario: 普通读操作放行
+- **WHEN** 调用低风险 `read_file`
+- **THEN** 策略允许并正常执行
+

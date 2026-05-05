@@ -39,3 +39,8 @@ npm run start
 npm run test:regression
 ```
 
+- PRD-07 安全治理 smoke
+```bash
+npx tsx src/smoke/prd07-security-smoke.ts
+```
+

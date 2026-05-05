@@ -12,6 +12,7 @@ type RuntimeConfig = {
   subagentDefaultWaitTimeoutMs: number;
   subagentMaxRounds: number;
   subagentMaxTokens: number;
+  securityApprovalDefaultTtlSec: number;
 };
 
 function readInt(name: string, fallback: number, min: number): number {
@@ -38,5 +39,5 @@ export const RUNTIME_CONFIG: RuntimeConfig = {
   subagentDefaultWaitTimeoutMs: readInt("AGENT_SUBAGENT_WAIT_TIMEOUT_MS", 30_000, 1_000),
   subagentMaxRounds: readInt("AGENT_SUBAGENT_MAX_ROUNDS", 12, 1),
   subagentMaxTokens: readInt("AGENT_SUBAGENT_MAX_TOKENS", 2_000, 100),
+  securityApprovalDefaultTtlSec: readInt("AGENT_SECURITY_APPROVAL_DEFAULT_TTL_SEC", 600, 30),
 };
-
