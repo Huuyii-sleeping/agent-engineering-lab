@@ -30,13 +30,20 @@ TBD - created by archiving change prd-02-task-visualization-persistence. Update 
 - **THEN** 未调用计数重置为 0
 
 ### Requirement: Agent SHALL persist task board across sessions
-系统 SHALL 提供 `task_create/task_update/task_list/task_get`，并将任务持久化到 `.tasks/task_<id>.json`。
+系统 MUST 支持为任务记录 `worktree` 绑定字段，并在任务查询与列表中返回该信息。
 
-#### Scenario: 创建任务后重启仍可读取
-- **WHEN** 创建任务并重启进程
-- **THEN** `task_list` 与 `task_get` 可读取到已有任务
+#### Scenario: 任务绑定工作树后可持久化读取
+- **WHEN** 任务绑定了 worktree
+- **THEN** 重启后 `task_get/task_list` 仍返回对应 worktree 信息
 
-#### Scenario: 完成任务自动清理依赖
-- **WHEN** 任务 A 状态更新为 `completed`
-- **THEN** 其他任务 `blockedBy` 中的 A 自动移除并持久化写回
+### Requirement: Task persistence SHALL include schema version and guarded transitions
+任务持久化记录 MUST 包含 `schemaVersion` 字段；系统 MUST 对任务状态转移执行守卫并拒绝非法跳转。
+
+#### Scenario: 读取旧版本任务文件
+- **WHEN** 任务文件缺少 `schemaVersion`
+- **THEN** 系统仍可读取并提供兼容默认值
+
+#### Scenario: 拒绝非法状态跳转
+- **WHEN** 已完成任务尝试变更为非 `completed`
+- **THEN** 系统返回结构化错误，错误码为 `INVALID_STATUS_TRANSITION`
 

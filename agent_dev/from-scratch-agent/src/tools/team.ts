@@ -6,8 +6,10 @@ import type { ChatCompletionTool } from "openai/resources/chat/completions";
 type TeammateStatus = "working" | "idle" | "shutdown";
 type RequestStatus = "pending" | "approved" | "rejected";
 type ProtocolType = "shutdown_request" | "plan_approval";
+const TEAM_SCHEMA_VERSION = 2;
 
 type Teammate = {
+  schemaVersion: number;
   id: number;
   name: string;
   status: TeammateStatus;
@@ -25,6 +27,7 @@ type TeamMessage = {
 };
 
 type TeamRequest = {
+  schemaVersion: number;
   request_id: string;
   type: ProtocolType;
   from: string;
@@ -90,7 +93,15 @@ class TeamManager {
   private async loadTeammates(): Promise<Teammate[]> {
     await this.ensureInit();
     const raw = await readFile(this.teammatesPath, "utf8");
-    return JSON.parse(raw) as Teammate[];
+    const parsed = JSON.parse(raw) as Array<Partial<Teammate>>;
+    return parsed.map((item) => ({
+      schemaVersion: Number.isInteger(Number(item.schemaVersion)) ? Number(item.schemaVersion) : 1,
+      id: Number(item.id),
+      name: String(item.name ?? ""),
+      status:
+        item.status === "working" || item.status === "idle" || item.status === "shutdown" ? item.status : "idle",
+      updatedAt: String(item.updatedAt ?? nowIso()),
+    }));
   }
 
   private async saveTeammates(teammates: Teammate[]): Promise<void> {
@@ -100,7 +111,20 @@ class TeamManager {
   private async loadRequests(): Promise<TeamRequest[]> {
     await this.ensureInit();
     const raw = await readFile(this.requestsPath, "utf8");
-    return JSON.parse(raw) as TeamRequest[];
+    const parsed = JSON.parse(raw) as Array<Partial<TeamRequest>>;
+    return parsed.map((item) => ({
+      schemaVersion: Number.isInteger(Number(item.schemaVersion)) ? Number(item.schemaVersion) : 1,
+      request_id: String(item.request_id ?? ""),
+      type: item.type === "shutdown_request" || item.type === "plan_approval" ? item.type : "plan_approval",
+      from: String(item.from ?? "main"),
+      to: String(item.to ?? ""),
+      status:
+        item.status === "pending" || item.status === "approved" || item.status === "rejected"
+          ? item.status
+          : "pending",
+      payload: String(item.payload ?? ""),
+      updatedAt: String(item.updatedAt ?? nowIso()),
+    }));
   }
 
   private async saveRequests(requests: TeamRequest[]): Promise<void> {
@@ -144,7 +168,7 @@ class TeamManager {
     }
     const teammates = await this.loadTeammates();
     const newId = teammates.length === 0 ? 1 : Math.max(...teammates.map((t) => t.id)) + 1;
-    const teammate: Teammate = { id: newId, name, status: "idle", updatedAt: nowIso() };
+    const teammate: Teammate = { schemaVersion: TEAM_SCHEMA_VERSION, id: newId, name, status: "idle", updatedAt: nowIso() };
     teammates.push(teammate);
     await this.saveTeammates(teammates);
     return this.ok({ teammate });
@@ -165,6 +189,7 @@ class TeamManager {
       return this.fail("TEAMMATE_NOT_FOUND", `teammate ${teammateId} not found`);
     }
     teammate.status = status as TeammateStatus;
+    teammate.schemaVersion = TEAM_SCHEMA_VERSION;
     teammate.updatedAt = nowIso();
     await this.saveTeammates(teammates);
     return this.ok({ teammate });
@@ -242,6 +267,7 @@ class TeamManager {
     }
 
     const request: TeamRequest = {
+      schemaVersion: TEAM_SCHEMA_VERSION,
       request_id: makeRequestId(),
       type: protocol,
       from,
@@ -296,6 +322,7 @@ class TeamManager {
     }
 
     request.status = approve ? "approved" : "rejected";
+    request.schemaVersion = TEAM_SCHEMA_VERSION;
     request.updatedAt = nowIso();
     await this.saveRequests(requests);
 

@@ -4,6 +4,7 @@ import type {
   ChatCompletionTool,
 } from "openai/resources/chat/completions";
 import { MODEL, createClient } from "../config.js";
+import { RUNTIME_CONFIG } from "../runtime-config.js";
 import { toAssistantMessage } from "../messages.js";
 import { BASE_TOOLS, runBaseToolByName } from "./base.js";
 
@@ -145,12 +146,12 @@ class SubagentManager {
         { role: "user", content: prompt },
       ];
 
-      for (let round = 0; round < 12; round += 1) {
+      for (let round = 0; round < RUNTIME_CONFIG.subagentMaxRounds; round += 1) {
         const response = await client.chat.completions.create({
           model: MODEL,
           messages,
           tools: BASE_TOOLS,
-          max_tokens: 2_000,
+          max_tokens: RUNTIME_CONFIG.subagentMaxTokens,
         });
 
         const message = response.choices[0]?.message;
@@ -231,7 +232,8 @@ class SubagentManager {
       return err("AGENT_NOT_FOUND", "subagent_wait requires a valid agent_id");
     }
 
-    const timeoutMsRaw = timeoutMsArg === undefined ? 30_000 : Number(timeoutMsArg);
+    const timeoutMsRaw =
+      timeoutMsArg === undefined ? RUNTIME_CONFIG.subagentDefaultWaitTimeoutMs : Number(timeoutMsArg);
     if (!Number.isInteger(timeoutMsRaw) || timeoutMsRaw <= 0) {
       return err("INVALID_ARGUMENT", "timeout_ms must be a positive integer");
     }

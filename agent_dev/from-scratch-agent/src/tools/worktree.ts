@@ -5,8 +5,10 @@ import * as process from "node:process";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 
 type WorktreeStatus = "created" | "running" | "kept" | "removed";
+const WORKTREE_SCHEMA_VERSION = 2;
 
 type WorktreeRecord = {
+  schemaVersion: number;
   name: string;
   path: string;
   status: WorktreeStatus;
@@ -15,6 +17,7 @@ type WorktreeRecord = {
 };
 
 type WorktreeEvent = {
+  schemaVersion: number;
   id: string;
   type: "create" | "run" | "keep" | "remove";
   name: string;
@@ -66,7 +69,18 @@ class WorktreeManager {
   private async loadIndex(): Promise<WorktreeRecord[]> {
     await this.ensureInit();
     const raw = await readFile(this.indexPath, "utf8");
-    return JSON.parse(raw) as WorktreeRecord[];
+    const parsed = JSON.parse(raw) as Array<Partial<WorktreeRecord>>;
+    return parsed.map((item) => ({
+      schemaVersion: Number.isInteger(Number(item.schemaVersion)) ? Number(item.schemaVersion) : 1,
+      name: String(item.name ?? ""),
+      path: String(item.path ?? ""),
+      status:
+        item.status === "created" || item.status === "running" || item.status === "kept" || item.status === "removed"
+          ? item.status
+          : "created",
+      createdAt: String(item.createdAt ?? nowIso()),
+      updatedAt: String(item.updatedAt ?? nowIso()),
+    }));
   }
 
   private async saveIndex(records: WorktreeRecord[]): Promise<void> {
@@ -109,6 +123,7 @@ class WorktreeManager {
     await mkdir(targetPath, { recursive: true });
     const now = nowIso();
     const record: WorktreeRecord = {
+      schemaVersion: WORKTREE_SCHEMA_VERSION,
       name,
       path: targetPath,
       status: "created",
@@ -118,6 +133,7 @@ class WorktreeManager {
     records.push(record);
     await this.saveIndex(records);
     await this.appendEvent({
+      schemaVersion: WORKTREE_SCHEMA_VERSION,
       id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       type: "create",
       name,
@@ -145,9 +161,11 @@ class WorktreeManager {
     }
     const result = await execPromise(command, record.path);
     record.status = "running";
+    record.schemaVersion = WORKTREE_SCHEMA_VERSION;
     record.updatedAt = nowIso();
     await this.saveIndex(records);
     await this.appendEvent({
+      schemaVersion: WORKTREE_SCHEMA_VERSION,
       id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       type: "run",
       name,
@@ -170,9 +188,11 @@ class WorktreeManager {
       return this.fail("WORKTREE_NOT_FOUND", `worktree ${name} not found`);
     }
     record.status = "kept";
+    record.schemaVersion = WORKTREE_SCHEMA_VERSION;
     record.updatedAt = nowIso();
     await this.saveIndex(records);
     await this.appendEvent({
+      schemaVersion: WORKTREE_SCHEMA_VERSION,
       id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       type: "keep",
       name,
@@ -191,9 +211,11 @@ class WorktreeManager {
     }
     await rm(record.path, { recursive: true, force: true });
     record.status = "removed";
+    record.schemaVersion = WORKTREE_SCHEMA_VERSION;
     record.updatedAt = nowIso();
     await this.saveIndex(records);
     await this.appendEvent({
+      schemaVersion: WORKTREE_SCHEMA_VERSION,
       id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       type: "remove",
       name,

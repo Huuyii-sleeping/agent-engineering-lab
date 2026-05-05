@@ -4,11 +4,11 @@
 TBD - created by archiving change prd-00-core-loop. Update Purpose after archive.
 ## Requirements
 ### Requirement: Agent loop SHALL handle tool-calling rounds deterministically
-主循环 MUST 在每轮请求前注入团队消息通知摘要（若存在），同时保持既有工具调用顺序与回填契约不变。
+主循环 MUST 在每轮前支持自治轮询入口，并在不破坏既有工具调用契约的前提下处理自治状态更新。
 
-#### Scenario: 团队消息通知注入
-- **WHEN** 团队收件箱出现新消息通知
-- **THEN** 主循环在下一轮模型请求前附加通知 system 消息
+#### Scenario: 自治入口与主循环兼容
+- **WHEN** 主循环进入新一轮
+- **THEN** 自治检查先执行，随后保持原有 tool-calling 顺序和回填流程
 
 ### Requirement: Bash tool MUST enforce execution safety constraints
 `bash(command)` 工具 MUST 在执行前进行命令内容校验，MUST 拒绝被屏蔽的危险片段，MUST 执行 120 秒默认超时，且 MUST 将输出截断至最多 50,000 字符。
@@ -31,4 +31,15 @@ CLI 入口 MUST 在每次输入循环显示固定提示符 `s01 >>`，并且在�
 #### Scenario: 用户输入正常请求
 - **WHEN** 用户输入非空且非退出关键字的文本
 - **THEN** CLI 将请求送入 agent loop，并输出 assistant 的结果
+
+### Requirement: Agent loop SHALL support centralized runtime configuration
+主循环及其核心工具 MUST 通过统一配置入口读取关键运行参数（如超时、阈值、输出截断），并支持环境变量覆盖默认值。
+
+#### Scenario: 默认配置生效
+- **WHEN** 未设置相关环境变量
+- **THEN** 系统使用内置默认配置并可正常运行
+
+#### Scenario: 环境变量覆盖配置
+- **WHEN** 设置有效的配置环境变量
+- **THEN** 对应运行参数在不改代码情况下生效
 

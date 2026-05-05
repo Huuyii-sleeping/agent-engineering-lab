@@ -1,9 +1,8 @@
 import { exec, type ExecException } from "node:child_process";
 import * as process from "node:process";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
+import { RUNTIME_CONFIG } from "../runtime-config.js";
 
-const MAX_OUTPUT_CHARS = 50_000;
-const BASH_TIMEOUT_MS = 120_000;
 const DANGEROUS_SNIPPETS = ["rm -rf /", "sudo", "shutdown", "reboot"];
 
 type ToolError = {
@@ -40,10 +39,10 @@ function truncateOutput(value: string): string {
   if (!text) {
     return "(no output)";
   }
-  if (text.length <= MAX_OUTPUT_CHARS) {
+  if (text.length <= RUNTIME_CONFIG.bashMaxOutputChars) {
     return text;
   }
-  return `${text.slice(0, MAX_OUTPUT_CHARS)}\n...[truncated to ${MAX_OUTPUT_CHARS} chars]`;
+  return `${text.slice(0, RUNTIME_CONFIG.bashMaxOutputChars)}\n...[truncated to ${RUNTIME_CONFIG.bashMaxOutputChars} chars]`;
 }
 
 export function readCommandArgs(argumentsJson: string): string {
@@ -65,7 +64,7 @@ export function runBash(command: string): Promise<string> {
       command,
       {
         cwd: process.cwd(),
-        timeout: BASH_TIMEOUT_MS,
+        timeout: RUNTIME_CONFIG.bashTimeoutMs,
         windowsHide: true,
       },
       (error: ExecException | null, stdout: string, stderr: string) => {

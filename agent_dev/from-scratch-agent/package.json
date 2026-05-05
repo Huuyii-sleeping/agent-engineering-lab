@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
-    "dev": "tsx src/main.ts"
+    "dev": "tsx src/main.ts",
+    "test:regression": "tsx src/smoke/prd13-regression.ts"
   },
   "dependencies": {
     "dotenv": "^17.2.0",

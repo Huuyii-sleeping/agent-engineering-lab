@@ -2,9 +2,9 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
 import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
+import { RUNTIME_CONFIG } from "../runtime-config.js";
 
-export const COMPACT_THRESHOLD_TOKENS = 50_000;
-const DEFAULT_KEEP_RECENT = 20;
+export const COMPACT_THRESHOLD_TOKENS = RUNTIME_CONFIG.compactThresholdTokens;
 const SUMMARY_LINE_LIMIT = 24;
 const SUMMARY_ITEM_CHAR_LIMIT = 160;
 
@@ -94,7 +94,9 @@ export async function compactMessages(
 ): Promise<CompactResult> {
   const keepRecentParsed = Number(keepRecentArg);
   const keepRecent =
-    Number.isInteger(keepRecentParsed) && keepRecentParsed > 0 ? keepRecentParsed : DEFAULT_KEEP_RECENT;
+    Number.isInteger(keepRecentParsed) && keepRecentParsed > 0
+      ? keepRecentParsed
+      : RUNTIME_CONFIG.compactDefaultKeepRecent;
 
   const stamp = Date.now();
   const oldMessages = [...context.messages];

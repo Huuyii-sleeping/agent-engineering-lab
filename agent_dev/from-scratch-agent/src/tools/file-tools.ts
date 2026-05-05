@@ -2,8 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
-
-const DEFAULT_READ_LIMIT = 50_000;
+import { RUNTIME_CONFIG } from "../runtime-config.js";
 
 type FileToolErrorCode =
   | "PATH_OUT_OF_BOUNDS"
@@ -18,11 +17,11 @@ function toFileToolError(code: FileToolErrorCode, message: string): string {
 
 function normalizeLimit(limit?: unknown): number {
   if (limit === undefined || limit === null) {
-    return DEFAULT_READ_LIMIT;
+    return RUNTIME_CONFIG.fileReadDefaultLimit;
   }
   const parsed = Number(limit);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    return DEFAULT_READ_LIMIT;
+    return RUNTIME_CONFIG.fileReadDefaultLimit;
   }
   return Math.floor(parsed);
 }

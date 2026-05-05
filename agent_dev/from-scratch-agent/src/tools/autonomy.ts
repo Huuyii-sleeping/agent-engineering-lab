@@ -1,10 +1,11 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
+import { RUNTIME_CONFIG } from "../runtime-config.js";
 import { runClaimTask, runScanUnclaimedTasks } from "./task-board.js";
 
-export const POLL_INTERVAL_MS = 5_000;
-export const IDLE_TIMEOUT_MS = 60_000;
+export const POLL_INTERVAL_MS = RUNTIME_CONFIG.autonomyPollIntervalMs;
+export const IDLE_TIMEOUT_MS = RUNTIME_CONFIG.autonomyIdleTimeoutMs;
 
 type AutonomyStatus = "idle" | "claiming" | "working" | "shutdown";
 

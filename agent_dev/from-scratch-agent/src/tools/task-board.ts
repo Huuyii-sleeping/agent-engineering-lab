@@ -4,8 +4,10 @@ import * as process from "node:process";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 
 type TaskStatus = "pending" | "in_progress" | "completed";
+const TASK_SCHEMA_VERSION = 2;
 
 type Task = {
+  schemaVersion: number;
   id: number;
   subject: string;
   description: string;
@@ -58,7 +60,9 @@ class TaskManager {
       throw new Error(`task ${taskId} not found`);
     }
     const parsed = JSON.parse(raw) as Partial<Task>;
+    const schemaVersion = Number((parsed as Partial<{ schemaVersion: unknown }>).schemaVersion);
     return {
+      schemaVersion: Number.isInteger(schemaVersion) && schemaVersion > 0 ? schemaVersion : 1,
       id: Number(parsed.id),
       subject: String(parsed.subject ?? ""),
       description: String(parsed.description ?? ""),
@@ -81,6 +85,7 @@ class TaskManager {
       return toTaskError("INVALID_ARGUMENT", "task_create requires subject");
     }
     const task: Task = {
+      schemaVersion: TASK_SCHEMA_VERSION,
       id: this.nextId,
       subject,
       description,
@@ -144,6 +149,12 @@ class TaskManager {
       if (status !== "pending" && status !== "in_progress" && status !== "completed") {
         return toTaskError("INVALID_ARGUMENT", `invalid status ${status}`);
       }
+      if (task.status === "completed" && status !== "completed") {
+        return toTaskError("INVALID_STATUS_TRANSITION", "completed task cannot transition back");
+      }
+      if (task.status === "in_progress" && status === "pending") {
+        return toTaskError("INVALID_STATUS_TRANSITION", "in_progress task cannot transition to pending");
+      }
       task.status = status as TaskStatus;
       if (status === "completed") {
         await this.clearDependency(taskId);
@@ -168,6 +179,7 @@ class TaskManager {
       const wt = String(worktreeArg ?? "").trim();
       task.worktree = wt || null;
     }
+    task.schemaVersion = TASK_SCHEMA_VERSION;
 
     await this.save(task);
     return JSON.stringify(task, null, 2);
@@ -227,10 +239,14 @@ class TaskManager {
     if (task.owner && task.owner !== owner) {
       return toTaskError("TASK_ALREADY_CLAIMED", `task ${taskId} already claimed by ${task.owner}`);
     }
+    if (task.status === "completed") {
+      return toTaskError("INVALID_STATUS_TRANSITION", `task ${taskId} is completed and cannot be claimed`);
+    }
     task.owner = owner;
     if (task.status === "pending") {
       task.status = "in_progress";
     }
+    task.schemaVersion = TASK_SCHEMA_VERSION;
     await this.save(task);
     return JSON.stringify({ ok: true, task }, null, 2);
   }

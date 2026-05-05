@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import * as process from "node:process";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
+import { RUNTIME_CONFIG } from "../runtime-config.js";
 
 type BackgroundStatus = "running" | "completed" | "failed";
 
@@ -26,8 +27,6 @@ type BackgroundNotification = {
   stderr: string;
 };
 
-const MAX_OUTPUT = 4_000;
-
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -39,7 +38,7 @@ function toShanghaiTime(iso: string): string {
   });
 }
 
-function cut(text: string, max = MAX_OUTPUT): string {
+function cut(text: string, max = RUNTIME_CONFIG.backgroundMaxOutputChars): string {
   if (text.length <= max) {
     return text;
   }
