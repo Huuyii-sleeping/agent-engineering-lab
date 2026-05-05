@@ -3,6 +3,7 @@ import { stdin as input, stdout as output } from "node:process";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { agentLoop, type AgentRuntimeState } from "./agent-loop.js";
 import { createClient, MODEL, SYSTEM } from "./config.js";
+import { setCompactRuntimeContext } from "./tools/base.js";
 import { TOOLS } from "./tools/index.js";
 
 const PROMPT = "\u001b[36ms01 >> \u001b[0m";
@@ -10,6 +11,7 @@ const PROMPT = "\u001b[36ms01 >> \u001b[0m";
 export async function runCli(): Promise<void> {
   const rl = createInterface({ input, output });
   const history: ChatCompletionMessageParam[] = [];
+  setCompactRuntimeContext({ messages: history });
   const client = createClient();
   const runtimeState: AgentRuntimeState = { roundsWithoutTodo: 0, activeTaskId: null };
 

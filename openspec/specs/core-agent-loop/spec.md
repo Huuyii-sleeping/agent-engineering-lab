@@ -4,16 +4,15 @@
 TBD - created by archiving change prd-00-core-loop. Update Purpose after archive.
 ## Requirements
 ### Requirement: Agent loop SHALL handle tool-calling rounds deterministically
-运行时 SHALL 执行可重复的“模型调用 + 工具处理”轮次流程。
-在每一轮中，系统 SHALL 先将 assistant 消息写入历史，再按顺序执行每个 tool call，并将每个工具结果以 `role: tool` 写回历史；若某一轮无 tool calls，循环 SHALL 结束。
+在既有轮次契约下，主循环 MUST 新增“前置注入阶段”：处理后台/子代理通知与自动压缩后再请求模型。
 
-#### Scenario: 无 tool calls 时本轮立即结束
-- **WHEN** 模型响应不包含 `tool_calls`
-- **THEN** 运行时结束当前 Agent 循环，且不尝试执行任何工具
+#### Scenario: 通知注入后再发起模型请求
+- **WHEN** 存在后台任务或子代理完成通知
+- **THEN** 主循环在本轮请求前追加对应 system 通知消息
 
-#### Scenario: 存在 tool calls 时继续回填并进入下一轮
-- **WHEN** 模型响应包含一个或多个 `tool_calls`
-- **THEN** 运行时按顺序执行每个工具调用，并在进入下一轮前将结果写入历史
+#### Scenario: 自动压缩后仍保持轮次契约
+- **WHEN** 触发自动压缩
+- **THEN** 压缩完成后再发起模型请求，且工具执行顺序与回填契约不变
 
 ### Requirement: Bash tool MUST enforce execution safety constraints
 `bash(command)` 工具 MUST 在执行前进行命令内容校验，MUST 拒绝被屏蔽的危险片段，MUST 执行 120 秒默认超时，且 MUST 将输出截断至最多 50,000 字符。

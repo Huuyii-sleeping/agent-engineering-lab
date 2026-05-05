@@ -1,7 +1,10 @@
 import OpenAI from "openai";
 import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
 import { toAssistantMessage } from "./messages.js";
+import { drainBackgroundNotifications } from "./tools/background-task.js";
+import { COMPACT_THRESHOLD_TOKENS, compactMessages, estimateTokensFromMessages } from "./tools/context-compact.js";
 import { previewToolCall, runToolByName } from "./tools/index.js";
+import { drainSubagentNotifications } from "./tools/subagent.js";
 
 export type AgentRuntimeState = {
   roundsWithoutTodo: number;
@@ -58,7 +61,42 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
   };
 
   while (true) {
+    const estimatedTokens = estimateTokensFromMessages(messages);
+    if (estimatedTokens > COMPACT_THRESHOLD_TOKENS) {
+      const compactResult = await compactMessages({ messages }, "auto");
+      console.log(
+        `\u001b[36m[auto compact]\u001b[0m before=${compactResult.estimatedBefore} after=${compactResult.estimatedAfter} snapshot=${compactResult.transcriptPath}`,
+      );
+    }
+
     const requestMessages: ChatCompletionMessageParam[] = [{ role: "system", content: system }];
+    const notifications = drainSubagentNotifications();
+    if (notifications.length > 0) {
+      const summaryLines = notifications.map((n) => {
+        const output = typeof n.output === "string" ? n.output.slice(0, 200) : "";
+        const error = typeof n.error === "string" ? n.error.slice(0, 200) : "";
+        if (n.status === "completed") {
+          return `agent#${n.agentId}(${n.agentName}) completed at ${n.updatedAtLocal}; output=${output}`;
+        }
+        return `agent#${n.agentId}(${n.agentName}) failed at ${n.updatedAtLocal}; error=${error}`;
+      });
+      const reminder = `<subagent_notifications>\n${summaryLines.join("\n")}\n</subagent_notifications>`;
+      requestMessages.push({ role: "system", content: reminder });
+      console.log(`\u001b[36m[subagent notifications]\u001b[0m\n${summaryLines.join("\n")}`);
+    }
+    const bgNotifications = drainBackgroundNotifications();
+    if (bgNotifications.length > 0) {
+      const summaryLines = bgNotifications.map((n) => {
+        const out = n.stdout ? n.stdout.slice(0, 160) : "";
+        const err = n.stderr ? n.stderr.slice(0, 160) : "";
+        return n.status === "completed"
+          ? `task#${n.taskId} completed at ${n.finishedAtLocal}; command=${n.command}; stdout=${out}`
+          : `task#${n.taskId} failed at ${n.finishedAtLocal}; command=${n.command}; stderr=${err}`;
+      });
+      const reminder = `<background_notifications>\n${summaryLines.join("\n")}\n</background_notifications>`;
+      requestMessages.push({ role: "system", content: reminder });
+      console.log(`\u001b[36m[background notifications]\u001b[0m\n${summaryLines.join("\n")}`);
+    }
     if (runtimeState.roundsWithoutTodo >= 3) {
       requestMessages.push({
         role: "system",
@@ -97,7 +135,7 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
       const preview = previewToolCall(toolCall.function.name, toolCall.function.arguments);
       console.log(`\u001b[33m$ ${preview}\u001b[0m`);
       const toolOutput = await runToolByName(toolCall.function.name, toolCall.function.arguments);
-      console.log(toolOutput.slice(0, 200));
+      console.log(toolOutput);
 
       messages.push({
         role: "tool",
@@ -115,7 +153,7 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
           });
           console.log(`\u001b[33m$ task_update ${runtimeState.activeTaskId} (auto)\u001b[0m`);
           const autoOutput = await runToolByName("task_update", autoUpdateArgs);
-          console.log(autoOutput.slice(0, 200));
+          console.log(autoOutput);
           runtimeState.activeTaskId = null;
         }
       }
