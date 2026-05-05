@@ -4,15 +4,11 @@
 TBD - created by archiving change prd-00-core-loop. Update Purpose after archive.
 ## Requirements
 ### Requirement: Agent loop SHALL handle tool-calling rounds deterministically
-在既有轮次契约下，主循环 MUST 新增“前置注入阶段”：处理后台/子代理通知与自动压缩后再请求模型。
+主循环 MUST 在每轮请求前注入团队消息通知摘要（若存在），同时保持既有工具调用顺序与回填契约不变。
 
-#### Scenario: 通知注入后再发起模型请求
-- **WHEN** 存在后台任务或子代理完成通知
-- **THEN** 主循环在本轮请求前追加对应 system 通知消息
-
-#### Scenario: 自动压缩后仍保持轮次契约
-- **WHEN** 触发自动压缩
-- **THEN** 压缩完成后再发起模型请求，且工具执行顺序与回填契约不变
+#### Scenario: 团队消息通知注入
+- **WHEN** 团队收件箱出现新消息通知
+- **THEN** 主循环在下一轮模型请求前附加通知 system 消息
 
 ### Requirement: Bash tool MUST enforce execution safety constraints
 `bash(command)` 工具 MUST 在执行前进行命令内容校验，MUST 拒绝被屏蔽的危险片段，MUST 执行 120 秒默认超时，且 MUST 将输出截断至最多 50,000 字符。

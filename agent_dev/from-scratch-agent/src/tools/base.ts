@@ -4,6 +4,20 @@ import { BACKGROUND_TOOLS, runBackgroundRun, runCheckBackground } from "./backgr
 import { CONTEXT_TOOLS, type CompactRuntimeContext, runCompact, runEstimateTokens } from "./context-compact.js";
 import { FILE_TOOLS, runEditFile, runReadFile, runWriteFile } from "./file-tools.js";
 import { TASK_TOOLS, runTaskCreate, runTaskGet, runTaskList, runTaskUpdate } from "./task-board.js";
+import {
+  TEAM_TOOLS,
+  runTeamAddTeammate,
+  runTeamBroadcast,
+  runTeamListRequests,
+  runTeamListTeammates,
+  runTeamMessage,
+  runTeamPlanApprovalRequest,
+  runTeamPlanApprovalResponse,
+  runTeamReadInbox,
+  runTeamSetStatus,
+  runTeamShutdownRequest,
+  runTeamShutdownResponse,
+} from "./team.js";
 import { TODO_TOOLS, runTodo } from "./todo.js";
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<string>;
@@ -31,6 +45,20 @@ const BASE_HANDLERS: Record<string, ToolHandler> = {
   compact: async (args) => runCompact(args.keep_recent, runtimeContext),
   background_run: async (args) => runBackgroundRun(args.command),
   check_background: async (args) => runCheckBackground(args.task_id),
+  team_add_teammate: async (args) => runTeamAddTeammate(args.name),
+  team_set_status: async (args) => runTeamSetStatus(args.teammate_id, args.status),
+  team_message: async (args) => runTeamMessage(args.teammate_id, args.content, args.from),
+  team_broadcast: async (args) => runTeamBroadcast(args.content, args.from),
+  team_shutdown_request: async (args) => runTeamShutdownRequest(args.teammate_id, args.payload, args.from),
+  team_shutdown_response: async (args) =>
+    runTeamShutdownResponse(args.request_id, args.approve, args.note, args.from),
+  team_plan_approval_request: async (args) =>
+    runTeamPlanApprovalRequest(args.teammate_id, args.payload, args.from),
+  team_plan_approval_response: async (args) =>
+    runTeamPlanApprovalResponse(args.request_id, args.approve, args.note, args.from),
+  team_list_teammates: async () => runTeamListTeammates(),
+  team_read_inbox: async (args) => runTeamReadInbox(args.teammate_id),
+  team_list_requests: async () => runTeamListRequests(),
 };
 
 export const BASE_TOOLS: ChatCompletionTool[] = [
@@ -40,6 +68,7 @@ export const BASE_TOOLS: ChatCompletionTool[] = [
   ...TASK_TOOLS,
   ...CONTEXT_TOOLS,
   ...BACKGROUND_TOOLS,
+  ...TEAM_TOOLS,
 ];
 
 let runtimeContext: CompactRuntimeContext | undefined;

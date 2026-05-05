@@ -5,6 +5,7 @@ import { drainBackgroundNotifications } from "./tools/background-task.js";
 import { COMPACT_THRESHOLD_TOKENS, compactMessages, estimateTokensFromMessages } from "./tools/context-compact.js";
 import { previewToolCall, runToolByName } from "./tools/index.js";
 import { drainSubagentNotifications } from "./tools/subagent.js";
+import { drainTeamNotifications } from "./tools/team.js";
 
 export type AgentRuntimeState = {
   roundsWithoutTodo: number;
@@ -96,6 +97,17 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
       const reminder = `<background_notifications>\n${summaryLines.join("\n")}\n</background_notifications>`;
       requestMessages.push({ role: "system", content: reminder });
       console.log(`\u001b[36m[background notifications]\u001b[0m\n${summaryLines.join("\n")}`);
+    }
+    const teamNotifications = drainTeamNotifications();
+    if (teamNotifications.length > 0) {
+      const summaryLines = teamNotifications.map((n) => {
+        const c = n.content.slice(0, 120);
+        const req = n.requestId ? ` request_id=${n.requestId}` : "";
+        return `to#${n.teammateId}(${n.teammateName}) ${n.messageType} from=${n.from}${req} at ${n.createdAtLocal}: ${c}`;
+      });
+      const reminder = `<team_notifications>\n${summaryLines.join("\n")}\n</team_notifications>`;
+      requestMessages.push({ role: "system", content: reminder });
+      console.log(`\u001b[36m[team notifications]\u001b[0m\n${summaryLines.join("\n")}`);
     }
     if (runtimeState.roundsWithoutTodo >= 3) {
       requestMessages.push({
