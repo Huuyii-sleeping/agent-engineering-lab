@@ -4,6 +4,7 @@ import { toAssistantMessage } from "./messages.js";
 import { drainBackgroundNotifications } from "./tools/background-task.js";
 import { COMPACT_THRESHOLD_TOKENS, compactMessages, estimateTokensFromMessages } from "./tools/context-compact.js";
 import { previewToolCall, runToolByName } from "./tools/index.js";
+import { autoExtractMemory, buildMemoryInjectionForQuery } from "./tools/memory.js";
 import { drainSubagentNotifications } from "./tools/subagent.js";
 import { drainTeamNotifications } from "./tools/team.js";
 import { runAutonomyTick } from "./tools/autonomy.js";
@@ -11,6 +12,7 @@ import { runAutonomyTick } from "./tools/autonomy.js";
 export type AgentRuntimeState = {
   roundsWithoutTodo: number;
   activeTaskId: number | null;
+  lastMemoryInput: string | null;
 };
 
 type AgentLoopOptions = {
@@ -63,6 +65,16 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
   };
 
   while (true) {
+    const latestUser = [...messages]
+      .reverse()
+      .find((item) => item.role === "user" && typeof item.content === "string") as
+      | { role: "user"; content: string }
+      | undefined;
+    if (latestUser?.content && runtimeState.lastMemoryInput !== latestUser.content) {
+      await autoExtractMemory("user", latestUser.content);
+      runtimeState.lastMemoryInput = latestUser.content;
+    }
+
     try {
       const autonomyRaw = await runAutonomyTick();
       const autonomy = JSON.parse(autonomyRaw) as { ok?: boolean; action?: string; taskId?: number };
@@ -125,6 +137,15 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
         role: "system",
         content: "<reminder>请调用 todo 工具更新任务列表并维护进度。</reminder>",
       });
+    }
+    if (latestUser?.content) {
+      const injected = await buildMemoryInjectionForQuery(latestUser.content);
+      if (injected.content) {
+        requestMessages.push({ role: "system", content: injected.content });
+        console.log(
+          `\u001b[36m[memory inject]\u001b[0m entries=${injected.usedEntries} tokens=${injected.estimatedTokens}`,
+        );
+      }
     }
     requestMessages.push(...messages);
 

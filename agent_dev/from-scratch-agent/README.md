@@ -44,3 +44,7 @@ npm run test:regression
 npx tsx src/smoke/prd07-security-smoke.ts
 ```
 
+- PRD-08 记忆检索 smoke
+```bash
+npm run test:memory
+```

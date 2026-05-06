@@ -13,6 +13,10 @@ type RuntimeConfig = {
   subagentMaxRounds: number;
   subagentMaxTokens: number;
   securityApprovalDefaultTtlSec: number;
+  memoryShortTermLimit: number;
+  memorySearchDefaultLimit: number;
+  memoryInjectTopK: number;
+  memoryInjectMaxTokens: number;
 };
 
 function readInt(name: string, fallback: number, min: number): number {
@@ -40,4 +44,8 @@ export const RUNTIME_CONFIG: RuntimeConfig = {
   subagentMaxRounds: readInt("AGENT_SUBAGENT_MAX_ROUNDS", 12, 1),
   subagentMaxTokens: readInt("AGENT_SUBAGENT_MAX_TOKENS", 2_000, 100),
   securityApprovalDefaultTtlSec: readInt("AGENT_SECURITY_APPROVAL_DEFAULT_TTL_SEC", 600, 30),
+  memoryShortTermLimit: readInt("AGENT_MEMORY_SHORT_TERM_LIMIT", 40, 1),
+  memorySearchDefaultLimit: readInt("AGENT_MEMORY_SEARCH_DEFAULT_LIMIT", 8, 1),
+  memoryInjectTopK: readInt("AGENT_MEMORY_INJECT_TOP_K", 5, 1),
+  memoryInjectMaxTokens: readInt("AGENT_MEMORY_INJECT_MAX_TOKENS", 700, 100),
 };

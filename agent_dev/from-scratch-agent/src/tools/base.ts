@@ -9,6 +9,7 @@ import { BASH_TOOLS, readCommandArgs, runBash } from "./bash.js";
 import { BACKGROUND_TOOLS, runBackgroundRun, runCheckBackground } from "./background-task.js";
 import { CONTEXT_TOOLS, type CompactRuntimeContext, runCompact, runEstimateTokens } from "./context-compact.js";
 import { FILE_TOOLS, runEditFile, runReadFile, runWriteFile } from "./file-tools.js";
+import { MEMORY_TOOLS, runMemoryAdd, runMemoryList, runMemorySearch } from "./memory.js";
 import {
   TASK_TOOLS,
   runTaskCreate,
@@ -65,6 +66,9 @@ const BASE_HANDLERS: Record<string, ToolHandler> = {
   read_file: async (args) => runReadFile(args.path, args.limit),
   write_file: async (args) => runWriteFile(args.path, args.content),
   edit_file: async (args) => runEditFile(args.path, args.old_text, args.new_text),
+  memory_add: async (args) => runMemoryAdd(args.source, args.type, args.tags, args.content, args.confidence),
+  memory_search: async (args) => runMemorySearch(args.query, args.limit, args.layer, args.type),
+  memory_list: async (args) => runMemoryList(args.layer, args.limit),
   todo: async (args) => runTodo(args.items),
   task_create: async (args) => runTaskCreate(args.subject, args.description),
   task_update: async (args) =>
@@ -109,6 +113,7 @@ const BASE_HANDLERS: Record<string, ToolHandler> = {
 export const BASE_TOOLS: ChatCompletionTool[] = [
   ...BASH_TOOLS,
   ...FILE_TOOLS,
+  ...MEMORY_TOOLS,
   ...TODO_TOOLS,
   ...TASK_TOOLS,
   ...CONTEXT_TOOLS,
