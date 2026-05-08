@@ -43,3 +43,9 @@ CLI 入口 MUST 在每次输入循环显示固定提示符 `s01 >>`，并且在�
 - **WHEN** 设置有效的配置环境变量
 - **THEN** 对应运行参数在不改代码情况下生效
 
+### Requirement: Agent loop SHALL inject relevant memory before model request
+主循环在每轮模型请求前 SHALL 基于最新用户输入注入相关记忆上下文，并保持原有工具调用契约不变。
+
+#### Scenario: 命中记忆时注入上下文
+- **WHEN** 最新用户输入可命中记忆条目
+- **THEN** 请求消息中追加 `memory_context` system 消息
