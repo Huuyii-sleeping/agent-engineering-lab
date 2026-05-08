@@ -4,6 +4,7 @@ import type {
   ChatCompletionTool,
 } from "openai/resources/chat/completions";
 import { MODEL, createClient } from "../config.js";
+import { getExecutionContext, recordObservabilityEvent } from "../observability/runtime.js";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
 import { toAssistantMessage } from "../messages.js";
 import { BASE_TOOLS, runBaseToolByName } from "./base.js";
@@ -14,6 +15,7 @@ type SubagentRecord = {
   id: number;
   name: string;
   status: SubagentStatus;
+  traceId: string | null;
   createdAt: string;
   updatedAt: string;
   lastInput: string | null;
@@ -88,6 +90,17 @@ class SubagentManager {
   }
 
   private pushCompletedNotification(record: SubagentRecord): void {
+    void recordObservabilityEvent(
+      "notification",
+      {
+        source: "subagent",
+        agentId: record.id,
+        agentName: record.name,
+        status: "completed",
+        output: record.lastOutput ?? "",
+      },
+      record.traceId ? { traceId: record.traceId } : undefined,
+    );
     this.notifications.push({
       agentId: record.id,
       agentName: record.name,
@@ -99,6 +112,17 @@ class SubagentManager {
   }
 
   private pushFailedNotification(record: SubagentRecord): void {
+    void recordObservabilityEvent(
+      "notification",
+      {
+        source: "subagent",
+        agentId: record.id,
+        agentName: record.name,
+        status: "failed",
+        error: record.lastError ?? "",
+      },
+      record.traceId ? { traceId: record.traceId } : undefined,
+    );
     this.notifications.push({
       agentId: record.id,
       agentName: record.name,
@@ -116,6 +140,7 @@ class SubagentManager {
       id: this.nextId,
       name,
       status: "idle",
+      traceId: getExecutionContext()?.traceId ?? null,
       createdAt: now,
       updatedAt: now,
       lastInput: null,
@@ -213,6 +238,7 @@ class SubagentManager {
     }
 
     record.status = "running";
+    record.traceId = getExecutionContext()?.traceId ?? record.traceId;
     record.updatedAt = this.now();
     record.lastInput = prompt;
     record.lastOutput = null;

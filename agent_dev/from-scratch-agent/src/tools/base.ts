@@ -1,4 +1,5 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
+import { isReplayDryRun } from "../observability/runtime.js";
 import {
   runAutonomyMarkActive,
   runAutonomySetOwner,
@@ -52,6 +53,22 @@ import {
 } from "./worktree.js";
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<string>;
+
+const REPLAY_SAFE_TOOLS = new Set([
+  "read_file",
+  "memory_search",
+  "memory_list",
+  "task_list",
+  "task_get",
+  "estimate_tokens",
+  "security_check",
+  "security_list_approvals",
+  "worktree_list",
+  "team_list_teammates",
+  "team_read_inbox",
+  "team_list_requests",
+  "check_background",
+]);
 
 export const BASE_UNKNOWN_TOOL = JSON.stringify({
   ok: false,
@@ -191,6 +208,12 @@ export async function runBaseToolByName(name: string, argumentsJson: string): Pr
   const handler = BASE_HANDLERS[name];
   if (!handler) {
     return BASE_UNKNOWN_TOOL;
+  }
+  if (isReplayDryRun() && !REPLAY_SAFE_TOOLS.has(name)) {
+    return JSON.stringify({
+      ok: false,
+      error: { code: "REPLAY_DRY_RUN_BLOCKED", message: `replay dry-run blocked tool ${name}` },
+    });
   }
   const args = parseToolArgs(argumentsJson);
   const gate = await enforceSecurityGate(name, args);

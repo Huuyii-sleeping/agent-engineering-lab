@@ -13,7 +13,12 @@ export async function runCli(): Promise<void> {
   const history: ChatCompletionMessageParam[] = [];
   setCompactRuntimeContext({ messages: history });
   const client = createClient();
-  const runtimeState: AgentRuntimeState = { roundsWithoutTodo: 0, activeTaskId: null, lastMemoryInput: null };
+  const runtimeState: AgentRuntimeState = {
+    roundsWithoutTodo: 0,
+    activeTaskId: null,
+    lastMemoryInput: null,
+    roundCounter: 0,
+  };
 
   try {
     while (true) {

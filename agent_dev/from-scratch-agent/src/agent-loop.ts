@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
 import { toAssistantMessage } from "./messages.js";
+import { createSpanId, createTraceId, recordObservabilityEvent, withExecutionContext } from "./observability/runtime.js";
 import { drainBackgroundNotifications } from "./tools/background-task.js";
 import { COMPACT_THRESHOLD_TOKENS, compactMessages, estimateTokensFromMessages } from "./tools/context-compact.js";
 import { previewToolCall, runToolByName } from "./tools/index.js";
@@ -13,6 +14,7 @@ export type AgentRuntimeState = {
   roundsWithoutTodo: number;
   activeTaskId: number | null;
   lastMemoryInput: string | null;
+  roundCounter: number;
 };
 
 type AgentLoopOptions = {
@@ -26,6 +28,27 @@ type AgentLoopOptions = {
 
 export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
   const { client, model, system, tools, messages, runtimeState } = opts;
+
+  const summarizeText = (value: string, max = 160): string => {
+    const trimmed = value.trim();
+    if (trimmed.length <= max) {
+      return trimmed;
+    }
+    return `${trimmed.slice(0, max)}...`;
+  };
+
+  const analyzeToolOutput = (output: string): { ok: boolean; errorCode: string | null; summary: string } => {
+    try {
+      const parsed = JSON.parse(output) as { ok?: boolean; error?: { code?: unknown } };
+      return {
+        ok: parsed.ok !== false,
+        errorCode: parsed.ok === false ? String(parsed.error?.code ?? "UNKNOWN_ERROR") : null,
+        summary: summarizeText(output, 220),
+      };
+    } catch {
+      return { ok: true, errorCode: null, summary: summarizeText(output, 220) };
+    }
+  };
 
   const parseArgs = (raw: string): Record<string, unknown> => {
     try {
@@ -65,11 +88,21 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
   };
 
   while (true) {
+    runtimeState.roundCounter += 1;
+    const traceId = createTraceId();
     const latestUser = [...messages]
       .reverse()
       .find((item) => item.role === "user" && typeof item.content === "string") as
       | { role: "user"; content: string }
       | undefined;
+    await recordObservabilityEvent(
+      "loop_start",
+      {
+        round: runtimeState.roundCounter,
+        latestUserInput: latestUser?.content ? summarizeText(latestUser.content) : "",
+      },
+      { traceId },
+    );
     if (latestUser?.content && runtimeState.lastMemoryInput !== latestUser.content) {
       await autoExtractMemory("user", latestUser.content);
       runtimeState.lastMemoryInput = latestUser.content;
@@ -120,6 +153,19 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
       const reminder = `<background_notifications>\n${summaryLines.join("\n")}\n</background_notifications>`;
       requestMessages.push({ role: "system", content: reminder });
       console.log(`\u001b[36m[background notifications]\u001b[0m\n${summaryLines.join("\n")}`);
+      for (const item of bgNotifications) {
+        await recordObservabilityEvent(
+          "notification",
+          {
+            source: "background",
+            taskId: item.taskId,
+            status: item.status,
+            command: item.command,
+            exitCode: item.exitCode,
+          },
+          { traceId },
+        );
+      }
     }
     const teamNotifications = drainTeamNotifications();
     if (teamNotifications.length > 0) {
@@ -131,6 +177,20 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
       const reminder = `<team_notifications>\n${summaryLines.join("\n")}\n</team_notifications>`;
       requestMessages.push({ role: "system", content: reminder });
       console.log(`\u001b[36m[team notifications]\u001b[0m\n${summaryLines.join("\n")}`);
+      for (const item of teamNotifications) {
+        await recordObservabilityEvent(
+          "notification",
+          {
+            source: "team",
+            teammateId: item.teammateId,
+            teammateName: item.teammateName,
+            messageType: item.messageType,
+            requestId: item.requestId ?? null,
+            content: item.content,
+          },
+          { traceId },
+        );
+      }
     }
     if (runtimeState.roundsWithoutTodo >= 3) {
       requestMessages.push({
@@ -148,6 +208,16 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
       }
     }
     requestMessages.push(...messages);
+    await recordObservabilityEvent(
+      "model_request",
+      {
+        round: runtimeState.roundCounter,
+        messageCount: requestMessages.length,
+        estimatedPromptTokens: estimateTokensFromMessages(requestMessages),
+        latestUserInput: latestUser?.content ? summarizeText(latestUser.content) : "",
+      },
+      { traceId },
+    );
 
     const response = await client.chat.completions.create({
       model,
@@ -158,8 +228,19 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
 
     const message = response.choices[0]?.message;
     if (!message) {
+      await recordObservabilityEvent("error", { phase: "model_response", message: "empty model response" }, { traceId });
       return;
     }
+    await recordObservabilityEvent(
+      "model_response",
+      {
+        round: runtimeState.roundCounter,
+        toolCallCount: message.tool_calls?.length ?? 0,
+        completionTokens: response.usage?.completion_tokens ?? 0,
+        content: typeof message.content === "string" ? summarizeText(message.content) : "",
+      },
+      { traceId },
+    );
 
     messages.push(toAssistantMessage(message));
 
@@ -177,9 +258,45 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
 
       const toolArgs = parseArgs(toolCall.function.arguments);
       const preview = previewToolCall(toolCall.function.name, toolCall.function.arguments);
+      const spanId = createSpanId();
+      await recordObservabilityEvent(
+        "tool_call",
+        {
+          toolName: toolCall.function.name,
+          preview,
+          argumentsJson: toolCall.function.arguments,
+        },
+        { traceId, spanId },
+      );
       console.log(`\u001b[33m$ ${preview}\u001b[0m`);
-      const toolOutput = await runToolByName(toolCall.function.name, toolCall.function.arguments);
+      const startedAt = Date.now();
+      const toolOutput = await withExecutionContext({ traceId, spanId }, async () =>
+        runToolByName(toolCall.function.name, toolCall.function.arguments),
+      );
+      const durationMs = Date.now() - startedAt;
       console.log(toolOutput);
+      const analyzed = analyzeToolOutput(toolOutput);
+      await recordObservabilityEvent(
+        "tool_result",
+        {
+          toolName: toolCall.function.name,
+          durationMs,
+          ok: analyzed.ok,
+          errorCode: analyzed.errorCode,
+          outputSummary: analyzed.summary,
+        },
+        { traceId, spanId },
+      );
+      if (analyzed.errorCode?.startsWith("SECURITY_")) {
+        await recordObservabilityEvent(
+          "security_blocked",
+          {
+            toolName: toolCall.function.name,
+            errorCode: analyzed.errorCode,
+          },
+          { traceId, spanId },
+        );
+      }
 
       messages.push({
         role: "tool",
@@ -196,7 +313,9 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
             status: "completed",
           });
           console.log(`\u001b[33m$ task_update ${runtimeState.activeTaskId} (auto)\u001b[0m`);
-          const autoOutput = await runToolByName("task_update", autoUpdateArgs);
+          const autoOutput = await withExecutionContext({ traceId, spanId: createSpanId() }, async () =>
+            runToolByName("task_update", autoUpdateArgs),
+          );
           console.log(autoOutput);
           runtimeState.activeTaskId = null;
         }

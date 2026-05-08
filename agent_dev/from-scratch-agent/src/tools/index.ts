@@ -1,4 +1,5 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
+import { isReplayDryRun } from "../observability/runtime.js";
 import { BASE_TOOLS, BASE_UNKNOWN_TOOL, previewBaseToolCall, runBaseToolByName } from "./base.js";
 import { enforceSecurityGate } from "./security.js";
 import {
@@ -50,6 +51,12 @@ export function previewToolCall(name: string, argumentsJson: string): string {
 export async function runToolByName(name: string, argumentsJson: string): Promise<string> {
   const subagentHandler = SUBAGENT_HANDLERS[name];
   if (subagentHandler) {
+    if (isReplayDryRun()) {
+      return JSON.stringify({
+        ok: false,
+        error: { code: "REPLAY_DRY_RUN_BLOCKED", message: `replay dry-run blocked tool ${name}` },
+      });
+    }
     const args = parseToolArgs(argumentsJson);
     const gate = await enforceSecurityGate(name, args);
     if (!gate.ok) {

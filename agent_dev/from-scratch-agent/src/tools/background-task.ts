@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import * as process from "node:process";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
+import { getExecutionContext, recordObservabilityEvent } from "../observability/runtime.js";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
 
 type BackgroundStatus = "running" | "completed" | "failed";
@@ -9,6 +10,7 @@ type BackgroundTask = {
   id: number;
   command: string;
   status: BackgroundStatus;
+  traceId: string | null;
   startedAt: string;
   finishedAt: string | null;
   exitCode: number | null;
@@ -79,6 +81,7 @@ class BackgroundManager {
       id: this.nextId,
       command,
       status: "running",
+      traceId: getExecutionContext()?.traceId ?? null,
       startedAt: nowIso(),
       finishedAt: null,
       exitCode: null,
@@ -87,6 +90,15 @@ class BackgroundManager {
     };
     this.tasks.set(task.id, task);
     this.nextId += 1;
+    void recordObservabilityEvent(
+      "background_task",
+      {
+        phase: "started",
+        taskId: task.id,
+        command: task.command,
+      },
+      task.traceId ? { traceId: task.traceId } : undefined,
+    );
 
     const child = spawn(command, {
       cwd: process.cwd(),
@@ -105,6 +117,17 @@ class BackgroundManager {
       task.finishedAt = nowIso();
       task.exitCode = -1;
       task.stderr += `\n${String(error)}`;
+      void recordObservabilityEvent(
+        "background_task",
+        {
+          phase: "failed",
+          taskId: task.id,
+          command: task.command,
+          exitCode: task.exitCode,
+          stderr: cut(task.stderr),
+        },
+        task.traceId ? { traceId: task.traceId } : undefined,
+      );
       this.notifications.push({
         taskId: task.id,
         status: "failed",
@@ -120,6 +143,18 @@ class BackgroundManager {
       task.finishedAt = nowIso();
       task.exitCode = code ?? 0;
       task.status = task.exitCode === 0 ? "completed" : "failed";
+      void recordObservabilityEvent(
+        "background_task",
+        {
+          phase: task.status,
+          taskId: task.id,
+          command: task.command,
+          exitCode: task.exitCode,
+          stdout: cut(task.stdout),
+          stderr: cut(task.stderr),
+        },
+        task.traceId ? { traceId: task.traceId } : undefined,
+      );
       this.notifications.push({
         taskId: task.id,
         status: task.status,
