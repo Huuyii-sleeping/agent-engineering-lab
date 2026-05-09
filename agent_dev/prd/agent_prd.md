@@ -1,7 +1,7 @@
-# TypeScript Agent 全量 PRD（覆盖 01-12 教学代码）
+# TypeScript Agent 全量 PRD（覆盖 01-19 教学目录）
 
 ## 0. 文档目标
-本 PRD 用于指导你在 `typescript` 目录实现一个完整 Agent，要求覆盖现有 `01_agent_loop.ts` 到 `12_worktree_task_isolation.ts` 的全部能力与约束，不遗漏任何核心机制。
+本 PRD 用于指导你在 `typescript` 目录实现一个完整 Agent，要求覆盖当前教学目录 `s01` 到 `s19` 的核心能力与约束，不遗漏主循环、系统加固、任务运行时和多 Agent 平台中的关键机制。
 
 ---
 
@@ -578,4 +578,3 @@ Worktree 创建/运行/状态/保留/删除/事件日志全链路可用，且任
 3. 然后并入并发层（Background + Team + Protocol）。
 4. 最后加入自治与 Worktree 隔离（S11/S12）。
 5. 每完成一层就跑一次阶段验收（按 AC-01~AC-12）。
-

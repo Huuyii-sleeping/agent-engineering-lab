@@ -1,12 +1,24 @@
+import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { agentLoop, type AgentRuntimeState } from "./agent-loop.js";
 import { createClient, MODEL, SYSTEM } from "./config.js";
+import { runHooks } from "./hooks/index.js";
 import { setCompactRuntimeContext } from "./tools/base.js";
 import { TOOLS } from "./tools/index.js";
 
 const PROMPT = "\u001b[36ms01 >> \u001b[0m";
+
+function appendSystemMessages(messages: ChatCompletionMessageParam[], items: string[]): void {
+  for (const item of items) {
+    const content = item.trim();
+    if (!content) {
+      continue;
+    }
+    messages.push({ role: "system", content });
+  }
+}
 
 export async function runCli(): Promise<void> {
   const rl = createInterface({ input, output });
@@ -14,6 +26,7 @@ export async function runCli(): Promise<void> {
   setCompactRuntimeContext({ messages: history });
   const client = createClient();
   const runtimeState: AgentRuntimeState = {
+    sessionId: randomUUID(),
     roundsWithoutTodo: 0,
     activeTaskId: null,
     lastMemoryInput: null,
@@ -37,6 +50,16 @@ export async function runCli(): Promise<void> {
         break;
       }
 
+      const promptHooks = await runHooks("UserPromptSubmit", {
+        session_id: runtimeState.sessionId,
+        payload: { prompt: query },
+      });
+      if (promptHooks.blocked) {
+        console.log(`\u001b[31m[hook blocked]\u001b[0m ${promptHooks.blockReason ?? "prompt blocked by hook"}`);
+        console.log();
+        continue;
+      }
+      appendSystemMessages(history, promptHooks.messages);
       history.push({ role: "user", content: query });
       await agentLoop({
         client,

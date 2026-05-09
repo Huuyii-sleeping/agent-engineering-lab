@@ -38,7 +38,12 @@
   - 核心实现逻辑；
   - 验证方式（命令与结果）。
 
-## 6. 提交前清理规则
+## 6. 包管理器规则
+
+- 以后统一使用 `pnpm`，不再新增 `npm` 工作流约定。
+- 新增文档、脚本、命令示例时，优先写 `pnpm` 命令。
+
+## 7. 提交前清理规则
 
 提交前必须清理运行与测试产物，不纳入 commit：
 
@@ -48,8 +53,11 @@
 - `agent_dev/from-scratch-agent/.transcripts/`
 - `agent_dev/from-scratch-agent/tmp/`
 - `agent_dev/from-scratch-agent/.memory/`（如为临时测试数据）
+- `agent_dev/from-scratch-agent/.audit/`
+- `agent_dev/from-scratch-agent/.observability/`
+- `agent_dev/from-scratch-agent/.security/`
 
-## 7. 提交内容规则
+## 8. 提交内容规则
 
 - 允许提交：
   - 源码变更（如 `src/`）；
@@ -60,7 +68,7 @@
   - 持久化运行数据。
 - 每次提交后执行 `git push`。
 
-## 8. Commit Message 规范（Conventional Commits）
+## 9. Commit Message 规范（Conventional Commits）
 
 格式：
 
@@ -98,20 +106,20 @@
 - `.githooks/commit-msg` 校验提交首行格式。
 - `.gitmessage.txt` 作为默认提交模板。
 
-## 9. 验证规则
+## 10. 验证规则
 
 每次实现至少执行：
 
-1. `npm run build`
+1. `pnpm build`
 2. 对应 PRD 的 smoke/回归测试
 3. `openspec status --change "<name>" --json`
 4. `openspec validate --changes "<name>"`
 
-## 10. 失败处理规则
+## 11. 失败处理规则
 
 - 先给出可读错误原因，再给出修复动作。
 - 遇到沙箱限制可申请提权后重试。
 
-## 11. 优先级
+## 12. 优先级
 
 - 若与系统/平台更高优先级指令冲突，以更高优先级为准。

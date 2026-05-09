@@ -1,0 +1,13 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "node",
+        "args": [
+          "./src/hooks/scripts/todo-reminder-hook.mjs"
+        ]
+      }
+    ]
+  }
+}

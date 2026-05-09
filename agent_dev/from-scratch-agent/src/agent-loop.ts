@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
+import { runHooks } from "./hooks/index.js";
 import { toAssistantMessage } from "./messages.js";
 import { createSpanId, createTraceId, recordObservabilityEvent, withExecutionContext } from "./observability/runtime.js";
 import { drainBackgroundNotifications } from "./tools/background-task.js";
@@ -11,6 +12,7 @@ import { drainTeamNotifications } from "./tools/team.js";
 import { runAutonomyTick } from "./tools/autonomy.js";
 
 export type AgentRuntimeState = {
+  sessionId: string;
   roundsWithoutTodo: number;
   activeTaskId: number | null;
   lastMemoryInput: string | null;
@@ -25,6 +27,30 @@ type AgentLoopOptions = {
   messages: ChatCompletionMessageParam[];
   runtimeState: AgentRuntimeState;
 };
+
+function appendSystemMessages(messages: ChatCompletionMessageParam[], items: string[]): void {
+  for (const item of items) {
+    const content = item.trim();
+    if (!content) {
+      continue;
+    }
+    messages.push({ role: "system", content });
+  }
+}
+
+function makeHookBlockedOutput(reason: string | null): string {
+  return JSON.stringify(
+    {
+      ok: false,
+      error: {
+        code: "HOOK_BLOCKED",
+        message: reason ?? "blocked by hook",
+      },
+    },
+    null,
+    2,
+  );
+}
 
 export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
   const { client, model, system, tools, messages, runtimeState } = opts;
@@ -90,253 +116,323 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
   while (true) {
     runtimeState.roundCounter += 1;
     const traceId = createTraceId();
+    let stopReason = "tool_calls_processed";
+    let stopToolCallCount = 0;
     const latestUser = [...messages]
       .reverse()
       .find((item) => item.role === "user" && typeof item.content === "string") as
       | { role: "user"; content: string }
       | undefined;
-    await recordObservabilityEvent(
-      "loop_start",
-      {
-        round: runtimeState.roundCounter,
-        latestUserInput: latestUser?.content ? summarizeText(latestUser.content) : "",
-      },
-      { traceId },
-    );
-    if (latestUser?.content && runtimeState.lastMemoryInput !== latestUser.content) {
-      await autoExtractMemory("user", latestUser.content);
-      runtimeState.lastMemoryInput = latestUser.content;
-    }
-
     try {
-      const autonomyRaw = await runAutonomyTick();
-      const autonomy = JSON.parse(autonomyRaw) as { ok?: boolean; action?: string; taskId?: number };
-      if (autonomy.ok && autonomy.action === "claimed") {
-        console.log(`\u001b[36m[autonomy]\u001b[0m claimed task #${autonomy.taskId ?? "?"}`);
-      }
-    } catch {
-      // keep agent loop resilient if autonomy tick fails
-    }
-
-    const estimatedTokens = estimateTokensFromMessages(messages);
-    if (estimatedTokens > COMPACT_THRESHOLD_TOKENS) {
-      const compactResult = await compactMessages({ messages }, "auto");
-      console.log(
-        `\u001b[36m[auto compact]\u001b[0m before=${compactResult.estimatedBefore} after=${compactResult.estimatedAfter} snapshot=${compactResult.transcriptPath}`,
+      await recordObservabilityEvent(
+        "loop_start",
+        {
+          round: runtimeState.roundCounter,
+          latestUserInput: latestUser?.content ? summarizeText(latestUser.content) : "",
+        },
+        { traceId },
       );
-    }
+      const sessionStartHooks = await runHooks("SessionStart", {
+        session_id: runtimeState.sessionId,
+        trace_id: traceId,
+        payload: {
+          round: runtimeState.roundCounter,
+          rounds_without_todo: runtimeState.roundsWithoutTodo,
+          latest_user_input: latestUser?.content ?? "",
+        },
+      });
+      if (sessionStartHooks.blocked) {
+        stopReason = "session_start_blocked";
+        messages.push({
+          role: "assistant",
+          content: `当前轮次被 hook 阻止：${sessionStartHooks.blockReason ?? "blocked by hook"}`,
+        });
+        return;
+      }
 
-    const requestMessages: ChatCompletionMessageParam[] = [{ role: "system", content: system }];
-    const notifications = drainSubagentNotifications();
-    if (notifications.length > 0) {
-      const summaryLines = notifications.map((n) => {
-        const output = typeof n.output === "string" ? n.output.slice(0, 200) : "";
-        const error = typeof n.error === "string" ? n.error.slice(0, 200) : "";
-        if (n.status === "completed") {
-          return `agent#${n.agentId}(${n.agentName}) completed at ${n.updatedAtLocal}; output=${output}`;
+      if (latestUser?.content && runtimeState.lastMemoryInput !== latestUser.content) {
+        await autoExtractMemory("user", latestUser.content);
+        runtimeState.lastMemoryInput = latestUser.content;
+      }
+
+      try {
+        const autonomyRaw = await runAutonomyTick();
+        const autonomy = JSON.parse(autonomyRaw) as { ok?: boolean; action?: string; taskId?: number };
+        if (autonomy.ok && autonomy.action === "claimed") {
+          console.log(`\u001b[36m[autonomy]\u001b[0m claimed task #${autonomy.taskId ?? "?"}`);
         }
-        return `agent#${n.agentId}(${n.agentName}) failed at ${n.updatedAtLocal}; error=${error}`;
-      });
-      const reminder = `<subagent_notifications>\n${summaryLines.join("\n")}\n</subagent_notifications>`;
-      requestMessages.push({ role: "system", content: reminder });
-      console.log(`\u001b[36m[subagent notifications]\u001b[0m\n${summaryLines.join("\n")}`);
-    }
-    const bgNotifications = drainBackgroundNotifications();
-    if (bgNotifications.length > 0) {
-      const summaryLines = bgNotifications.map((n) => {
-        const out = n.stdout ? n.stdout.slice(0, 160) : "";
-        const err = n.stderr ? n.stderr.slice(0, 160) : "";
-        return n.status === "completed"
-          ? `task#${n.taskId} completed at ${n.finishedAtLocal}; command=${n.command}; stdout=${out}`
-          : `task#${n.taskId} failed at ${n.finishedAtLocal}; command=${n.command}; stderr=${err}`;
-      });
-      const reminder = `<background_notifications>\n${summaryLines.join("\n")}\n</background_notifications>`;
-      requestMessages.push({ role: "system", content: reminder });
-      console.log(`\u001b[36m[background notifications]\u001b[0m\n${summaryLines.join("\n")}`);
-      for (const item of bgNotifications) {
-        await recordObservabilityEvent(
-          "notification",
-          {
-            source: "background",
-            taskId: item.taskId,
-            status: item.status,
-            command: item.command,
-            exitCode: item.exitCode,
-          },
-          { traceId },
-        );
+      } catch {
+        // keep agent loop resilient if autonomy tick fails
       }
-    }
-    const teamNotifications = drainTeamNotifications();
-    if (teamNotifications.length > 0) {
-      const summaryLines = teamNotifications.map((n) => {
-        const c = n.content.slice(0, 120);
-        const req = n.requestId ? ` request_id=${n.requestId}` : "";
-        return `to#${n.teammateId}(${n.teammateName}) ${n.messageType} from=${n.from}${req} at ${n.createdAtLocal}: ${c}`;
-      });
-      const reminder = `<team_notifications>\n${summaryLines.join("\n")}\n</team_notifications>`;
-      requestMessages.push({ role: "system", content: reminder });
-      console.log(`\u001b[36m[team notifications]\u001b[0m\n${summaryLines.join("\n")}`);
-      for (const item of teamNotifications) {
-        await recordObservabilityEvent(
-          "notification",
-          {
-            source: "team",
-            teammateId: item.teammateId,
-            teammateName: item.teammateName,
-            messageType: item.messageType,
-            requestId: item.requestId ?? null,
-            content: item.content,
-          },
-          { traceId },
-        );
-      }
-    }
-    if (runtimeState.roundsWithoutTodo >= 3) {
-      requestMessages.push({
-        role: "system",
-        content: "<reminder>请调用 todo 工具更新任务列表并维护进度。</reminder>",
-      });
-    }
-    if (latestUser?.content) {
-      const injected = await buildMemoryInjectionForQuery(latestUser.content);
-      if (injected.content) {
-        requestMessages.push({ role: "system", content: injected.content });
+
+      const estimatedTokens = estimateTokensFromMessages(messages);
+      if (estimatedTokens > COMPACT_THRESHOLD_TOKENS) {
+        const compactResult = await compactMessages({ messages }, "auto");
         console.log(
-          `\u001b[36m[memory inject]\u001b[0m entries=${injected.usedEntries} tokens=${injected.estimatedTokens}`,
+          `\u001b[36m[auto compact]\u001b[0m before=${compactResult.estimatedBefore} after=${compactResult.estimatedAfter} snapshot=${compactResult.transcriptPath}`,
         );
       }
-    }
-    requestMessages.push(...messages);
-    await recordObservabilityEvent(
-      "model_request",
-      {
-        round: runtimeState.roundCounter,
-        messageCount: requestMessages.length,
-        estimatedPromptTokens: estimateTokensFromMessages(requestMessages),
-        latestUserInput: latestUser?.content ? summarizeText(latestUser.content) : "",
-      },
-      { traceId },
-    );
 
-    const response = await client.chat.completions.create({
-      model,
-      messages: requestMessages,
-      tools,
-      max_tokens: 8_000,
-    });
+      const requestMessages: ChatCompletionMessageParam[] = [{ role: "system", content: system }];
+      appendSystemMessages(requestMessages, sessionStartHooks.messages);
+      const notifications = drainSubagentNotifications();
+      if (notifications.length > 0) {
+        const summaryLines = notifications.map((n) => {
+          const output = typeof n.output === "string" ? n.output.slice(0, 200) : "";
+          const error = typeof n.error === "string" ? n.error.slice(0, 200) : "";
+          if (n.status === "completed") {
+            return `agent#${n.agentId}(${n.agentName}) completed at ${n.updatedAtLocal}; output=${output}`;
+          }
+          return `agent#${n.agentId}(${n.agentName}) failed at ${n.updatedAtLocal}; error=${error}`;
+        });
+        const reminder = `<subagent_notifications>\n${summaryLines.join("\n")}\n</subagent_notifications>`;
+        requestMessages.push({ role: "system", content: reminder });
+        console.log(`\u001b[36m[subagent notifications]\u001b[0m\n${summaryLines.join("\n")}`);
+      }
+      const bgNotifications = drainBackgroundNotifications();
+      if (bgNotifications.length > 0) {
+        const summaryLines = bgNotifications.map((n) => {
+          const out = n.stdout ? n.stdout.slice(0, 160) : "";
+          const err = n.stderr ? n.stderr.slice(0, 160) : "";
+          return n.status === "completed"
+            ? `task#${n.taskId} completed at ${n.finishedAtLocal}; command=${n.command}; stdout=${out}`
+            : `task#${n.taskId} failed at ${n.finishedAtLocal}; command=${n.command}; stderr=${err}`;
+        });
+        const reminder = `<background_notifications>\n${summaryLines.join("\n")}\n</background_notifications>`;
+        requestMessages.push({ role: "system", content: reminder });
+        console.log(`\u001b[36m[background notifications]\u001b[0m\n${summaryLines.join("\n")}`);
+        for (const item of bgNotifications) {
+          await recordObservabilityEvent(
+            "notification",
+            {
+              source: "background",
+              taskId: item.taskId,
+              status: item.status,
+              command: item.command,
+              exitCode: item.exitCode,
+            },
+            { traceId },
+          );
+        }
+      }
+      const teamNotifications = drainTeamNotifications();
+      if (teamNotifications.length > 0) {
+        const summaryLines = teamNotifications.map((n) => {
+          const c = n.content.slice(0, 120);
+          const req = n.requestId ? ` request_id=${n.requestId}` : "";
+          return `to#${n.teammateId}(${n.teammateName}) ${n.messageType} from=${n.from}${req} at ${n.createdAtLocal}: ${c}`;
+        });
+        const reminder = `<team_notifications>\n${summaryLines.join("\n")}\n</team_notifications>`;
+        requestMessages.push({ role: "system", content: reminder });
+        console.log(`\u001b[36m[team notifications]\u001b[0m\n${summaryLines.join("\n")}`);
+        for (const item of teamNotifications) {
+          await recordObservabilityEvent(
+            "notification",
+            {
+              source: "team",
+              teammateId: item.teammateId,
+              teammateName: item.teammateName,
+              messageType: item.messageType,
+              requestId: item.requestId ?? null,
+              content: item.content,
+            },
+            { traceId },
+          );
+        }
+      }
+      if (latestUser?.content) {
+        const injected = await buildMemoryInjectionForQuery(latestUser.content);
+        if (injected.content) {
+          requestMessages.push({ role: "system", content: injected.content });
+          console.log(
+            `\u001b[36m[memory inject]\u001b[0m entries=${injected.usedEntries} tokens=${injected.estimatedTokens}`,
+          );
+        }
+      }
+      requestMessages.push(...messages);
+      await recordObservabilityEvent(
+        "model_request",
+        {
+          round: runtimeState.roundCounter,
+          messageCount: requestMessages.length,
+          estimatedPromptTokens: estimateTokensFromMessages(requestMessages),
+          latestUserInput: latestUser?.content ? summarizeText(latestUser.content) : "",
+        },
+        { traceId },
+      );
 
-    const message = response.choices[0]?.message;
-    if (!message) {
-      await recordObservabilityEvent("error", { phase: "model_response", message: "empty model response" }, { traceId });
-      return;
-    }
-    await recordObservabilityEvent(
-      "model_response",
-      {
-        round: runtimeState.roundCounter,
-        toolCallCount: message.tool_calls?.length ?? 0,
-        completionTokens: response.usage?.completion_tokens ?? 0,
-        content: typeof message.content === "string" ? summarizeText(message.content) : "",
-      },
-      { traceId },
-    );
+      const response = await client.chat.completions.create({
+        model,
+        messages: requestMessages,
+        tools,
+        max_tokens: 8_000,
+      });
 
-    messages.push(toAssistantMessage(message));
+      const message = response.choices[0]?.message;
+      if (!message) {
+        stopReason = "empty_model_response";
+        await recordObservabilityEvent("error", { phase: "model_response", message: "empty model response" }, { traceId });
+        return;
+      }
+      await recordObservabilityEvent(
+        "model_response",
+        {
+          round: runtimeState.roundCounter,
+          toolCallCount: message.tool_calls?.length ?? 0,
+          completionTokens: response.usage?.completion_tokens ?? 0,
+          content: typeof message.content === "string" ? summarizeText(message.content) : "",
+        },
+        { traceId },
+      );
 
-    const toolCalls = message.tool_calls ?? [];
-    if (toolCalls.length === 0) {
-      runtimeState.roundsWithoutTodo += 1;
-      return;
-    }
+      messages.push(toAssistantMessage(message));
 
-    let usedTodo = false;
-    for (const toolCall of toolCalls) {
-      if (toolCall.type !== "function") {
-        continue;
+      const toolCalls = message.tool_calls ?? [];
+      stopToolCallCount = toolCalls.length;
+      if (toolCalls.length === 0) {
+        stopReason = "assistant_response";
+        runtimeState.roundsWithoutTodo += 1;
+        return;
       }
 
-      const toolArgs = parseArgs(toolCall.function.arguments);
-      const preview = previewToolCall(toolCall.function.name, toolCall.function.arguments);
-      const spanId = createSpanId();
-      await recordObservabilityEvent(
-        "tool_call",
-        {
-          toolName: toolCall.function.name,
-          preview,
-          argumentsJson: toolCall.function.arguments,
-        },
-        { traceId, spanId },
-      );
-      console.log(`\u001b[33m$ ${preview}\u001b[0m`);
-      const startedAt = Date.now();
-      const toolOutput = await withExecutionContext({ traceId, spanId }, async () =>
-        runToolByName(toolCall.function.name, toolCall.function.arguments),
-      );
-      const durationMs = Date.now() - startedAt;
-      console.log(toolOutput);
-      const analyzed = analyzeToolOutput(toolOutput);
-      await recordObservabilityEvent(
-        "tool_result",
-        {
-          toolName: toolCall.function.name,
-          durationMs,
-          ok: analyzed.ok,
-          errorCode: analyzed.errorCode,
-          outputSummary: analyzed.summary,
-        },
-        { traceId, spanId },
-      );
-      if (analyzed.errorCode?.startsWith("SECURITY_")) {
+      let usedTodo = false;
+      for (const toolCall of toolCalls) {
+        if (toolCall.type !== "function") {
+          continue;
+        }
+
+        const toolArgs = parseArgs(toolCall.function.arguments);
+        const preview = previewToolCall(toolCall.function.name, toolCall.function.arguments);
+        const spanId = createSpanId();
         await recordObservabilityEvent(
-          "security_blocked",
+          "tool_call",
           {
             toolName: toolCall.function.name,
-            errorCode: analyzed.errorCode,
+            preview,
+            argumentsJson: toolCall.function.arguments,
           },
           { traceId, spanId },
         );
-      }
+        console.log(`\u001b[33m$ ${preview}\u001b[0m`);
 
-      messages.push({
-        role: "tool",
-        tool_call_id: toolCall.id,
-        content: toolOutput,
-      });
+        const preToolHooks = await runHooks("PreToolUse", {
+          session_id: runtimeState.sessionId,
+          trace_id: traceId,
+          span_id: spanId,
+          payload: {
+            tool_name: toolCall.function.name,
+            tool_arguments: toolArgs,
+          },
+        });
+        appendSystemMessages(messages, preToolHooks.messages);
 
-      if (toolCall.function.name === "todo") {
-        usedTodo = true;
-
-        if (runtimeState.activeTaskId && isTodoAllCompleted(toolArgs)) {
-          const autoUpdateArgs = JSON.stringify({
-            task_id: runtimeState.activeTaskId,
-            status: "completed",
-          });
-          console.log(`\u001b[33m$ task_update ${runtimeState.activeTaskId} (auto)\u001b[0m`);
-          const autoOutput = await withExecutionContext({ traceId, spanId: createSpanId() }, async () =>
-            runToolByName("task_update", autoUpdateArgs),
+        let toolOutput = "";
+        let durationMs = 0;
+        if (preToolHooks.blocked) {
+          toolOutput = makeHookBlockedOutput(preToolHooks.blockReason);
+        } else {
+          const startedAt = Date.now();
+          toolOutput = await withExecutionContext({ traceId, spanId }, async () =>
+            runToolByName(toolCall.function.name, toolCall.function.arguments),
           );
-          console.log(autoOutput);
-          runtimeState.activeTaskId = null;
+          durationMs = Date.now() - startedAt;
+        }
+
+        console.log(toolOutput);
+        const analyzed = analyzeToolOutput(toolOutput);
+        await recordObservabilityEvent(
+          "tool_result",
+          {
+            toolName: toolCall.function.name,
+            durationMs,
+            ok: analyzed.ok,
+            errorCode: analyzed.errorCode,
+            outputSummary: analyzed.summary,
+          },
+          { traceId, spanId },
+        );
+        if (analyzed.errorCode?.startsWith("SECURITY_")) {
+          await recordObservabilityEvent(
+            "security_blocked",
+            {
+              toolName: toolCall.function.name,
+              errorCode: analyzed.errorCode,
+            },
+            { traceId, spanId },
+          );
+        }
+
+        messages.push({
+          role: "tool",
+          tool_call_id: toolCall.id,
+          content: toolOutput,
+        });
+
+        if (!preToolHooks.blocked) {
+          const postToolHooks = await runHooks("PostToolUse", {
+            session_id: runtimeState.sessionId,
+            trace_id: traceId,
+            span_id: spanId,
+            payload: {
+              tool_name: toolCall.function.name,
+              tool_arguments: toolArgs,
+              tool_output: toolOutput,
+              tool_ok: analyzed.ok,
+              error_code: analyzed.errorCode,
+            },
+          });
+          appendSystemMessages(messages, postToolHooks.messages);
+        }
+
+        if (preToolHooks.blocked) {
+          continue;
+        }
+
+        if (toolCall.function.name === "todo") {
+          usedTodo = true;
+
+          if (runtimeState.activeTaskId && isTodoAllCompleted(toolArgs)) {
+            const autoUpdateArgs = JSON.stringify({
+              task_id: runtimeState.activeTaskId,
+              status: "completed",
+            });
+            console.log(`\u001b[33m$ task_update ${runtimeState.activeTaskId} (auto)\u001b[0m`);
+            const autoOutput = await withExecutionContext({ traceId, spanId: createSpanId() }, async () =>
+              runToolByName("task_update", autoUpdateArgs),
+            );
+            console.log(autoOutput);
+            runtimeState.activeTaskId = null;
+          }
+        }
+
+        if (toolCall.function.name === "task_create") {
+          const createdId = parseTaskIdFromOutput(toolOutput);
+          if (createdId) {
+            runtimeState.activeTaskId = createdId;
+          }
+        }
+
+        if (toolCall.function.name === "task_update") {
+          const taskId = Number(toolArgs.task_id);
+          const status = String(toolArgs.status ?? "");
+          if (runtimeState.activeTaskId && taskId === runtimeState.activeTaskId && status === "completed") {
+            runtimeState.activeTaskId = null;
+          }
         }
       }
 
-      if (toolCall.function.name === "task_create") {
-        const createdId = parseTaskIdFromOutput(toolOutput);
-        if (createdId) {
-          runtimeState.activeTaskId = createdId;
-        }
-      }
-
-      if (toolCall.function.name === "task_update") {
-        const taskId = Number(toolArgs.task_id);
-        const status = String(toolArgs.status ?? "");
-        if (runtimeState.activeTaskId && taskId === runtimeState.activeTaskId && status === "completed") {
-          runtimeState.activeTaskId = null;
-        }
-      }
+      runtimeState.roundsWithoutTodo = usedTodo ? 0 : runtimeState.roundsWithoutTodo + 1;
+    } finally {
+      const stopHooks = await runHooks("Stop", {
+        session_id: runtimeState.sessionId,
+        trace_id: traceId,
+        payload: {
+          round: runtimeState.roundCounter,
+          outcome: stopReason,
+          tool_call_count: stopToolCallCount,
+        },
+      });
+      appendSystemMessages(messages, stopHooks.messages);
     }
-
-    runtimeState.roundsWithoutTodo = usedTodo ? 0 : runtimeState.roundsWithoutTodo + 1;
   }
 }
