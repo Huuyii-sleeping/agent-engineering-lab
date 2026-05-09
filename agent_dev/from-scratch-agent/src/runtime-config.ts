@@ -18,6 +18,7 @@ type RuntimeConfig = {
   memoryInjectTopK: number;
   memoryInjectMaxTokens: number;
   observabilityFieldMaxChars: number;
+  hookTimeoutMs: number;
 };
 
 function readInt(name: string, fallback: number, min: number): number {
@@ -50,4 +51,5 @@ export const RUNTIME_CONFIG: RuntimeConfig = {
   memoryInjectTopK: readInt("AGENT_MEMORY_INJECT_TOP_K", 5, 1),
   memoryInjectMaxTokens: readInt("AGENT_MEMORY_INJECT_MAX_TOKENS", 700, 100),
   observabilityFieldMaxChars: readInt("AGENT_OBSERVABILITY_FIELD_MAX_CHARS", 400, 40),
+  hookTimeoutMs: readInt("AGENT_HOOK_TIMEOUT_MS", 10_000, 100),
 };
