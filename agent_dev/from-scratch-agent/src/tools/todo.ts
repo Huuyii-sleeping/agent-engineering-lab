@@ -1,3 +1,5 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 
 type TodoStatus = "pending" | "in_progress" | "completed";
@@ -8,14 +10,77 @@ type TodoItem = {
   status: TodoStatus;
 };
 
+type TodoSnapshot = {
+  schemaVersion: number;
+  updatedAt: string;
+  items: TodoItem[];
+};
+
 function toTodoError(code: string, message: string): string {
   return JSON.stringify({ ok: false, error: { code, message } });
 }
 
 class TodoManager {
   private items: TodoItem[] = [];
+  private readonly filePath = path.join(process.cwd(), ".runtime", "todos.json");
+  private initPromise: Promise<void> | null = null;
 
-  update(itemsArg: unknown): string {
+  private async ensureInit(): Promise<void> {
+    if (!this.initPromise) {
+      this.initPromise = (async () => {
+        await mkdir(path.dirname(this.filePath), { recursive: true });
+        const snapshot = await this.readSnapshot();
+        this.items = snapshot.items;
+      })();
+    }
+    await this.initPromise;
+  }
+
+  private async readSnapshot(): Promise<TodoSnapshot> {
+    const raw = await readFile(this.filePath, "utf8").catch(() => "");
+    if (!raw.trim()) {
+      return { schemaVersion: 1, updatedAt: new Date().toISOString(), items: [] };
+    }
+    try {
+      const parsed = JSON.parse(raw) as Partial<TodoSnapshot>;
+      const items = Array.isArray(parsed.items)
+        ? parsed.items
+            .map((item) => {
+              const rec = typeof item === "object" && item !== null ? (item as Record<string, unknown>) : {};
+              const id = String(rec.id ?? "").trim();
+              const text = String(rec.text ?? "").trim();
+              const status = String(rec.status ?? "").toLowerCase();
+              if (!id || !text) {
+                return null;
+              }
+              if (status !== "pending" && status !== "in_progress" && status !== "completed") {
+                return null;
+              }
+              return { id, text, status: status as TodoStatus };
+            })
+            .filter((item): item is TodoItem => Boolean(item))
+        : [];
+      return {
+        schemaVersion: 1,
+        updatedAt: String(parsed.updatedAt ?? new Date().toISOString()),
+        items,
+      };
+    } catch {
+      return { schemaVersion: 1, updatedAt: new Date().toISOString(), items: [] };
+    }
+  }
+
+  private async saveSnapshot(): Promise<void> {
+    const snapshot: TodoSnapshot = {
+      schemaVersion: 1,
+      updatedAt: new Date().toISOString(),
+      items: this.items,
+    };
+    await writeFile(this.filePath, `${JSON.stringify(snapshot, null, 2)}\n`, "utf8");
+  }
+
+  async update(itemsArg: unknown): Promise<string> {
+    await this.ensureInit();
     if (!Array.isArray(itemsArg)) {
       return toTodoError("INVALID_ARGUMENT", "todo 需要 items 数组");
     }
@@ -49,6 +114,7 @@ class TodoManager {
     }
 
     this.items = validated;
+    await this.saveSnapshot();
     return this.render();
   }
 
@@ -99,7 +165,7 @@ export const TODO_TOOLS: ChatCompletionTool[] = [
 
 export async function runTodo(items: unknown): Promise<string> {
   try {
-    return TODO.update(items);
+    return await TODO.update(items);
   } catch (error) {
     return toTodoError("INVALID_TODO_ITEM", error instanceof Error ? error.message : String(error));
   }
