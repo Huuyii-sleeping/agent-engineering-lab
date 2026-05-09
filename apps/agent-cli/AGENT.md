@@ -10,9 +10,9 @@
 
 ## Web
 
-- web 前端目录为 `from-scratch-agent/web`
+- web 前端目录为 `apps/web-console`
 - web 技术栈为 `React + TypeScript + Tailwind`
-- web 开发启动命令为 `pnpm install && pnpm dev`
+- web 开发启动命令为 `pnpm install && pnpm --filter agent-web-console dev`
 
 ## Current Scope
 

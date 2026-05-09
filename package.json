@@ -1,0 +1,16 @@
+{
+  "name": "agent-engineering-lab",
+  "private": true,
+  "packageManager": "pnpm@10.18.3",
+  "scripts": {
+    "dev": "pnpm dev:agent",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "dev:agent": "pnpm --filter agent-cli dev",
+    "build:agent": "pnpm --filter agent-cli build",
+    "start:agent": "pnpm --filter agent-cli start",
+    "dev:web": "pnpm --filter agent-web-console dev",
+    "build:web": "pnpm --filter agent-web-console build"
+  }
+}

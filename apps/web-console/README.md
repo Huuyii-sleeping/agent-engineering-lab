@@ -1,11 +1,11 @@
-# from-scratch-agent web
+# agent-web-console
 
 独立的 web 展示层骨架，技术栈使用 React + TypeScript + Tailwind。
 
 ## 启动
 
 ```bash
-cd from-scratch-agent/web
+cd apps/web-console
 pnpm install
 pnpm dev
 ```
@@ -27,8 +27,8 @@ pnpm dev
 
 ## 数据来源
 
-- `../.tasks`
-- `../.runtime/todos.json`
-- `../.observability`
+- `../agent-cli/.tasks`
+- `../agent-cli/.runtime/todos.json`
+- `../agent-cli/.observability`
 
 当前实现是只读视图，不会从 web 端直接修改 agent 状态。

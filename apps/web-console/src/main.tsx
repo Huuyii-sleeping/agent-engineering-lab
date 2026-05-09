@@ -131,7 +131,7 @@ function App() {
         <section className="surface-card lift-in p-7 max-sm:p-5">
           <div className="flex items-center justify-between gap-4 max-sm:flex-col max-sm:items-start">
             <span className="text-xs uppercase tracking-[0.18em] text-emerald-300">
-              from-scratch-agent / web
+              apps/web-console
             </span>
             <div className="flex items-center gap-3 max-sm:w-full max-sm:flex-col max-sm:items-start">
               <span className="rounded-full border border-white/[0.12] bg-white/[0.04] px-3 py-1 text-sm text-slate-300">
@@ -152,7 +152,7 @@ function App() {
               Agent Runtime Console
             </h1>
             <p className="mt-3 max-w-[60ch] text-[1.05rem] leading-7 text-slate-300">
-              现在已经直接读取 `.tasks`、`.runtime/todos.json` 和 `.observability`，前端展示的是实际快照，不再是静态占位。
+              现在已经直接读取 `apps/agent-cli` 下的 `.tasks`、`.runtime/todos.json` 和 `.observability`，前端展示的是实际快照，不再是静态占位。
             </p>
           </div>
           {error ? (
