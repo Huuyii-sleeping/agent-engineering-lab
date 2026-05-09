@@ -3,6 +3,8 @@ import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/reso
 import { runHooks } from "./hooks/index.js";
 import { toAssistantMessage } from "./messages.js";
 import { createSpanId, createTraceId, recordObservabilityEvent, withExecutionContext } from "./observability/runtime.js";
+import { buildPromptEnvelope } from "./prompt/builder.js";
+import type { StaticPromptSource } from "./prompt/types.js";
 import { drainBackgroundNotifications } from "./tools/background-task.js";
 import { COMPACT_THRESHOLD_TOKENS, compactMessages, estimateTokensFromMessages } from "./tools/context-compact.js";
 import { previewToolCall, runToolByName } from "./tools/index.js";
@@ -22,7 +24,7 @@ export type AgentRuntimeState = {
 type AgentLoopOptions = {
   client: OpenAI;
   model: string;
-  system: string;
+  promptSource: StaticPromptSource;
   tools: ChatCompletionTool[];
   messages: ChatCompletionMessageParam[];
   runtimeState: AgentRuntimeState;
@@ -53,7 +55,7 @@ function makeHookBlockedOutput(reason: string | null): string {
 }
 
 export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
-  const { client, model, system, tools, messages, runtimeState } = opts;
+  const { client, model, promptSource, tools, messages, runtimeState } = opts;
 
   const summarizeText = (value: string, max = 160): string => {
     const trimmed = value.trim();
@@ -145,7 +147,7 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
         stopReason = "session_start_blocked";
         messages.push({
           role: "assistant",
-          content: `当前轮次被 hook 阻止：${sessionStartHooks.blockReason ?? "blocked by hook"}`,
+          content: `Current round blocked by hook: ${sessionStartHooks.blockReason ?? "blocked by hook"}`,
         });
         return;
       }
@@ -173,8 +175,7 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
         );
       }
 
-      const requestMessages: ChatCompletionMessageParam[] = [{ role: "system", content: system }];
-      appendSystemMessages(requestMessages, sessionStartHooks.messages);
+      const dynamicSystemMessages = [...sessionStartHooks.messages];
       const notifications = drainSubagentNotifications();
       if (notifications.length > 0) {
         const summaryLines = notifications.map((n) => {
@@ -186,7 +187,7 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
           return `agent#${n.agentId}(${n.agentName}) failed at ${n.updatedAtLocal}; error=${error}`;
         });
         const reminder = `<subagent_notifications>\n${summaryLines.join("\n")}\n</subagent_notifications>`;
-        requestMessages.push({ role: "system", content: reminder });
+        dynamicSystemMessages.push(reminder);
         console.log(`\u001b[36m[subagent notifications]\u001b[0m\n${summaryLines.join("\n")}`);
       }
       const bgNotifications = drainBackgroundNotifications();
@@ -199,7 +200,7 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
             : `task#${n.taskId} failed at ${n.finishedAtLocal}; command=${n.command}; stderr=${err}`;
         });
         const reminder = `<background_notifications>\n${summaryLines.join("\n")}\n</background_notifications>`;
-        requestMessages.push({ role: "system", content: reminder });
+        dynamicSystemMessages.push(reminder);
         console.log(`\u001b[36m[background notifications]\u001b[0m\n${summaryLines.join("\n")}`);
         for (const item of bgNotifications) {
           await recordObservabilityEvent(
@@ -223,7 +224,7 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
           return `to#${n.teammateId}(${n.teammateName}) ${n.messageType} from=${n.from}${req} at ${n.createdAtLocal}: ${c}`;
         });
         const reminder = `<team_notifications>\n${summaryLines.join("\n")}\n</team_notifications>`;
-        requestMessages.push({ role: "system", content: reminder });
+        dynamicSystemMessages.push(reminder);
         console.log(`\u001b[36m[team notifications]\u001b[0m\n${summaryLines.join("\n")}`);
         for (const item of teamNotifications) {
           await recordObservabilityEvent(
@@ -240,15 +241,30 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
           );
         }
       }
+      let memoryContext: string | null = null;
       if (latestUser?.content) {
         const injected = await buildMemoryInjectionForQuery(latestUser.content);
         if (injected.content) {
-          requestMessages.push({ role: "system", content: injected.content });
+          memoryContext = injected.content;
           console.log(
             `\u001b[36m[memory inject]\u001b[0m entries=${injected.usedEntries} tokens=${injected.estimatedTokens}`,
           );
         }
       }
+      if (runtimeState.roundsWithoutTodo >= 3) {
+        dynamicSystemMessages.push(
+          "<reminder>Please call the todo tool to update the task list and maintain progress.</reminder>",
+        );
+      }
+      const promptEnvelope = buildPromptEnvelope({
+        ...promptSource,
+        memoryContext,
+        dynamicMessages: dynamicSystemMessages,
+      });
+      const requestMessages: ChatCompletionMessageParam[] = [
+        { role: "system", content: promptEnvelope.primarySystemPrompt },
+        ...promptEnvelope.supplementalSystemMessages.map((content) => ({ role: "system", content }) satisfies ChatCompletionMessageParam),
+      ];
       requestMessages.push(...messages);
       await recordObservabilityEvent(
         "model_request",

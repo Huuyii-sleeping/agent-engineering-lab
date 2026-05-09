@@ -3,7 +3,7 @@ import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { agentLoop, type AgentRuntimeState } from "./agent-loop.js";
-import { createClient, MODEL, SYSTEM } from "./config.js";
+import { createClient, ensureModelConfigured, getStaticPromptSource, MODEL } from "./config.js";
 import { runHooks } from "./hooks/index.js";
 import { setCompactRuntimeContext } from "./tools/base.js";
 import { TOOLS } from "./tools/index.js";
@@ -21,10 +21,12 @@ function appendSystemMessages(messages: ChatCompletionMessageParam[], items: str
 }
 
 export async function runCli(): Promise<void> {
+  ensureModelConfigured();
   const rl = createInterface({ input, output });
   const history: ChatCompletionMessageParam[] = [];
   setCompactRuntimeContext({ messages: history });
   const client = createClient();
+  const promptSource = getStaticPromptSource();
   const runtimeState: AgentRuntimeState = {
     sessionId: randomUUID(),
     roundsWithoutTodo: 0,
@@ -64,7 +66,7 @@ export async function runCli(): Promise<void> {
       await agentLoop({
         client,
         model: MODEL,
-        system: SYSTEM,
+        promptSource,
         tools: TOOLS,
         messages: history,
         runtimeState,

@@ -152,7 +152,12 @@ async function main(): Promise<void> {
     await agentLoop({
       client,
       model: "smoke-model",
-      system: "smoke-system",
+      promptSource: {
+        core: "smoke-system",
+        tools: [],
+        skills: [],
+        rules: [],
+      },
       tools: [] as ChatCompletionTool[],
       messages,
       runtimeState,

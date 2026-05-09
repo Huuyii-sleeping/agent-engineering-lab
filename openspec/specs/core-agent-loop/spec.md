@@ -44,11 +44,11 @@ CLI 入口 MUST 在每次输入循环显示固定提示符 `s01 >>`，并且在�
 - **THEN** 对应运行参数在不改代码情况下生效
 
 ### Requirement: Agent loop SHALL inject relevant memory before model request
-主循环在每轮模型请求前 SHALL 基于最新用户输入注入相关记忆上下文，并保持原有工具调用契约不变。
+主循环在每轮模型请求前 SHALL 基于最新用户输入注入相关记忆上下文，并通过统一的 system prompt 组装流水线将该上下文作为补充 system message 注入，且保持原有工具调用契约不变。
 
-#### Scenario: 命中记忆时注入上下文
+#### Scenario: 命中记忆时通过 prompt pipeline 注入上下文
 - **WHEN** 最新用户输入可命中记忆条目
-- **THEN** 请求消息中追加 `memory_context` system 消息
+- **THEN** 主循环在发起模型请求前通过 prompt pipeline 追加 `memory_context` system message
 
 ### Requirement: Agent loop SHALL assign trace context for each round
 主循环在每轮模型请求前 SHALL 分配 `trace_id`，并将该上下文贯穿本轮工具调用与通知事件。
@@ -63,3 +63,11 @@ CLI 入口 MUST 在每次输入循环显示固定提示符 `s01 >>`，并且在�
 #### Scenario: 请求元数据写入事件流
 - **WHEN** 主循环发起模型请求
 - **THEN** 观测事件中包含本轮编号、用户输入摘要和 token 估算字段
+
+### Requirement: Agent loop SHALL build system input through prompt pipeline
+主循环在每轮模型请求前 SHALL 通过统一 prompt pipeline 构建模型 system 输入，而不是直接在多个模块中分别拼接稳定规则、动态提醒和运行时通知。
+
+#### Scenario: 发起请求前统一构建 system 输入
+- **WHEN** 主循环准备发起新的模型请求
+- **THEN** 主循环先调用 prompt pipeline 获取 system 输入，再与历史消息拼装最终请求
+

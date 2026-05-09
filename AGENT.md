@@ -53,19 +53,20 @@
 - 统一使用 `pnpm`，不再新增 `npm` 工作流约定。
 - 新增文档、脚本、命令示例时，优先写 `pnpm` 命令。
 
-## 8. 提交前清理规则
+## 8. 清理规则
 
-提交前必须清理运行与测试产物，不纳入 commit：
-
-- `apps/agent-cli/.tasks/`
-- `apps/agent-cli/.team/`
-- `apps/agent-cli/.worktrees/`
-- `apps/agent-cli/.transcripts/`
-- `apps/agent-cli/tmp/`
-- `apps/agent-cli/.memory/`（如为临时测试数据）
-- `apps/agent-cli/.audit/`
-- `apps/agent-cli/.observability/`
-- `apps/agent-cli/.security/`
+- 每次测试产生的运行产物、临时数据和缓存内容，在本次开发结束后就删除，不留到下一轮。
+- 每次 `git push` 之前必须再次清理并确认测试产物没有残留。
+- 以下目录或文件默认视为运行/测试产物，不纳入 commit：
+  - `apps/agent-cli/.tasks/`
+  - `apps/agent-cli/.team/`
+  - `apps/agent-cli/.worktrees/`
+  - `apps/agent-cli/.transcripts/`
+  - `apps/agent-cli/tmp/`
+  - `apps/agent-cli/.memory/`（如为临时测试数据）
+  - `apps/agent-cli/.audit/`
+  - `apps/agent-cli/.observability/`
+  - `apps/agent-cli/.security/`
 
 ## 9. 提交内容规则
 
@@ -121,7 +122,7 @@
 每次实现至少执行：
 
 1. `pnpm build`
-2. 对应 PRD 的 smoke/回归测试
+2. 对应 PRD 的 smoke / 回归测试
 3. `openspec status --change "<name>" --json`
 4. `openspec validate --changes "<name>"`
 

@@ -1,16 +1,33 @@
 import dotenv from "dotenv";
 import OpenAI from "openai";
 import * as process from "node:process";
+import type { StaticPromptSource } from "./prompt/types.js";
 
 dotenv.config({ override: true });
 
-const modelEnv = process.env.MODEL_ID;
-if (!modelEnv) {
-  throw new Error("缺少环境变量: MODEL_ID");
+const modelEnv = process.env.MODEL_ID?.trim() ?? "";
+export const MODEL = modelEnv || "unset-model";
+
+const CORE_PROMPT = `You are a coding agent working inside ${process.cwd()}.`;
+const TOOL_PROMPT_LINES = [
+  "Prefer using tools to complete tasks.",
+  "For multi-step tasks, use the todo tool to track plan and progress.",
+];
+
+export function getStaticPromptSource(): StaticPromptSource {
+  return {
+    core: CORE_PROMPT,
+    tools: [...TOOL_PROMPT_LINES],
+    skills: [],
+    rules: [],
+  };
 }
 
-export const MODEL = modelEnv;
-export const SYSTEM = `你是位于 ${process.cwd()} 的编程代理。优先使用工具完成任务。多步骤任务请调用 todo 工具进行规划与进度更新。`;
+export function ensureModelConfigured(): void {
+  if (!modelEnv) {
+    throw new Error("Missing environment variable: MODEL_ID");
+  }
+}
 
 export function createClient(): OpenAI {
   return new OpenAI({
