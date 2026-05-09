@@ -3,7 +3,8 @@
 这个仓库用于构建和迭代一个可在本地工作区运行的 Coding Agent，采用 PRD 增量开发 + OpenSpec 规范化变更流程。
 
 ## 仓库主要内容
-- `agent_dev/from-scratch-agent/`：核心 Agent 工程（TypeScript）。
+- `apps/agent-cli/`：核心 Agent CLI 与运行时（TypeScript）。
+- `apps/web-console/`：Web 展示端（React + TypeScript + Vite）。
 - `agent_dev/prd/incremental/`：按阶段拆分的 PRD（`PRD-00` 到后续）。
 - `openspec/`：OpenSpec 变更、规格与归档记录。
 - `WORKSPACE_AGENT_RULES.md`：当前工作区执行规范（提交前清理、流程约束等）。
@@ -13,12 +14,11 @@
 - npm 或 pnpm
 
 ## 快速启动（核心项目）
-核心项目目录：`agent_dev/from-scratch-agent`
+核心项目目录：`apps/agent-cli`
 
 1. 安装依赖
 ```bash
-cd agent_dev/from-scratch-agent
-npm install
+pnpm install
 ```
 
 2. 配置环境变量（可放到 `.env`）
@@ -30,13 +30,20 @@ OPENAI_BASE_URL=可选，兼容网关时填写
 
 3. 开发模式启动
 ```bash
-npm run dev
+pnpm dev:agent
 ```
 
 4. 构建与运行
 ```bash
-npm run build
-npm run start
+pnpm build:agent
+pnpm start:agent
+```
+
+## Web 展示端
+
+```bash
+pnpm dev:web
+pnpm build:web
 ```
 
 ## OpenSpec 常用命令

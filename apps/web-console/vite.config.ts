@@ -65,7 +65,7 @@ type ObservabilityEvent = {
 };
 
 const webDir = path.dirname(fileURLToPath(import.meta.url));
-const projectRoot = path.resolve(webDir, "..");
+const projectRoot = path.resolve(webDir, "..", "agent-cli");
 const tasksDir = path.join(projectRoot, ".tasks");
 const observabilityDir = path.join(projectRoot, ".observability");
 const runtimeDir = path.join(projectRoot, ".runtime");

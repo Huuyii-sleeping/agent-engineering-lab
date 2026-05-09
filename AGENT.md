@@ -47,15 +47,15 @@
 
 提交前必须清理运行与测试产物，不纳入 commit：
 
-- `agent_dev/from-scratch-agent/.tasks/`
-- `agent_dev/from-scratch-agent/.team/`
-- `agent_dev/from-scratch-agent/.worktrees/`
-- `agent_dev/from-scratch-agent/.transcripts/`
-- `agent_dev/from-scratch-agent/tmp/`
-- `agent_dev/from-scratch-agent/.memory/`（如为临时测试数据）
-- `agent_dev/from-scratch-agent/.audit/`
-- `agent_dev/from-scratch-agent/.observability/`
-- `agent_dev/from-scratch-agent/.security/`
+- `apps/agent-cli/.tasks/`
+- `apps/agent-cli/.team/`
+- `apps/agent-cli/.worktrees/`
+- `apps/agent-cli/.transcripts/`
+- `apps/agent-cli/tmp/`
+- `apps/agent-cli/.memory/`（如为临时测试数据）
+- `apps/agent-cli/.audit/`
+- `apps/agent-cli/.observability/`
+- `apps/agent-cli/.security/`
 
 ## 8. 提交内容规则
 

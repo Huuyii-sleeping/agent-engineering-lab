@@ -1,6 +1,6 @@
-# from-scratch-agent
+# agent-cli
 
-一个在 `agent_dev` 下从零实现的独立 Agent 项目。
+一个在 monorepo `apps/agent-cli` 下运行的独立 Agent CLI 项目。
 
 ## 约束
 
@@ -34,9 +34,9 @@ pnpm start
 
 ## Web
 
-- 前端目录：`from-scratch-agent/web`
+- 前端目录：`../web-console`
 - 技术栈：`React + TypeScript + Tailwind`
-- 启动方式：进入 `web` 目录后执行 `pnpm install && pnpm dev`
+- 启动方式：进入 `../web-console` 目录后执行 `pnpm install && pnpm dev`
 
 ## 测试
 
