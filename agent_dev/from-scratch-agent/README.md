@@ -11,7 +11,7 @@
 
 1. 安装依赖
 ```bash
-npm install
+pnpm install
 ```
 
 2. 配置环境变量（`.env`）
@@ -23,28 +23,34 @@ OPENAI_BASE_URL=可选
 
 3. 本地运行
 ```bash
-npm run dev
+pnpm dev
 ```
 
 4. 构建与运行
 ```bash
-npm run build
-npm run start
+pnpm build
+pnpm start
 ```
+
+## Web
+
+- 前端目录：`from-scratch-agent/web`
+- 技术栈：`React + TypeScript + Tailwind`
+- 启动方式：进入 `web` 目录后执行 `pnpm install && pnpm dev`
 
 ## 测试
 
 - PRD-13 回归测试（配置层 + 状态守卫 + schemaVersion）
 ```bash
-npm run test:regression
+pnpm test:regression
 ```
 
 - PRD-07 安全治理 smoke
 ```bash
-npx tsx src/smoke/prd07-security-smoke.ts
+pnpm exec tsx src/smoke/prd07-security-smoke.ts
 ```
 
 - PRD-08 记忆检索 smoke
 ```bash
-npm run test:memory
+pnpm test:memory
 ```
