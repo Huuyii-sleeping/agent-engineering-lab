@@ -6,6 +6,7 @@ import type {
 import { MODEL, createClient } from "../config.js";
 import { getExecutionContext, recordObservabilityEvent } from "../observability/runtime.js";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
+import { nowTimestampMs } from "../time.js";
 import { toAssistantMessage } from "../messages.js";
 import { BASE_TOOLS, runBaseToolByName } from "./base.js";
 
@@ -16,8 +17,8 @@ type SubagentRecord = {
   name: string;
   status: SubagentStatus;
   traceId: string | null;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: number;
+  updatedAt: number;
   lastInput: string | null;
   lastOutput: string | null;
   lastError: string | null;
@@ -27,8 +28,7 @@ type SubagentNotification = {
   agentId: number;
   agentName: string;
   status: "completed" | "failed";
-  updatedAt: string;
-  updatedAtLocal: string;
+  updatedAt: number;
   output?: string | null;
   error?: string | null;
 };
@@ -48,15 +48,8 @@ class SubagentManager {
   private readonly notifications: SubagentNotification[] = [];
   private client: ReturnType<typeof createClient> | null = null;
 
-  private now(): string {
-    return new Date().toISOString();
-  }
-
-  private toShanghaiTime(iso: string): string {
-    return new Date(iso).toLocaleString("zh-CN", {
-      timeZone: "Asia/Shanghai",
-      hour12: false,
-    });
+  private now(): number {
+    return nowTimestampMs();
   }
 
   private getRecord(agentIdArg: unknown): SubagentRecord | null {
@@ -73,9 +66,7 @@ class SubagentManager {
       name: record.name,
       status: record.status,
       createdAt: record.createdAt,
-      createdAtLocal: this.toShanghaiTime(record.createdAt),
       updatedAt: record.updatedAt,
-      updatedAtLocal: this.toShanghaiTime(record.updatedAt),
       lastInput: record.lastInput,
       lastOutput: record.lastOutput,
       lastError: record.lastError,
@@ -106,7 +97,6 @@ class SubagentManager {
       agentName: record.name,
       status: "completed",
       updatedAt: record.updatedAt,
-      updatedAtLocal: this.toShanghaiTime(record.updatedAt),
       output: record.lastOutput,
     });
   }
@@ -128,7 +118,6 @@ class SubagentManager {
       agentName: record.name,
       status: "failed",
       updatedAt: record.updatedAt,
-      updatedAtLocal: this.toShanghaiTime(record.updatedAt),
       error: record.lastError,
     });
   }

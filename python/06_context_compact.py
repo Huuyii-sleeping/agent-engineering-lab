@@ -103,7 +103,7 @@ def micro_compact(messages: list) -> list:
 def auto_compact(messages: list) -> list:
     # Save full transcript to disk
     TRANSCRIPT_DIR.mkdir(exist_ok=True)
-    transcript_path = TRANSCRIPT_DIR / f"transcript_{int(time.time())}.jsonl"
+    transcript_path = TRANSCRIPT_DIR / f"transcript_{int(time.time() * 1000)}.jsonl"
     with open(transcript_path, "w") as f:
         for msg in messages:
             f.write(json.dumps(msg, default=str) + "\n")

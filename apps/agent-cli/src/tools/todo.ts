@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
+import { nowTimestampMs, parseTimestampMs } from "../time.js";
 
 type TodoStatus = "pending" | "in_progress" | "completed";
 
@@ -12,7 +13,7 @@ type TodoItem = {
 
 type TodoSnapshot = {
   schemaVersion: number;
-  updatedAt: string;
+  updatedAt: number;
   items: TodoItem[];
 };
 
@@ -39,7 +40,7 @@ class TodoManager {
   private async readSnapshot(): Promise<TodoSnapshot> {
     const raw = await readFile(this.filePath, "utf8").catch(() => "");
     if (!raw.trim()) {
-      return { schemaVersion: 1, updatedAt: new Date().toISOString(), items: [] };
+      return { schemaVersion: 1, updatedAt: nowTimestampMs(), items: [] };
     }
     try {
       const parsed = JSON.parse(raw) as Partial<TodoSnapshot>;
@@ -62,18 +63,18 @@ class TodoManager {
         : [];
       return {
         schemaVersion: 1,
-        updatedAt: String(parsed.updatedAt ?? new Date().toISOString()),
+        updatedAt: parseTimestampMs(parsed.updatedAt, nowTimestampMs()),
         items,
       };
     } catch {
-      return { schemaVersion: 1, updatedAt: new Date().toISOString(), items: [] };
+      return { schemaVersion: 1, updatedAt: nowTimestampMs(), items: [] };
     }
   }
 
   private async saveSnapshot(): Promise<void> {
     const snapshot: TodoSnapshot = {
       schemaVersion: 1,
-      updatedAt: new Date().toISOString(),
+      updatedAt: nowTimestampMs(),
       items: this.items,
     };
     await writeFile(this.filePath, `${JSON.stringify(snapshot, null, 2)}\n`, "utf8");

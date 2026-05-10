@@ -188,7 +188,7 @@ class MessageBus {
       type: msgType,
       from: sender,
       content,
-      timestamp: Date.now() / 1000,
+      timestamp: Date.now(),
       ...(extra ?? {}),
     };
     const target = this.inboxPath(to);
@@ -216,7 +216,7 @@ class MessageBus {
           type: "message",
           from: "system",
           content: row,
-          timestamp: Date.now() / 1000,
+          timestamp: Date.now(),
         });
       }
     }

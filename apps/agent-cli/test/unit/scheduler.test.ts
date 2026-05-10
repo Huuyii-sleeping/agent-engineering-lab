@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -36,28 +36,43 @@ describe("scheduler manager", () => {
     expect(listed).toHaveLength(1);
     expect(listed[0]?.cron).toBe("15 10 * * *");
     expect(listed[0]?.prompt).toBe("do the thing");
+    expect(typeof listed[0]?.created_at).toBe("number");
   });
 
-  it("fires matching schedules into durable notifications and avoids duplicate firing in the same minute", async () => {
+  it("fires second-level cron schedules into durable notifications and avoids duplicate firing in the same second", async () => {
     const { scheduler } = await createManager();
-    await scheduler.createSchedule("5 9 * * *", "scheduled prompt", true, true);
+    await scheduler.createSchedule("*/3 * * * * *", "scheduled prompt", true, true);
 
-    const atMinute = new Date("2026-05-11T09:05:10+08:00");
-    const first = await scheduler.tick(atMinute);
+    const first = await scheduler.tick(new Date("2026-05-11T09:05:12+08:00"));
     expect(first.fired).toHaveLength(1);
 
-    const second = await scheduler.tick(new Date("2026-05-11T09:05:45+08:00"));
+    const second = await scheduler.tick(new Date("2026-05-11T09:05:12.800+08:00"));
     expect(second.fired).toHaveLength(0);
 
-    expect(await scheduler.peekNotificationCount()).toBe(1);
+    const third = await scheduler.tick(new Date("2026-05-11T09:05:15+08:00"));
+    expect(third.fired).toHaveLength(1);
+
+    expect(await scheduler.peekNotificationCount()).toBe(2);
     const drained = await scheduler.drainNotifications();
-    expect(drained).toHaveLength(1);
+    expect(drained).toHaveLength(2);
+    expect(drained[0]?.firedAt).toBe(new Date("2026-05-11T09:05:12+08:00").getTime());
     expect(await scheduler.peekNotificationCount()).toBe(0);
+  });
+
+  it("keeps 5-field cron semantics minute-based with seconds defaulting to zero", async () => {
+    const { scheduler } = await createManager();
+    await scheduler.createSchedule("5 9 * * *", "minute prompt", true, true);
+
+    const miss = await scheduler.tick(new Date("2026-05-11T09:05:10+08:00"));
+    expect(miss.fired).toHaveLength(0);
+
+    const hit = await scheduler.tick(new Date("2026-05-11T09:05:00+08:00"));
+    expect(hit.fired).toHaveLength(1);
   });
 
   it("disables one-shot schedules after the first fire", async () => {
     const { scheduler } = await createManager();
-    await scheduler.createSchedule("30 8 * * *", "one shot", false, true);
+    await scheduler.createSchedule("0 30 8 * * *", "one shot", false, true);
     await scheduler.tick(new Date("2026-05-11T08:30:00+08:00"));
     const listed = await scheduler.listSchedules();
     expect(listed[0]?.enabled).toBe(false);
@@ -67,11 +82,46 @@ describe("scheduler manager", () => {
 
   it("restores durable schedules after restart", async () => {
     const { root, scheduler } = await createManager();
-    await scheduler.createSchedule("45 7 * * *", "durable prompt", true, true);
+    await scheduler.createSchedule("0 45 7 * * *", "durable prompt", true, true);
     const restarted = new SchedulerManager(() => path.join(root, ".schedule"));
     const listed = await restarted.listSchedules();
     expect(listed).toHaveLength(1);
     const fired = await restarted.tick(new Date("2026-05-11T07:45:00+08:00"));
     expect(fired.fired).toHaveLength(1);
+  });
+
+  it("loads legacy iso timestamps and rewrites them as numeric milliseconds", async () => {
+    const { root, scheduler } = await createManager();
+    const scheduleRoot = path.join(root, ".schedule");
+    await scheduler.createSchedule("0 0 * * * *", "placeholder", true, true);
+    await writeFile(
+      path.join(scheduleRoot, "records.json"),
+      `${JSON.stringify(
+        [
+          {
+            id: "sch_legacy",
+            cron: "*/2 * * * * *",
+            prompt: "legacy schedule",
+            recurring: true,
+            durable: true,
+            created_at: "2026-05-10T05:58:30.805Z",
+            last_fired_at: "2026-05-10T05:58:32.000Z",
+            enabled: true,
+          },
+        ],
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const listed = await scheduler.listSchedules();
+    expect(listed[0]?.created_at).toBe(Date.parse("2026-05-10T05:58:30.805Z"));
+    expect(listed[0]?.last_fired_at).toBe(Date.parse("2026-05-10T05:58:32.000Z"));
+
+    await scheduler.tick(new Date("2026-05-10T13:58:34+08:00"));
+    const recordsRaw = await readFile(path.join(scheduleRoot, "records.json"), "utf8");
+    expect(recordsRaw).toContain(`"created_at": ${Date.parse("2026-05-10T05:58:30.805Z")}`);
+    expect(recordsRaw).toContain(`"last_fired_at": ${Date.parse("2026-05-10T05:58:34.000Z")}`);
   });
 });

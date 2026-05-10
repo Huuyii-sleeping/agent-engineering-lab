@@ -2,6 +2,7 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
+import { nowTimestampMs, parseTimestampMs } from "../time.js";
 
 type TeammateStatus = "working" | "idle" | "shutdown";
 type RequestStatus = "pending" | "approved" | "rejected";
@@ -13,7 +14,7 @@ type Teammate = {
   id: number;
   name: string;
   status: TeammateStatus;
-  updatedAt: string;
+  updatedAt: number;
 };
 
 type TeamMessage = {
@@ -23,7 +24,7 @@ type TeamMessage = {
   type: "message" | "broadcast" | "shutdown_request" | "shutdown_response" | "plan_approval" | "plan_approval_response";
   content: string;
   request_id?: string;
-  createdAt: string;
+  createdAt: number;
 };
 
 type TeamRequest = {
@@ -34,7 +35,7 @@ type TeamRequest = {
   to: string;
   status: RequestStatus;
   payload: string;
-  updatedAt: string;
+  updatedAt: number;
 };
 
 type TeamNotification = {
@@ -43,21 +44,9 @@ type TeamNotification = {
   messageType: TeamMessage["type"];
   from: string;
   requestId?: string;
-  createdAt: string;
-  createdAtLocal: string;
+  createdAt: number;
   content: string;
 };
-
-function nowIso(): string {
-  return new Date().toISOString();
-}
-
-function nowLocal(iso: string): string {
-  return new Date(iso).toLocaleString("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    hour12: false,
-  });
-}
 
 function makeRequestId(): string {
   return `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -100,7 +89,7 @@ class TeamManager {
       name: String(item.name ?? ""),
       status:
         item.status === "working" || item.status === "idle" || item.status === "shutdown" ? item.status : "idle",
-      updatedAt: String(item.updatedAt ?? nowIso()),
+      updatedAt: parseTimestampMs(item.updatedAt, nowTimestampMs()),
     }));
   }
 
@@ -123,7 +112,7 @@ class TeamManager {
           ? item.status
           : "pending",
       payload: String(item.payload ?? ""),
-      updatedAt: String(item.updatedAt ?? nowIso()),
+      updatedAt: parseTimestampMs(item.updatedAt, nowTimestampMs()),
     }));
   }
 
@@ -156,7 +145,6 @@ class TeamManager {
       from: message.from,
       requestId: message.request_id,
       createdAt: message.createdAt,
-      createdAtLocal: nowLocal(message.createdAt),
       content: message.content,
     });
   }
@@ -168,7 +156,13 @@ class TeamManager {
     }
     const teammates = await this.loadTeammates();
     const newId = teammates.length === 0 ? 1 : Math.max(...teammates.map((t) => t.id)) + 1;
-    const teammate: Teammate = { schemaVersion: TEAM_SCHEMA_VERSION, id: newId, name, status: "idle", updatedAt: nowIso() };
+    const teammate: Teammate = {
+      schemaVersion: TEAM_SCHEMA_VERSION,
+      id: newId,
+      name,
+      status: "idle",
+      updatedAt: nowTimestampMs(),
+    };
     teammates.push(teammate);
     await this.saveTeammates(teammates);
     return this.ok({ teammate });
@@ -190,7 +184,7 @@ class TeamManager {
     }
     teammate.status = status as TeammateStatus;
     teammate.schemaVersion = TEAM_SCHEMA_VERSION;
-    teammate.updatedAt = nowIso();
+    teammate.updatedAt = nowTimestampMs();
     await this.saveTeammates(teammates);
     return this.ok({ teammate });
   }
@@ -216,7 +210,7 @@ class TeamManager {
       to: teammate.name,
       type: "message",
       content,
-      createdAt: nowIso(),
+      createdAt: nowTimestampMs(),
     };
     await this.deliverMessage(teammate, message);
     return this.ok({ delivered: 1, message });
@@ -237,7 +231,7 @@ class TeamManager {
         to: teammate.name,
         type: "broadcast",
         content,
-        createdAt: nowIso(),
+        createdAt: nowTimestampMs(),
       };
       await this.deliverMessage(teammate, message);
       delivered += 1;
@@ -274,7 +268,7 @@ class TeamManager {
       to: teammate.name,
       status: "pending",
       payload,
-      updatedAt: nowIso(),
+      updatedAt: nowTimestampMs(),
     };
     const requests = await this.loadRequests();
     requests.push(request);
@@ -288,7 +282,7 @@ class TeamManager {
       type: messageType,
       content: payload,
       request_id: request.request_id,
-      createdAt: nowIso(),
+      createdAt: nowTimestampMs(),
     };
     await this.deliverMessage(teammate, message);
     return this.ok({ request, message });
@@ -323,7 +317,7 @@ class TeamManager {
 
     request.status = approve ? "approved" : "rejected";
     request.schemaVersion = TEAM_SCHEMA_VERSION;
-    request.updatedAt = nowIso();
+    request.updatedAt = nowTimestampMs();
     await this.saveRequests(requests);
 
     const teammates = await this.loadTeammates();
@@ -339,7 +333,7 @@ class TeamManager {
       type: messageType,
       content: note || request.status,
       request_id: request.request_id,
-      createdAt: nowIso(),
+      createdAt: nowTimestampMs(),
     };
     await this.deliverMessage(target, message);
 

@@ -79,6 +79,10 @@ SYSTEM = (
 )
 
 
+def now_timestamp_ms() -> int:
+    return int(time.time() * 1000)
+
+
 # -- EventBus: append-only lifecycle events for observability --
 class EventBus:
     def __init__(self, event_log_path: Path):
@@ -96,7 +100,7 @@ class EventBus:
     ):
         payload = {
             "event": event,
-            "ts": time.time(),
+            "ts": now_timestamp_ms(),
             "task": task or {},
             "worktree": worktree or {},
         }
@@ -155,8 +159,8 @@ class TaskManager:
             "owner": "",
             "worktree": "",
             "blockedBy": [],
-            "created_at": time.time(),
-            "updated_at": time.time(),
+            "created_at": now_timestamp_ms(),
+            "updated_at": now_timestamp_ms(),
         }
         self._save(task)
         self._next_id += 1
@@ -176,7 +180,7 @@ class TaskManager:
             task["status"] = status
         if owner is not None:
             task["owner"] = owner
-        task["updated_at"] = time.time()
+        task["updated_at"] = now_timestamp_ms()
         self._save(task)
         return json.dumps(task, indent=2)
 
@@ -187,14 +191,14 @@ class TaskManager:
             task["owner"] = owner
         if task["status"] == "pending":
             task["status"] = "in_progress"
-        task["updated_at"] = time.time()
+        task["updated_at"] = now_timestamp_ms()
         self._save(task)
         return json.dumps(task, indent=2)
 
     def unbind_worktree(self, task_id: int) -> str:
         task = self._load(task_id)
         task["worktree"] = ""
-        task["updated_at"] = time.time()
+        task["updated_at"] = now_timestamp_ms()
         self._save(task)
         return json.dumps(task, indent=2)
 
@@ -304,7 +308,7 @@ class WorktreeManager:
                 "branch": branch,
                 "task_id": task_id,
                 "status": "active",
-                "created_at": time.time(),
+                "created_at": now_timestamp_ms(),
             }
 
             idx = self._load_index()
@@ -427,7 +431,7 @@ class WorktreeManager:
             for item in idx.get("worktrees", []):
                 if item.get("name") == name:
                     item["status"] = "removed"
-                    item["removed_at"] = time.time()
+                    item["removed_at"] = now_timestamp_ms()
             self._save_index(idx)
 
             self.events.emit(
@@ -455,7 +459,7 @@ class WorktreeManager:
         for item in idx.get("worktrees", []):
             if item.get("name") == name:
                 item["status"] = "kept"
-                item["kept_at"] = time.time()
+                item["kept_at"] = now_timestamp_ms()
                 kept = item
         self._save_index(idx)
 

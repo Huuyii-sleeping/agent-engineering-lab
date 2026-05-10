@@ -3,6 +3,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
+import { nowTimestampMs, parseTimestampMs } from "../time.js";
 
 type WorktreeStatus = "created" | "running" | "kept" | "removed";
 const WORKTREE_SCHEMA_VERSION = 2;
@@ -12,8 +13,8 @@ type WorktreeRecord = {
   name: string;
   path: string;
   status: WorktreeStatus;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: number;
+  updatedAt: number;
 };
 
 type WorktreeEvent = {
@@ -21,13 +22,9 @@ type WorktreeEvent = {
   id: string;
   type: "create" | "run" | "keep" | "remove";
   name: string;
-  at: string;
+  at: number;
   detail: string;
 };
-
-function nowIso(): string {
-  return new Date().toISOString();
-}
 
 function validWorktreeName(name: string): boolean {
   return /^[A-Za-z0-9._-]{1,40}$/.test(name);
@@ -78,8 +75,8 @@ class WorktreeManager {
         item.status === "created" || item.status === "running" || item.status === "kept" || item.status === "removed"
           ? item.status
           : "created",
-      createdAt: String(item.createdAt ?? nowIso()),
-      updatedAt: String(item.updatedAt ?? nowIso()),
+      createdAt: parseTimestampMs(item.createdAt, nowTimestampMs()),
+      updatedAt: parseTimestampMs(item.updatedAt, nowTimestampMs()),
     }));
   }
 
@@ -121,7 +118,7 @@ class WorktreeManager {
 
     const targetPath = this.defaultPath(name);
     await mkdir(targetPath, { recursive: true });
-    const now = nowIso();
+    const now = nowTimestampMs();
     const record: WorktreeRecord = {
       schemaVersion: WORKTREE_SCHEMA_VERSION,
       name,
@@ -137,7 +134,7 @@ class WorktreeManager {
       id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       type: "create",
       name,
-      at: nowIso(),
+      at: nowTimestampMs(),
       detail: (await this.isGitRepo()) ? "git_repo" : "workdir_fallback",
     });
     return this.ok({ worktree: record });
@@ -162,14 +159,14 @@ class WorktreeManager {
     const result = await execPromise(command, record.path);
     record.status = "running";
     record.schemaVersion = WORKTREE_SCHEMA_VERSION;
-    record.updatedAt = nowIso();
+    record.updatedAt = nowTimestampMs();
     await this.saveIndex(records);
     await this.appendEvent({
       schemaVersion: WORKTREE_SCHEMA_VERSION,
       id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       type: "run",
       name,
-      at: nowIso(),
+      at: nowTimestampMs(),
       detail: command,
     });
     return this.ok({
@@ -189,14 +186,14 @@ class WorktreeManager {
     }
     record.status = "kept";
     record.schemaVersion = WORKTREE_SCHEMA_VERSION;
-    record.updatedAt = nowIso();
+    record.updatedAt = nowTimestampMs();
     await this.saveIndex(records);
     await this.appendEvent({
       schemaVersion: WORKTREE_SCHEMA_VERSION,
       id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       type: "keep",
       name,
-      at: nowIso(),
+      at: nowTimestampMs(),
       detail: "mark kept",
     });
     return this.ok({ worktree: record });
@@ -212,14 +209,14 @@ class WorktreeManager {
     await rm(record.path, { recursive: true, force: true });
     record.status = "removed";
     record.schemaVersion = WORKTREE_SCHEMA_VERSION;
-    record.updatedAt = nowIso();
+    record.updatedAt = nowTimestampMs();
     await this.saveIndex(records);
     await this.appendEvent({
       schemaVersion: WORKTREE_SCHEMA_VERSION,
       id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       type: "remove",
       name,
-      at: nowIso(),
+      at: nowTimestampMs(),
       detail: "removed",
     });
     return this.ok({ worktree: record });

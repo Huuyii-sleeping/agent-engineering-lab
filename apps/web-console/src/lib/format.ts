@@ -1,10 +1,10 @@
-export function formatDateTime(value: string | null | undefined): string {
+export function formatDateTime(value: number | string | null | undefined): string {
   if (!value) {
     return "N/A";
   }
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
-    return value;
+    return String(value);
   }
   return parsed.toLocaleString("zh-CN", {
     hour12: false,

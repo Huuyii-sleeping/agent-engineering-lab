@@ -63,18 +63,24 @@ async function main(): Promise<void> {
     const { SchedulerManager } = await import("../../src/tools/scheduler.js");
     const scheduler = new SchedulerManager(() => path.join(process.cwd(), ".schedule"));
 
-    const created = await scheduler.createSchedule("1 10 * * *", "Follow up on the durable scheduled task.", true, true);
+    const created = await scheduler.createSchedule("5 1 10 * * *", "Follow up on the durable scheduled task.", true, true);
     assert(created.ok, "schedule should be created");
+    if (!created.ok) {
+      throw new Error("schedule should be created");
+    }
+    assert(typeof created.schedule.created_at === "number", "schedule timestamps should use epoch milliseconds");
 
     const recordsPath = path.join(process.cwd(), ".schedule", "records.json");
     const recordsRaw = await readFile(recordsPath, "utf8");
     assert(recordsRaw.includes("Follow up on the durable scheduled task."), "schedule should be persisted to disk");
+    assert(recordsRaw.includes('"created_at": '), "persisted schedule should store numeric created_at");
 
     const firstTick = await scheduler.tick(new Date("2026-05-11T10:01:05+08:00"));
     assert(firstTick.fired.length === 1, "matching schedule should enqueue a scheduled prompt");
+    assert(firstTick.fired[0] && typeof firstTick.fired[0].firedAt === "number", "fired notification should use epoch milliseconds");
 
-    const secondTick = await scheduler.tick(new Date("2026-05-11T10:01:40+08:00"));
-    assert(secondTick.fired.length === 0, "same schedule should not fire twice in the same minute");
+    const secondTick = await scheduler.tick(new Date("2026-05-11T10:01:05.600+08:00"));
+    assert(secondTick.fired.length === 0, "same schedule should not fire twice in the same second");
 
     const restartedScheduler = new SchedulerManager(() => path.join(process.cwd(), ".schedule"));
     const listed = await restartedScheduler.listSchedules();

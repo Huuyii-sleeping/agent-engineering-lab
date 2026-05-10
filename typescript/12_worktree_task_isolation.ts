@@ -118,7 +118,7 @@ class EventBus {
   ): Promise<void> {
     const payload: Record<string, unknown> = {
       event,
-      ts: Date.now() / 1000,
+      ts: Date.now(),
       task: task ?? {},
       worktree: worktree ?? {},
     };
@@ -180,7 +180,7 @@ class TaskManager {
   }
 
   async create(subject: string, description = ""): Promise<string> {
-    const now = Date.now() / 1000;
+    const now = Date.now();
     const task: TaskRow = {
       id: this.nextId,
       subject,
@@ -217,7 +217,7 @@ class TaskManager {
     if (typeof owner === "string") {
       task.owner = owner;
     }
-    task.updated_at = Date.now() / 1000;
+    task.updated_at = Date.now();
     await this.save(task);
     return JSON.stringify(task, null, 2);
   }
@@ -231,7 +231,7 @@ class TaskManager {
     if (task.status === "pending") {
       task.status = "in_progress";
     }
-    task.updated_at = Date.now() / 1000;
+    task.updated_at = Date.now();
     await this.save(task);
     return JSON.stringify(task, null, 2);
   }
@@ -239,7 +239,7 @@ class TaskManager {
   async unbindWorktree(taskId: number): Promise<string> {
     const task = await this.load(taskId);
     task.worktree = "";
-    task.updated_at = Date.now() / 1000;
+    task.updated_at = Date.now();
     await this.save(task);
     return JSON.stringify(task, null, 2);
   }
@@ -379,7 +379,7 @@ class WorktreeManager {
         branch,
         task_id: taskId,
         status: "active",
-        created_at: Date.now() / 1000,
+        created_at: Date.now(),
       };
       const index = await this.loadIndex();
       index.worktrees.push(entry);
@@ -503,7 +503,7 @@ class WorktreeManager {
       for (const item of index.worktrees) {
         if (item.name === name) {
           item.status = "removed";
-          item.removed_at = Date.now() / 1000;
+          item.removed_at = Date.now();
         }
       }
       await this.saveIndex(index);
@@ -536,7 +536,7 @@ class WorktreeManager {
     for (const item of index.worktrees) {
       if (item.name === name) {
         item.status = "kept";
-        item.kept_at = Date.now() / 1000;
+        item.kept_at = Date.now();
         kept = item;
       }
     }

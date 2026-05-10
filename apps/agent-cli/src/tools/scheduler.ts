@@ -8,8 +8,8 @@ export type ScheduleRecord = {
   prompt: string;
   recurring: boolean;
   durable: boolean;
-  created_at: string;
-  last_fired_at: string | null;
+  created_at: number;
+  last_fired_at: number | null;
   enabled: boolean;
 };
 
@@ -18,8 +18,7 @@ export type ScheduledPromptNotification = {
   scheduleId: string;
   prompt: string;
   recurring: boolean;
-  firedAt: string;
-  firedAtLocal: string;
+  firedAt: number;
 };
 
 type Paths = {
@@ -28,39 +27,36 @@ type Paths = {
   notificationsPath: string;
 };
 
-type CronFields = [string, string, string, string, string];
+type CronFields = [string, string, string, string, string, string];
 
 type TickResult = {
-  scannedAt: string;
+  scannedAt: number;
   fired: ScheduledPromptNotification[];
 };
-
-function nowLocal(iso: string): string {
-  return new Date(iso).toLocaleString("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    hour12: false,
-  });
-}
 
 function makeId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function minuteKey(date: Date): string {
+function secondKey(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   const h = String(date.getHours()).padStart(2, "0");
   const min = String(date.getMinutes()).padStart(2, "0");
-  return `${y}-${m}-${d}T${h}:${min}`;
+  const sec = String(date.getSeconds()).padStart(2, "0");
+  return `${y}-${m}-${d}T${h}:${min}:${sec}`;
 }
 
 function parseCron(cron: string): CronFields | null {
   const parts = cron.trim().split(/\s+/);
-  if (parts.length !== 5) {
+  if (parts.length === 5) {
+    return ["0", parts[0], parts[1], parts[2], parts[3], parts[4]];
+  }
+  if (parts.length !== 6) {
     return null;
   }
-  return [parts[0], parts[1], parts[2], parts[3], parts[4]];
+  return [parts[0], parts[1], parts[2], parts[3], parts[4], parts[5]];
 }
 
 function validateRange(value: number, min: number, max: number): boolean {
@@ -138,9 +134,10 @@ function cronMatches(cron: string, now: Date): boolean {
   if (!fields) {
     return false;
   }
-  const [minuteExpr, hourExpr, dayExpr, monthExpr, weekdayExpr] = fields;
+  const [secondExpr, minuteExpr, hourExpr, dayExpr, monthExpr, weekdayExpr] = fields;
   const weekday = now.getDay();
   return (
+    matchField(secondExpr, now.getSeconds(), 0, 59) &&
     matchField(minuteExpr, now.getMinutes(), 0, 59) &&
     matchField(hourExpr, now.getHours(), 0, 23) &&
     matchField(dayExpr, now.getDate(), 1, 31) &&
@@ -156,11 +153,29 @@ function isCronValid(cron: string): boolean {
   }
   return (
     expandToken(fields[0], 0, 59) !== null &&
-    expandToken(fields[1], 0, 23) !== null &&
-    expandToken(fields[2], 1, 31) !== null &&
-    expandToken(fields[3], 1, 12) !== null &&
-    expandToken(fields[4], 0, 6) !== null
+    expandToken(fields[1], 0, 59) !== null &&
+    expandToken(fields[2], 0, 23) !== null &&
+    expandToken(fields[3], 1, 31) !== null &&
+    expandToken(fields[4], 1, 12) !== null &&
+    expandToken(fields[5], 0, 6) !== null
   );
+}
+
+function toTimestampMs(value: unknown, fallback: number | null): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+  if (typeof value === "string" && value.trim()) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) {
+      return Math.trunc(numeric);
+    }
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return fallback;
 }
 
 let nowProvider: () => Date = () => new Date();
@@ -215,8 +230,8 @@ export class SchedulerManager {
       prompt: String(item.prompt ?? ""),
       recurring: item.recurring !== false,
       durable: item.durable !== false,
-      created_at: String(item.created_at ?? new Date(0).toISOString()),
-      last_fired_at: typeof item.last_fired_at === "string" ? item.last_fired_at : null,
+      created_at: toTimestampMs(item.created_at, 0) ?? 0,
+      last_fired_at: toTimestampMs(item.last_fired_at, null),
       enabled: item.enabled !== false,
     }));
   }
@@ -234,8 +249,7 @@ export class SchedulerManager {
       scheduleId: String(item.scheduleId ?? ""),
       prompt: String(item.prompt ?? ""),
       recurring: item.recurring !== false,
-      firedAt: String(item.firedAt ?? new Date(0).toISOString()),
-      firedAtLocal: String(item.firedAtLocal ?? ""),
+      firedAt: toTimestampMs(item.firedAt, 0) ?? 0,
     }));
   }
 
@@ -257,7 +271,10 @@ export class SchedulerManager {
       return { ok: false, error: { code: "INVALID_ARGUMENT", message: "schedule_create requires cron" } };
     }
     if (!isCronValid(cron)) {
-      return { ok: false, error: { code: "INVALID_CRON", message: "cron must be a valid 5-field expression" } };
+      return {
+        ok: false,
+        error: { code: "INVALID_CRON", message: "cron must be a valid 5-field or 6-field expression" },
+      };
     }
     if (!prompt) {
       return { ok: false, error: { code: "INVALID_ARGUMENT", message: "schedule_create requires prompt" } };
@@ -269,7 +286,7 @@ export class SchedulerManager {
       prompt,
       recurring,
       durable,
-      created_at: nowProvider().toISOString(),
+      created_at: nowProvider().getTime(),
       last_fired_at: null,
       enabled: true,
     };
@@ -300,7 +317,7 @@ export class SchedulerManager {
 
   async tick(nowArg?: Date): Promise<TickResult> {
     const now = nowArg ?? nowProvider();
-    const currentMinute = minuteKey(now);
+    const currentSecond = secondKey(now);
     const records = await this.loadRecords();
     const notifications = await this.loadNotifications();
     const fired: ScheduledPromptNotification[] = [];
@@ -312,19 +329,18 @@ export class SchedulerManager {
       if (!cronMatches(record.cron, now)) {
         continue;
       }
-      const lastFiredMinute = record.last_fired_at ? minuteKey(new Date(record.last_fired_at)) : null;
-      if (lastFiredMinute === currentMinute) {
+      const lastFiredSecond = record.last_fired_at ? secondKey(new Date(record.last_fired_at)) : null;
+      if (lastFiredSecond === currentSecond) {
         continue;
       }
 
-      const firedAt = now.toISOString();
+      const firedAt = now.getTime();
       const notification: ScheduledPromptNotification = {
         id: makeId("sched_evt"),
         scheduleId: record.id,
         prompt: record.prompt,
         recurring: record.recurring,
         firedAt,
-        firedAtLocal: nowLocal(firedAt),
       };
       notifications.push(notification);
       fired.push(notification);
@@ -340,7 +356,7 @@ export class SchedulerManager {
     }
 
     return {
-      scannedAt: now.toISOString(),
+      scannedAt: now.getTime(),
       fired,
     };
   }
@@ -367,7 +383,8 @@ export const SCHEDULER_TOOLS: ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "schedule_create",
-      description: "Create a durable future prompt schedule with a 5-field cron expression.",
+      description:
+        "Create a durable future prompt schedule. Supports 6-field cron (second minute hour day month weekday) and 5-field cron (minute hour day month weekday, defaults second=0). Example: every 3 seconds => */3 * * * * *.",
       parameters: {
         type: "object",
         properties: {
@@ -384,7 +401,7 @@ export const SCHEDULER_TOOLS: ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "schedule_list",
-      description: "List existing future prompt schedules.",
+      description: "List existing future prompt schedules with timestamp fields in milliseconds.",
       parameters: { type: "object", properties: {} },
     },
   },

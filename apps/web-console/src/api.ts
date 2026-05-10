@@ -8,7 +8,7 @@ export type TodoItem = {
 
 export type TodoSnapshot = {
   schemaVersion: number;
-  updatedAt: string | null;
+  updatedAt: number | null;
   items: TodoItem[];
 };
 
@@ -25,7 +25,7 @@ export type TaskItem = {
 
 export type ObservabilityMetrics = {
   schemaVersion: number;
-  updatedAt: string | null;
+  updatedAt: number | null;
   tracesStarted: number;
   modelRequests: number;
   modelResponses: number;
@@ -50,7 +50,7 @@ export type ObservabilityMetrics = {
 export type ObservabilityEvent = {
   schemaVersion: number;
   id: string;
-  at: string;
+  at: number;
   trace_id: string | null;
   span_id: string | null;
   kind: string;
@@ -59,7 +59,7 @@ export type ObservabilityEvent = {
 
 export type RuntimeSnapshot = {
   cwd: string;
-  lastUpdatedAt: string | null;
+  lastUpdatedAt: number | null;
   tasksCount: number;
   todosCount: number;
   inProgressTasks: number;

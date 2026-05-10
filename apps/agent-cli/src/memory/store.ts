@@ -2,13 +2,10 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
+import { nowTimestampMs, parseTimestampMs } from "../time.js";
 import { parseJsonl, toJsonl } from "./jsonl.js";
 import { asMemoryType, asTags, normalizeConfidence, normalizeMemoryText } from "./normalize.js";
 import type { MemoryEntry } from "./types.js";
-
-function nowIso(): string {
-  return new Date().toISOString();
-}
 
 function makeId(): string {
   return `mem_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -28,17 +25,26 @@ function dedupLongTerm(items: MemoryEntry[], next: MemoryEntry): MemoryEntry[] {
 }
 
 export class MemoryStore {
-  private readonly root = path.join(process.cwd(), ".memory");
-  private readonly shortPath = path.join(this.root, "short_term.jsonl");
-  private readonly longPath = path.join(this.root, "long_term.jsonl");
+  private initRoot: string | null = null;
   private initPromise: Promise<void> | null = null;
 
+  private paths(): { root: string; shortPath: string; longPath: string } {
+    const root = path.join(process.cwd(), ".memory");
+    return {
+      root,
+      shortPath: path.join(root, "short_term.jsonl"),
+      longPath: path.join(root, "long_term.jsonl"),
+    };
+  }
+
   private async ensureInit(): Promise<void> {
-    if (!this.initPromise) {
+    const paths = this.paths();
+    if (this.initRoot !== paths.root) {
+      this.initRoot = paths.root;
       this.initPromise = (async () => {
-        await mkdir(this.root, { recursive: true });
-        await this.ensureFile(this.shortPath);
-        await this.ensureFile(this.longPath);
+        await mkdir(paths.root, { recursive: true });
+        await this.ensureFile(paths.shortPath);
+        await this.ensureFile(paths.longPath);
       })();
     }
     await this.initPromise;
@@ -54,7 +60,8 @@ export class MemoryStore {
 
   private async loadLayer(layer: "short_term" | "long_term"): Promise<MemoryEntry[]> {
     await this.ensureInit();
-    const target = layer === "short_term" ? this.shortPath : this.longPath;
+    const { shortPath, longPath } = this.paths();
+    const target = layer === "short_term" ? shortPath : longPath;
     const raw = await readFile(target, "utf8");
     const parsed = parseJsonl<Partial<MemoryEntry>>(raw);
     return parsed.map((item) => ({
@@ -64,12 +71,13 @@ export class MemoryStore {
       tags: asTags(item.tags),
       content: String(item.content ?? ""),
       confidence: normalizeConfidence(item.confidence),
-      updatedAt: String(item.updatedAt ?? nowIso()),
+      updatedAt: parseTimestampMs(item.updatedAt, nowTimestampMs()),
     }));
   }
 
   private async saveLayer(layer: "short_term" | "long_term", items: MemoryEntry[]): Promise<void> {
-    const target = layer === "short_term" ? this.shortPath : this.longPath;
+    const { shortPath, longPath } = this.paths();
+    const target = layer === "short_term" ? shortPath : longPath;
     await writeFile(target, toJsonl(items), "utf8");
   }
 
@@ -92,7 +100,7 @@ export class MemoryStore {
       tags: asTags(tagsArg),
       content,
       confidence: normalizeConfidence(confidenceArg),
-      updatedAt: nowIso(),
+      updatedAt: nowTimestampMs(),
     };
 
     const shortItems = await this.loadLayer("short_term");

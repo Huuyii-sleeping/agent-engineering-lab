@@ -2,10 +2,11 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
+import { nowTimestampMs, parseTimestampMs } from "../time.js";
 
 type ObservabilityMetrics = {
   schemaVersion: number;
-  updatedAt: string;
+  updatedAt: number;
   tracesStarted: number;
   modelRequests: number;
   modelResponses: number;
@@ -30,7 +31,7 @@ type ObservabilityMetrics = {
 export type ObservabilityEvent = {
   schemaVersion: number;
   id: string;
-  at: string;
+  at: number;
   trace_id: string | null;
   span_id: string | null;
   kind: string;
@@ -42,10 +43,6 @@ export type ExecutionContext = {
   spanId?: string;
   replayMode?: "dry_run" | "live";
 };
-
-function nowIso(): string {
-  return new Date().toISOString();
-}
 
 function makeId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -79,7 +76,7 @@ function sanitizeValue(value: unknown): unknown {
 function defaultMetrics(): ObservabilityMetrics {
   return {
     schemaVersion: 1,
-    updatedAt: nowIso(),
+    updatedAt: nowTimestampMs(),
     tracesStarted: 0,
     modelRequests: 0,
     modelResponses: 0,
@@ -134,7 +131,7 @@ class ObservabilityRuntime {
         ...defaultMetrics(),
         ...parsed,
         schemaVersion: 1,
-        updatedAt: String(parsed.updatedAt ?? nowIso()),
+        updatedAt: parseTimestampMs(parsed.updatedAt, nowTimestampMs()),
         perTool: parsed.perTool && typeof parsed.perTool === "object" ? parsed.perTool : {},
       };
     } catch {
@@ -145,7 +142,7 @@ class ObservabilityRuntime {
 
   private async saveMetrics(): Promise<void> {
     const metrics = await this.loadMetrics();
-    metrics.updatedAt = nowIso();
+    metrics.updatedAt = nowTimestampMs();
     await writeFile(this.metricsPath, `${JSON.stringify(metrics, null, 2)}\n`, "utf8");
   }
 
@@ -236,7 +233,7 @@ class ObservabilityRuntime {
     const event: ObservabilityEvent = {
       schemaVersion: 1,
       id: makeId("evt"),
-      at: nowIso(),
+      at: nowTimestampMs(),
       trace_id: traceId,
       span_id: spanId,
       kind,
@@ -259,9 +256,19 @@ class ObservabilityRuntime {
     const out: ObservabilityEvent[] = [];
     for (const line of lines) {
       try {
-        const parsed = JSON.parse(line) as ObservabilityEvent;
-        if (!traceId || parsed.trace_id === traceId) {
-          out.push(parsed);
+        const parsed = JSON.parse(line) as Partial<ObservabilityEvent>;
+        const normalized: ObservabilityEvent = {
+          schemaVersion: Number(parsed.schemaVersion ?? 1) || 1,
+          id: String(parsed.id ?? ""),
+          at: parseTimestampMs(parsed.at, 0),
+          trace_id: typeof parsed.trace_id === "string" ? parsed.trace_id : null,
+          span_id: typeof parsed.span_id === "string" ? parsed.span_id : null,
+          kind: String(parsed.kind ?? ""),
+          payload:
+            parsed.payload && typeof parsed.payload === "object" ? (parsed.payload as Record<string, unknown>) : {},
+        };
+        if (!traceId || normalized.trace_id === traceId) {
+          out.push(normalized);
         }
       } catch {
         // ignore malformed line

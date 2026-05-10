@@ -26,13 +26,13 @@ type TodoItem = {
 
 type TodoSnapshot = {
   schemaVersion: number;
-  updatedAt: string | null;
+  updatedAt: number | null;
   items: TodoItem[];
 };
 
 type ObservabilityMetrics = {
   schemaVersion: number;
-  updatedAt: string | null;
+  updatedAt: number | null;
   tracesStarted: number;
   modelRequests: number;
   modelResponses: number;
@@ -57,7 +57,7 @@ type ObservabilityMetrics = {
 type ObservabilityEvent = {
   schemaVersion: number;
   id: string;
-  at: string;
+  at: number;
   trace_id: string | null;
   span_id: string | null;
   kind: string;
@@ -69,6 +69,23 @@ const projectRoot = path.resolve(webDir, "..", "agent-cli");
 const tasksDir = path.join(projectRoot, ".tasks");
 const observabilityDir = path.join(projectRoot, ".observability");
 const runtimeDir = path.join(projectRoot, ".runtime");
+
+function parseTimestampMs(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+  if (typeof value === "string" && value.trim()) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) {
+      return Math.trunc(numeric);
+    }
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+}
 
 function jsonResponse(payload: unknown) {
   return new Response(JSON.stringify(payload, null, 2), {
@@ -139,28 +156,29 @@ async function readTodos(): Promise<TodoSnapshot> {
     : [];
   return {
     schemaVersion: 1,
-    updatedAt: parsed.updatedAt ? String(parsed.updatedAt) : null,
+    updatedAt: parseTimestampMs(parsed.updatedAt),
     items,
   };
 }
 
 async function readMetrics(): Promise<ObservabilityMetrics> {
-  return readJsonFile<ObservabilityMetrics>(path.join(observabilityDir, "metrics.json"), {
-    schemaVersion: 1,
-    updatedAt: null,
-    tracesStarted: 0,
-    modelRequests: 0,
-    modelResponses: 0,
-    notifications: 0,
-    securityBlocks: 0,
-    toolCalls: 0,
-    toolFailures: 0,
-    totalToolDurationMs: 0,
-    maxToolDurationMs: 0,
-    estimatedPromptTokens: 0,
-    completionTokens: 0,
-    perTool: {},
-  });
+  const parsed = await readJsonFile<Partial<ObservabilityMetrics>>(path.join(observabilityDir, "metrics.json"), {});
+  return {
+    schemaVersion: Number(parsed.schemaVersion ?? 1),
+    updatedAt: parseTimestampMs(parsed.updatedAt),
+    tracesStarted: Number(parsed.tracesStarted ?? 0),
+    modelRequests: Number(parsed.modelRequests ?? 0),
+    modelResponses: Number(parsed.modelResponses ?? 0),
+    notifications: Number(parsed.notifications ?? 0),
+    securityBlocks: Number(parsed.securityBlocks ?? 0),
+    toolCalls: Number(parsed.toolCalls ?? 0),
+    toolFailures: Number(parsed.toolFailures ?? 0),
+    totalToolDurationMs: Number(parsed.totalToolDurationMs ?? 0),
+    maxToolDurationMs: Number(parsed.maxToolDurationMs ?? 0),
+    estimatedPromptTokens: Number(parsed.estimatedPromptTokens ?? 0),
+    completionTokens: Number(parsed.completionTokens ?? 0),
+    perTool: parsed.perTool && typeof parsed.perTool === "object" ? parsed.perTool : {},
+  };
 }
 
 async function readEvents(traceId?: string | null): Promise<ObservabilityEvent[]> {
@@ -172,7 +190,16 @@ async function readEvents(traceId?: string | null): Promise<ObservabilityEvent[]
   const events: ObservabilityEvent[] = [];
   for (const line of lines) {
     try {
-      const event = JSON.parse(line) as ObservabilityEvent;
+      const parsed = JSON.parse(line) as Partial<ObservabilityEvent>;
+      const event: ObservabilityEvent = {
+        schemaVersion: Number(parsed.schemaVersion ?? 1),
+        id: String(parsed.id ?? ""),
+        at: parseTimestampMs(parsed.at) ?? 0,
+        trace_id: typeof parsed.trace_id === "string" ? parsed.trace_id : null,
+        span_id: typeof parsed.span_id === "string" ? parsed.span_id : null,
+        kind: String(parsed.kind ?? ""),
+        payload: parsed.payload && typeof parsed.payload === "object" ? (parsed.payload as Record<string, unknown>) : {},
+      };
       if (!traceId || event.trace_id === traceId) {
         events.push(event);
       }
@@ -180,7 +207,7 @@ async function readEvents(traceId?: string | null): Promise<ObservabilityEvent[]
       // ignore malformed events
     }
   }
-  return events.sort((a, b) => (a.at < b.at ? 1 : -1));
+  return events.sort((a, b) => b.at - a.at);
 }
 
 export default defineConfig({
@@ -198,9 +225,11 @@ export default defineConfig({
           const [tasks, todos, metrics] = await Promise.all([readTasks(), readTodos(), readMetrics()]);
           const completedTasks = tasks.filter((task) => task.status === "completed").length;
           const inProgressTasks = tasks.filter((task) => task.status === "in_progress").length;
-          const updatedAtCandidates = [todos.updatedAt, metrics.updatedAt].filter(Boolean) as string[];
+          const updatedAtCandidates = [todos.updatedAt, metrics.updatedAt].filter((value): value is number =>
+            typeof value === "number",
+          );
           const lastUpdatedAt =
-            updatedAtCandidates.length > 0 ? updatedAtCandidates.sort((a, b) => (a < b ? 1 : -1))[0] : null;
+            updatedAtCandidates.length > 0 ? updatedAtCandidates.sort((a, b) => b - a)[0] : null;
           const snapshot = {
             cwd: projectRoot,
             lastUpdatedAt,

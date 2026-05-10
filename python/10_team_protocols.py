@@ -78,6 +78,10 @@ VALID_MSG_TYPES = {
     "plan_approval_response",
 }
 
+
+def now_timestamp_ms() -> int:
+    return int(time.time() * 1000)
+
 # -- Request trackers: correlate by request_id --
 shutdown_requests = {}
 plan_requests = {}
@@ -98,7 +102,7 @@ class MessageBus:
             "type": msg_type,
             "from": sender,
             "content": content,
-            "timestamp": time.time(),
+            "timestamp": now_timestamp_ms(),
         }
         if extra:
             msg.update(extra)

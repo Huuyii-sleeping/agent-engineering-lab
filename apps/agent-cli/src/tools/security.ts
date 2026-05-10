@@ -3,6 +3,7 @@ import path from "node:path";
 import * as process from "node:process";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
+import { nowTimestampMs, parseOptionalTimestampMs, parseTimestampMs, plusSecondsMs } from "../time.js";
 
 type RiskLevel = "low" | "medium" | "high" | "critical";
 type Decision = "allow" | "deny" | "require_approval";
@@ -15,10 +16,10 @@ type ApprovalRequest = {
   reason: string;
   scope: string;
   status: ApprovalStatus;
-  createdAt: string;
-  expiresAt: string;
-  decidedAt?: string;
-  consumedAt?: string;
+  createdAt: number;
+  expiresAt: number;
+  decidedAt?: number;
+  consumedAt?: number;
 };
 
 type PolicyRule = {
@@ -59,15 +60,6 @@ function ok(data: Record<string, unknown>): string {
 
 function fail(code: string, message: string, extra?: Record<string, unknown>): string {
   return JSON.stringify({ ok: false, error: { code, message }, ...(extra ?? {}) }, null, 2);
-}
-
-function nowIso(): string {
-  return new Date().toISOString();
-}
-
-function plusSeconds(iso: string, sec: number): string {
-  const t = new Date(iso).getTime() + sec * 1000;
-  return new Date(t).toISOString();
 }
 
 function safeJsonParse<T>(raw: string, fallback: T): T {
@@ -203,10 +195,10 @@ class SecurityManager {
         item.status === "consumed"
           ? item.status
           : "pending",
-      createdAt: String(item.createdAt ?? nowIso()),
-      expiresAt: String(item.expiresAt ?? nowIso()),
-      decidedAt: item.decidedAt ? String(item.decidedAt) : undefined,
-      consumedAt: item.consumedAt ? String(item.consumedAt) : undefined,
+      createdAt: parseTimestampMs(item.createdAt, nowTimestampMs()),
+      expiresAt: parseTimestampMs(item.expiresAt, nowTimestampMs()),
+      decidedAt: parseOptionalTimestampMs(item.decidedAt) ?? undefined,
+      consumedAt: parseOptionalTimestampMs(item.consumedAt) ?? undefined,
     }));
   }
 
@@ -216,7 +208,7 @@ class SecurityManager {
 
   private async audit(type: string, payload: Record<string, unknown>): Promise<void> {
     await this.ensureInit();
-    const event = { at: nowIso(), type, payload };
+    const event = { at: nowTimestampMs(), type, payload };
     await writeFile(this.auditPath, `${JSON.stringify(event)}\n`, { flag: "a", encoding: "utf8" });
   }
 
@@ -272,7 +264,7 @@ class SecurityManager {
   async createApproval(toolName: string, args: Record<string, unknown>): Promise<string> {
     const decision = await this.evaluate(toolName, args);
     const id = `apr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const createdAt = nowIso();
+    const createdAt = nowTimestampMs();
     const request: ApprovalRequest = {
       request_id: id,
       action: toolName,
@@ -281,7 +273,7 @@ class SecurityManager {
       scope: decision.scope,
       status: "pending",
       createdAt,
-      expiresAt: plusSeconds(createdAt, RUNTIME_CONFIG.securityApprovalDefaultTtlSec),
+      expiresAt: plusSecondsMs(createdAt, RUNTIME_CONFIG.securityApprovalDefaultTtlSec),
     };
     const all = await this.loadApprovals();
     all.push(request);
@@ -308,13 +300,13 @@ class SecurityManager {
     if (item.status !== "pending") {
       return fail("INVALID_STATUS", `approval ${requestId} is ${item.status}`);
     }
-    if (new Date(item.expiresAt).getTime() <= Date.now()) {
+    if (item.expiresAt <= Date.now()) {
       item.status = "expired";
       await this.saveApprovals(all);
       return fail("APPROVAL_EXPIRED", `approval ${requestId} expired`);
     }
     item.status = "approved";
-    item.decidedAt = nowIso();
+    item.decidedAt = nowTimestampMs();
     await this.saveApprovals(all);
     await this.audit("approval_decision", { request_id: requestId, decision: "approved" });
     return ok({ request: item });
@@ -334,7 +326,7 @@ class SecurityManager {
       return fail("INVALID_STATUS", `approval ${requestId} is ${item.status}`);
     }
     item.status = "rejected";
-    item.decidedAt = nowIso();
+    item.decidedAt = nowTimestampMs();
     await this.saveApprovals(all);
     await this.audit("approval_decision", { request_id: requestId, decision: "rejected" });
     return ok({ request: item });
@@ -346,7 +338,7 @@ class SecurityManager {
     const nowMs = Date.now();
     let mutated = false;
     for (const item of all) {
-      if (item.status === "pending" && new Date(item.expiresAt).getTime() <= nowMs) {
+      if (item.status === "pending" && item.expiresAt <= nowMs) {
         item.status = "expired";
         mutated = true;
       }
@@ -367,13 +359,13 @@ class SecurityManager {
         row.action === toolName &&
         row.scope === scope &&
         row.status === "approved" &&
-        new Date(row.expiresAt).getTime() > nowMs,
+        row.expiresAt > nowMs,
     );
     if (!item) {
       return false;
     }
     item.status = "consumed";
-    item.consumedAt = nowIso();
+    item.consumedAt = nowTimestampMs();
     await this.saveApprovals(all);
     await this.audit("approval_consumed", { request_id: item.request_id, action: toolName });
     return true;

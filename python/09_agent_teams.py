@@ -74,6 +74,10 @@ VALID_MSG_TYPES = {
 }
 
 
+def now_timestamp_ms() -> int:
+    return int(time.time() * 1000)
+
+
 # -- MessageBus: JSONL inbox per teammate --
 class MessageBus:
     def __init__(self, inbox_dir: Path):
@@ -88,7 +92,7 @@ class MessageBus:
             "type": msg_type,
             "from": sender,
             "content": content,
-            "timestamp": time.time(),
+            "timestamp": now_timestamp_ms(),
         }
         if extra:
             msg.update(extra)

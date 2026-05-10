@@ -3,6 +3,7 @@ import * as process from "node:process";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { getExecutionContext, recordObservabilityEvent } from "../observability/runtime.js";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
+import { nowTimestampMs } from "../time.js";
 
 type BackgroundStatus = "running" | "completed" | "failed";
 
@@ -11,8 +12,8 @@ type BackgroundTask = {
   command: string;
   status: BackgroundStatus;
   traceId: string | null;
-  startedAt: string;
-  finishedAt: string | null;
+  startedAt: number;
+  finishedAt: number | null;
   exitCode: number | null;
   stdout: string;
   stderr: string;
@@ -22,23 +23,11 @@ type BackgroundNotification = {
   taskId: number;
   status: "completed" | "failed";
   command: string;
-  finishedAt: string;
-  finishedAtLocal: string;
+  finishedAt: number;
   exitCode: number | null;
   stdout: string;
   stderr: string;
 };
-
-function nowIso(): string {
-  return new Date().toISOString();
-}
-
-function toShanghaiTime(iso: string): string {
-  return new Date(iso).toLocaleString("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    hour12: false,
-  });
-}
 
 function cut(text: string, max = RUNTIME_CONFIG.backgroundMaxOutputChars): string {
   if (text.length <= max) {
@@ -53,9 +42,7 @@ function taskSnapshot(task: BackgroundTask): Record<string, unknown> {
     command: task.command,
     status: task.status,
     startedAt: task.startedAt,
-    startedAtLocal: toShanghaiTime(task.startedAt),
     finishedAt: task.finishedAt,
-    finishedAtLocal: task.finishedAt ? toShanghaiTime(task.finishedAt) : null,
     exitCode: task.exitCode,
     stdout: cut(task.stdout),
     stderr: cut(task.stderr),
@@ -82,7 +69,7 @@ class BackgroundManager {
       command,
       status: "running",
       traceId: getExecutionContext()?.traceId ?? null,
-      startedAt: nowIso(),
+      startedAt: nowTimestampMs(),
       finishedAt: null,
       exitCode: null,
       stdout: "",
@@ -114,7 +101,7 @@ class BackgroundManager {
     });
     child.on("error", (error) => {
       task.status = "failed";
-      task.finishedAt = nowIso();
+      task.finishedAt = nowTimestampMs();
       task.exitCode = -1;
       task.stderr += `\n${String(error)}`;
       void recordObservabilityEvent(
@@ -133,14 +120,13 @@ class BackgroundManager {
         status: "failed",
         command: task.command,
         finishedAt: task.finishedAt,
-        finishedAtLocal: toShanghaiTime(task.finishedAt),
         exitCode: task.exitCode,
         stdout: cut(task.stdout),
         stderr: cut(task.stderr),
       });
     });
     child.on("exit", (code) => {
-      task.finishedAt = nowIso();
+      task.finishedAt = nowTimestampMs();
       task.exitCode = code ?? 0;
       task.status = task.exitCode === 0 ? "completed" : "failed";
       void recordObservabilityEvent(
@@ -160,7 +146,6 @@ class BackgroundManager {
         status: task.status,
         command: task.command,
         finishedAt: task.finishedAt,
-        finishedAtLocal: toShanghaiTime(task.finishedAt),
         exitCode: task.exitCode,
         stdout: cut(task.stdout),
         stderr: cut(task.stderr),

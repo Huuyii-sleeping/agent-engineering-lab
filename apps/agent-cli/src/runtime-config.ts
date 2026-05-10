@@ -50,7 +50,7 @@ export const RUNTIME_CONFIG: RuntimeConfig = {
   recoveryTransportMaxAttempts: readInt("AGENT_RECOVERY_TRANSPORT_MAX_ATTEMPTS", 3, 0),
   recoveryBackoffBaseMs: readInt("AGENT_RECOVERY_BACKOFF_BASE_MS", 1_000, 1),
   recoveryBackoffMaxMs: readInt("AGENT_RECOVERY_BACKOFF_MAX_MS", 8_000, 1),
-  schedulerPollIntervalMs: readInt("AGENT_SCHEDULER_POLL_INTERVAL_MS", 5_000, 1_000),
+  schedulerPollIntervalMs: readInt("AGENT_SCHEDULER_POLL_INTERVAL_MS", 1_000, 100),
   backgroundMaxOutputChars: readInt("AGENT_BACKGROUND_MAX_OUTPUT_CHARS", 4_000, 100),
   autonomyPollIntervalMs: readInt("AGENT_AUTONOMY_POLL_INTERVAL_MS", 5_000, 100),
   autonomyIdleTimeoutMs: readInt("AGENT_AUTONOMY_IDLE_TIMEOUT_MS", 60_000, 1_000),

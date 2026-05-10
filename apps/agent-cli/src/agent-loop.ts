@@ -203,12 +203,12 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
       if (scheduledNotifications.length > 0) {
         const summaryLines = scheduledNotifications.map((item) => {
           const preview = item.prompt.replace(/\s+/g, " ").trim().slice(0, 160);
-          return `schedule#${item.scheduleId} fired at ${item.firedAtLocal}; prompt=${preview}`;
+          return `schedule#${item.scheduleId} fired_at_ms=${item.firedAt}; prompt=${preview}`;
         });
         const blocks = scheduledNotifications
           .map(
             (item) =>
-              `<scheduled_prompt id="${item.scheduleId}" fired_at="${item.firedAt}" recurring="${item.recurring}">\n${item.prompt}\n</scheduled_prompt>`,
+              `<scheduled_prompt id="${item.scheduleId}" fired_at_ms="${item.firedAt}" recurring="${item.recurring}">\n${item.prompt}\n</scheduled_prompt>`,
           )
           .join("\n");
         dynamicSystemMessages.push(
@@ -235,9 +235,9 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
           const output = typeof n.output === "string" ? n.output.slice(0, 200) : "";
           const error = typeof n.error === "string" ? n.error.slice(0, 200) : "";
           if (n.status === "completed") {
-            return `agent#${n.agentId}(${n.agentName}) completed at ${n.updatedAtLocal}; output=${output}`;
+            return `agent#${n.agentId}(${n.agentName}) updated_at_ms=${n.updatedAt}; output=${output}`;
           }
-          return `agent#${n.agentId}(${n.agentName}) failed at ${n.updatedAtLocal}; error=${error}`;
+          return `agent#${n.agentId}(${n.agentName}) updated_at_ms=${n.updatedAt}; error=${error}`;
         });
         const reminder = `<subagent_notifications>\n${summaryLines.join("\n")}\n</subagent_notifications>`;
         dynamicSystemMessages.push(reminder);
@@ -249,8 +249,8 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
           const out = n.stdout ? n.stdout.slice(0, 160) : "";
           const err = n.stderr ? n.stderr.slice(0, 160) : "";
           return n.status === "completed"
-            ? `task#${n.taskId} completed at ${n.finishedAtLocal}; command=${n.command}; stdout=${out}`
-            : `task#${n.taskId} failed at ${n.finishedAtLocal}; command=${n.command}; stderr=${err}`;
+            ? `task#${n.taskId} finished_at_ms=${n.finishedAt}; command=${n.command}; stdout=${out}`
+            : `task#${n.taskId} finished_at_ms=${n.finishedAt}; command=${n.command}; stderr=${err}`;
         });
         const reminder = `<background_notifications>\n${summaryLines.join("\n")}\n</background_notifications>`;
         dynamicSystemMessages.push(reminder);
@@ -274,7 +274,7 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
         const summaryLines = teamNotifications.map((n) => {
           const c = n.content.slice(0, 120);
           const req = n.requestId ? ` request_id=${n.requestId}` : "";
-          return `to#${n.teammateId}(${n.teammateName}) ${n.messageType} from=${n.from}${req} at ${n.createdAtLocal}: ${c}`;
+          return `to#${n.teammateId}(${n.teammateName}) ${n.messageType} from=${n.from}${req} created_at_ms=${n.createdAt}: ${c}`;
         });
         const reminder = `<team_notifications>\n${summaryLines.join("\n")}\n</team_notifications>`;
         dynamicSystemMessages.push(reminder);

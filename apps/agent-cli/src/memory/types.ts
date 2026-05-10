@@ -8,7 +8,7 @@ export type MemoryEntry = {
   tags: string[];
   content: string;
   confidence: number;
-  updatedAt: string;
+  updatedAt: number;
 };
 
 export type SearchHit = MemoryEntry & {
