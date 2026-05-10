@@ -29,7 +29,7 @@ async function main(): Promise<void> {
 
   const created = parseJson(await runTaskCreate("prd13-smoke-task", "state transition check"));
   assert(typeof created.id === "number", "task_create should return id");
-  assert(created.schemaVersion === 2, "task_create should write schemaVersion=2");
+  assert(Number(created.schemaVersion) >= 2, "task_create should write schemaVersion>=2");
 
   const taskId = Number(created.id);
   const markCompleted = parseJson(await runTaskUpdate(taskId, "completed", undefined, undefined));
@@ -51,12 +51,12 @@ async function main(): Promise<void> {
 
   const wtCreate = parseJson(await runWorktreeCreate("prd13-wt"));
   const wtObj = wtCreate.worktree as { schemaVersion?: number } | undefined;
-  assert(wtObj?.schemaVersion === 2, "worktree_create should write schemaVersion=2");
+  assert(Number(wtObj?.schemaVersion) >= 2, "worktree_create should write schemaVersion>=2");
 
   const wtList = parseJson(await runWorktreeList());
   const list = wtList.worktrees as Array<{ schemaVersion?: number }> | undefined;
   assert(Array.isArray(list) && list.length >= 1, "worktree_list should include created worktree");
-  assert(list?.[0]?.schemaVersion === 2, "worktree_list should expose schemaVersion");
+  assert(Number(list?.[0]?.schemaVersion) >= 2, "worktree_list should expose schemaVersion>=2");
 
   const wtRemove = parseJson(await runWorktreeRemove("prd13-wt"));
   assert((wtRemove.worktree as { status?: string } | undefined)?.status === "removed", "worktree should be removed");

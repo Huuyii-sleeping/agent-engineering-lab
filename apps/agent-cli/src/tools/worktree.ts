@@ -1,12 +1,20 @@
 import { exec } from "node:child_process";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { nowTimestampMs, parseTimestampMs } from "../time.js";
+import { runTaskSyncWorktreeState } from "./task-board.js";
 
-type WorktreeStatus = "created" | "running" | "kept" | "removed";
-const WORKTREE_SCHEMA_VERSION = 2;
+type WorktreeStatus = "created" | "entered" | "running" | "kept" | "removed";
+type CloseoutAction = "keep" | "remove";
+type WorktreeCloseout = {
+  action: CloseoutAction;
+  at: number;
+  forced: boolean;
+};
+
+const WORKTREE_SCHEMA_VERSION = 3;
 
 type WorktreeRecord = {
   schemaVersion: number;
@@ -15,16 +23,43 @@ type WorktreeRecord = {
   status: WorktreeStatus;
   createdAt: number;
   updatedAt: number;
+  lastEnteredAt: number | null;
+  lastCommandAt: number | null;
+  lastCommandPreview: string | null;
+  closeout: WorktreeCloseout | null;
 };
 
 type WorktreeEvent = {
   schemaVersion: number;
   id: string;
-  type: "create" | "run" | "keep" | "remove";
+  type: "create" | "enter" | "run" | "closeout";
   name: string;
   at: number;
   detail: string;
 };
+
+function normalizeCloseout(value: unknown): WorktreeCloseout | null {
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+  const parsed = value as Partial<WorktreeCloseout>;
+  if (parsed.action !== "keep" && parsed.action !== "remove") {
+    return null;
+  }
+  return {
+    action: parsed.action,
+    at: Number.isFinite(Number(parsed.at)) ? Number(parsed.at) : nowTimestampMs(),
+    forced: Boolean(parsed.forced),
+  };
+}
+
+function previewCommand(command: string, max = 160): string {
+  const normalized = command.replace(/\s+/g, " ").trim();
+  if (normalized.length <= max) {
+    return normalized;
+  }
+  return `${normalized.slice(0, max)}...`;
+}
 
 function validWorktreeName(name: string): boolean {
   return /^[A-Za-z0-9._-]{1,40}$/.test(name);
@@ -68,15 +103,25 @@ class WorktreeManager {
     const raw = await readFile(this.indexPath, "utf8");
     const parsed = JSON.parse(raw) as Array<Partial<WorktreeRecord>>;
     return parsed.map((item) => ({
-      schemaVersion: Number.isInteger(Number(item.schemaVersion)) ? Number(item.schemaVersion) : 1,
+      schemaVersion: WORKTREE_SCHEMA_VERSION,
       name: String(item.name ?? ""),
       path: String(item.path ?? ""),
       status:
-        item.status === "created" || item.status === "running" || item.status === "kept" || item.status === "removed"
+        item.status === "created" ||
+          item.status === "entered" ||
+          item.status === "running" ||
+          item.status === "kept" ||
+          item.status === "removed"
           ? item.status
           : "created",
       createdAt: parseTimestampMs(item.createdAt, nowTimestampMs()),
       updatedAt: parseTimestampMs(item.updatedAt, nowTimestampMs()),
+      lastEnteredAt:
+        item.lastEnteredAt === null || item.lastEnteredAt === undefined ? null : parseTimestampMs(item.lastEnteredAt, nowTimestampMs()),
+      lastCommandAt:
+        item.lastCommandAt === null || item.lastCommandAt === undefined ? null : parseTimestampMs(item.lastCommandAt, nowTimestampMs()),
+      lastCommandPreview: item.lastCommandPreview ? String(item.lastCommandPreview) : null,
+      closeout: normalizeCloseout(item.closeout),
     }));
   }
 
@@ -95,6 +140,29 @@ class WorktreeManager {
 
   private defaultPath(name: string): string {
     return path.join(this.root, name);
+  }
+
+  private async hasGitMetadata(cwd: string): Promise<boolean> {
+    try {
+      await access(path.join(cwd, ".git"));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async getDirtyFiles(record: WorktreeRecord): Promise<string[] | null> {
+    if (!(await this.hasGitMetadata(record.path))) {
+      return null;
+    }
+    const result = await execPromise("git status --short", record.path);
+    if (result.code !== 0) {
+      return null;
+    }
+    return result.stdout
+      .split(/\r?\n/)
+      .map((line) => line.trimEnd())
+      .filter(Boolean);
   }
 
   private ok(data: Record<string, unknown>): string {
@@ -126,6 +194,10 @@ class WorktreeManager {
       status: "created",
       createdAt: now,
       updatedAt: now,
+      lastEnteredAt: null,
+      lastCommandAt: null,
+      lastCommandPreview: null,
+      closeout: null,
     };
     records.push(record);
     await this.saveIndex(records);
@@ -145,6 +217,36 @@ class WorktreeManager {
     return this.ok({ worktrees: records });
   }
 
+  async enter(nameArg: unknown, taskIdArg?: unknown): Promise<string> {
+    const name = String(nameArg ?? "").trim();
+    if (!name) {
+      return this.fail("INVALID_ARGUMENT", "worktree_enter requires name");
+    }
+    const records = await this.loadIndex();
+    const record = records.find((r) => r.name === name && r.status !== "removed");
+    if (!record) {
+      return this.fail("WORKTREE_NOT_FOUND", `worktree ${name} not found`);
+    }
+
+    const now = nowTimestampMs();
+    record.status = "entered";
+    record.updatedAt = now;
+    record.lastEnteredAt = now;
+    record.closeout = null;
+    record.schemaVersion = WORKTREE_SCHEMA_VERSION;
+    await this.saveIndex(records);
+    await this.appendEvent({
+      schemaVersion: WORKTREE_SCHEMA_VERSION,
+      id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      type: "enter",
+      name,
+      at: now,
+      detail: "entered",
+    });
+    await runTaskSyncWorktreeState(name, "entered", taskIdArg);
+    return this.ok({ worktree: record });
+  }
+
   async run(nameArg: unknown, commandArg: unknown): Promise<string> {
     const name = String(nameArg ?? "").trim();
     const command = String(commandArg ?? "").trim();
@@ -160,6 +262,9 @@ class WorktreeManager {
     record.status = "running";
     record.schemaVersion = WORKTREE_SCHEMA_VERSION;
     record.updatedAt = nowTimestampMs();
+    record.lastCommandAt = record.updatedAt;
+    record.lastCommandPreview = previewCommand(command);
+    record.closeout = null;
     await this.saveIndex(records);
     await this.appendEvent({
       schemaVersion: WORKTREE_SCHEMA_VERSION,
@@ -169,6 +274,7 @@ class WorktreeManager {
       at: nowTimestampMs(),
       detail: command,
     });
+    await runTaskSyncWorktreeState(name, "running");
     return this.ok({
       worktree: record,
       exitCode: result.code,
@@ -177,49 +283,67 @@ class WorktreeManager {
     });
   }
 
-  async keep(nameArg: unknown): Promise<string> {
+  async closeout(nameArg: unknown, actionArg: unknown, taskIdArg?: unknown, forceArg?: unknown): Promise<string> {
     const name = String(nameArg ?? "").trim();
+    const action = String(actionArg ?? "").trim();
+    const force = Boolean(forceArg);
+    if (!name || (action !== "keep" && action !== "remove")) {
+      return this.fail("INVALID_ARGUMENT", "worktree_closeout requires name and action=keep|remove");
+    }
     const records = await this.loadIndex();
     const record = records.find((r) => r.name === name && r.status !== "removed");
     if (!record) {
       return this.fail("WORKTREE_NOT_FOUND", `worktree ${name} not found`);
     }
-    record.status = "kept";
+
+    const dirtyFiles = action === "remove" ? await this.getDirtyFiles(record) : null;
+    if (action === "remove" && dirtyFiles && dirtyFiles.length > 0 && !force) {
+      return JSON.stringify(
+        {
+          ok: false,
+          error: {
+            code: "DIRTY_WORKTREE",
+            message: `worktree ${name} has uncommitted changes; use keep or force remove`,
+          },
+          dirtyFiles,
+        },
+        null,
+        2,
+      );
+    }
+
+    if (action === "remove") {
+      await rm(record.path, { recursive: true, force: true });
+    }
+
+    const now = nowTimestampMs();
+    record.status = action === "keep" ? "kept" : "removed";
     record.schemaVersion = WORKTREE_SCHEMA_VERSION;
-    record.updatedAt = nowTimestampMs();
+    record.updatedAt = now;
+    record.closeout = {
+      action: action as CloseoutAction,
+      at: now,
+      forced: force,
+    };
     await this.saveIndex(records);
     await this.appendEvent({
       schemaVersion: WORKTREE_SCHEMA_VERSION,
       id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      type: "keep",
+      type: "closeout",
       name,
-      at: nowTimestampMs(),
-      detail: "mark kept",
+      at: now,
+      detail: JSON.stringify({ action, force, dirtyFiles: dirtyFiles ?? [] }),
     });
-    return this.ok({ worktree: record });
+    await runTaskSyncWorktreeState(name, action === "keep" ? "kept" : "removed", taskIdArg, record.closeout);
+    return this.ok({ worktree: record, closeout: record.closeout, dirtyFiles: dirtyFiles ?? [] });
   }
 
-  async remove(nameArg: unknown): Promise<string> {
-    const name = String(nameArg ?? "").trim();
-    const records = await this.loadIndex();
-    const record = records.find((r) => r.name === name && r.status !== "removed");
-    if (!record) {
-      return this.fail("WORKTREE_NOT_FOUND", `worktree ${name} not found`);
-    }
-    await rm(record.path, { recursive: true, force: true });
-    record.status = "removed";
-    record.schemaVersion = WORKTREE_SCHEMA_VERSION;
-    record.updatedAt = nowTimestampMs();
-    await this.saveIndex(records);
-    await this.appendEvent({
-      schemaVersion: WORKTREE_SCHEMA_VERSION,
-      id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      type: "remove",
-      name,
-      at: nowTimestampMs(),
-      detail: "removed",
-    });
-    return this.ok({ worktree: record });
+  async keep(nameArg: unknown, taskIdArg?: unknown): Promise<string> {
+    return this.closeout(nameArg, "keep", taskIdArg, false);
+  }
+
+  async remove(nameArg: unknown, forceArg?: unknown, taskIdArg?: unknown): Promise<string> {
+    return this.closeout(nameArg, "remove", taskIdArg, forceArg);
   }
 }
 
@@ -249,6 +373,21 @@ export const WORKTREE_TOOLS: ChatCompletionTool[] = [
   {
     type: "function",
     function: {
+      name: "worktree_enter",
+      description: "Mark a worktree as the active execution lane and optionally sync a task binding.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          task_id: { type: "integer" },
+        },
+        required: ["name"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "worktree_run",
       description: "Run a command inside a worktree path.",
       parameters: {
@@ -265,10 +404,13 @@ export const WORKTREE_TOOLS: ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "worktree_keep",
-      description: "Mark worktree as kept.",
+      description: "Close out a worktree by keeping it.",
       parameters: {
         type: "object",
-        properties: { name: { type: "string" } },
+        properties: {
+          name: { type: "string" },
+          task_id: { type: "integer" },
+        },
         required: ["name"],
       },
     },
@@ -277,11 +419,32 @@ export const WORKTREE_TOOLS: ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "worktree_remove",
-      description: "Remove a worktree.",
+      description: "Close out a worktree by removing it; force can override dirty git guard.",
       parameters: {
         type: "object",
-        properties: { name: { type: "string" } },
+        properties: {
+          name: { type: "string" },
+          force: { type: "boolean" },
+          task_id: { type: "integer" },
+        },
         required: ["name"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "worktree_closeout",
+      description: "Close out a worktree with action keep or remove and sync task/worktree lifecycle state.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          action: { type: "string", enum: ["keep", "remove"] },
+          force: { type: "boolean" },
+          task_id: { type: "integer" },
+        },
+        required: ["name", "action"],
       },
     },
   },
@@ -295,14 +458,27 @@ export async function runWorktreeList(): Promise<string> {
   return WORKTREES.list();
 }
 
+export async function runWorktreeEnter(name: unknown, taskId?: unknown): Promise<string> {
+  return WORKTREES.enter(name, taskId);
+}
+
 export async function runWorktreeRun(name: unknown, command: unknown): Promise<string> {
   return WORKTREES.run(name, command);
 }
 
-export async function runWorktreeKeep(name: unknown): Promise<string> {
-  return WORKTREES.keep(name);
+export async function runWorktreeKeep(name: unknown, taskId?: unknown): Promise<string> {
+  return WORKTREES.keep(name, taskId);
 }
 
-export async function runWorktreeRemove(name: unknown): Promise<string> {
-  return WORKTREES.remove(name);
+export async function runWorktreeRemove(name: unknown, force?: unknown, taskId?: unknown): Promise<string> {
+  return WORKTREES.remove(name, force, taskId);
+}
+
+export async function runWorktreeCloseout(
+  name: unknown,
+  action: unknown,
+  force?: unknown,
+  taskId?: unknown,
+): Promise<string> {
+  return WORKTREES.closeout(name, action, taskId, force);
 }

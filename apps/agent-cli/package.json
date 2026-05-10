@@ -14,6 +14,7 @@
     "test:hooks": "tsx test/smoke/prd14-hooks-smoke.ts",
     "test:recovery": "tsx test/smoke/prd16-recovery-smoke.ts",
     "test:scheduler": "tsx test/smoke/prd17-scheduler-smoke.ts",
+    "test:worktree-closeout": "tsx test/smoke/prd18-worktree-smoke.ts",
     "replay:trace": "tsx src/observability/replay-cli.ts",
     "test": "vitest run --no-cache",
     "lint": "eslint . --ext .ts",
