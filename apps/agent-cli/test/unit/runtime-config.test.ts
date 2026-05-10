@@ -11,6 +11,7 @@ describe("runtime-config", () => {
     expect(RUNTIME_CONFIG.recoveryTransportMaxAttempts).toBeGreaterThan(0);
     expect(RUNTIME_CONFIG.recoveryBackoffBaseMs).toBeGreaterThan(0);
     expect(RUNTIME_CONFIG.recoveryBackoffMaxMs).toBeGreaterThan(0);
+    expect(RUNTIME_CONFIG.schedulerPollIntervalMs).toBeGreaterThan(0);
     expect(RUNTIME_CONFIG.autonomyIdleTimeoutMs).toBeGreaterThan(0);
     expect(RUNTIME_CONFIG.subagentDefaultWaitTimeoutMs).toBeGreaterThan(0);
   });

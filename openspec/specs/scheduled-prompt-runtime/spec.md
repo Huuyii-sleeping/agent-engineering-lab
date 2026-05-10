@@ -1,0 +1,40 @@
+# scheduled-prompt-runtime Specification
+
+## Purpose
+定义持久化调度运行时，用于保存未来提示词调度、扫描到期任务，并向主循环投递可恢复的通知。
+
+## Requirements
+### Requirement: Scheduler SHALL persist future prompt records
+调度器 SHALL 持久化未来 prompt 调度记录，并至少保存 `id`、`cron`、`prompt`、`recurring`、`durable`、`created_at` 与 `last_fired_at` 字段。
+
+#### Scenario: 创建调度后写入持久化记录
+- **WHEN** 创建一条未来调度
+- **THEN** 调度器将该记录写入持久化存储，并可在后续重新读取到同一条记录
+
+### Requirement: Scheduler SHALL scan schedules at minute granularity
+调度器 SHALL 以分钟粒度扫描调度记录，并判断当前分钟是否命中某条调度。
+
+#### Scenario: 调度命中当前分钟
+- **WHEN** 某条调度记录与当前分钟匹配
+- **THEN** 调度器生成一条 `scheduled_prompt` 通知，而不是立即执行该 prompt
+
+### Requirement: Scheduler notifications MUST be durable until drained
+调度器 MUST 将命中的 `scheduled_prompt` 通知持久化保存，直到主循环完成 drain。
+
+#### Scenario: 命中的调度进入通知队列
+- **WHEN** 某条调度记录被命中
+- **THEN** 调度器将 `scheduled_prompt` 写入持久化通知队列，供主循环下一轮消费
+
+### Requirement: Scheduler MUST prevent duplicate firing within a short window
+调度器 MUST 通过 `last_fired_at` 或等效机制，避免同一条调度在同一分钟内重复触发。
+
+#### Scenario: 同一分钟内发生多次 tick
+- **WHEN** 调度器在同一分钟内重复执行 tick
+- **THEN** 同一条调度不会重复生成新的 `scheduled_prompt` 通知
+
+### Requirement: Durable schedules SHALL survive process restart
+被标记为 durable 的调度 SHALL 在进程重启后继续生效。
+
+#### Scenario: durable 调度在重启后恢复
+- **WHEN** 一条 durable 调度已经持久化，随后进程重启
+- **THEN** 调度器重新加载该调度，并在未来继续按命中结果生成通知

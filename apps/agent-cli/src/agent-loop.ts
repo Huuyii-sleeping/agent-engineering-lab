@@ -15,6 +15,7 @@ import {
   selectRecoveryDecision,
 } from "./recovery.js";
 import { drainBackgroundNotifications } from "./tools/background-task.js";
+import { drainScheduledNotifications, tickScheduler } from "./tools/scheduler.js";
 import { COMPACT_THRESHOLD_TOKENS, compactMessages, estimateTokensFromMessages } from "./tools/context-compact.js";
 import { previewToolCall, runToolByName } from "./tools/index.js";
 import { autoExtractMemory, buildMemoryInjectionForQuery } from "./tools/memory.js";
@@ -191,7 +192,43 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
         // keep agent loop resilient if autonomy tick fails
       }
 
+      try {
+        await tickScheduler();
+      } catch {
+        // keep agent loop resilient if scheduler tick fails
+      }
+
       const dynamicSystemMessages = [...sessionStartHooks.messages];
+      const scheduledNotifications = await drainScheduledNotifications();
+      if (scheduledNotifications.length > 0) {
+        const summaryLines = scheduledNotifications.map((item) => {
+          const preview = item.prompt.replace(/\s+/g, " ").trim().slice(0, 160);
+          return `schedule#${item.scheduleId} fired at ${item.firedAtLocal}; prompt=${preview}`;
+        });
+        const blocks = scheduledNotifications
+          .map(
+            (item) =>
+              `<scheduled_prompt id="${item.scheduleId}" fired_at="${item.firedAt}" recurring="${item.recurring}">\n${item.prompt}\n</scheduled_prompt>`,
+          )
+          .join("\n");
+        dynamicSystemMessages.push(
+          `${blocks}\n<scheduled_prompt_instruction>Treat each scheduled_prompt as a user intent that became due now. Handle it in this round.</scheduled_prompt_instruction>`,
+        );
+        console.log(`\u001b[36m[scheduled prompts]\u001b[0m\n${summaryLines.join("\n")}`);
+        for (const item of scheduledNotifications) {
+          await recordObservabilityEvent(
+            "notification",
+            {
+              source: "schedule",
+              scheduleId: item.scheduleId,
+              firedAt: item.firedAt,
+              recurring: item.recurring,
+              prompt: item.prompt,
+            },
+            { traceId },
+          );
+        }
+      }
       const notifications = drainSubagentNotifications();
       if (notifications.length > 0) {
         const summaryLines = notifications.map((n) => {

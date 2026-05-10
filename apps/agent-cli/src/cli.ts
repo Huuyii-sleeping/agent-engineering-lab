@@ -5,8 +5,10 @@ import type { ChatCompletionMessageParam } from "openai/resources/chat/completio
 import { agentLoop, type AgentRuntimeState } from "./agent-loop.js";
 import { createClient, ensureModelConfigured, getStaticPromptSource, MODEL } from "./config.js";
 import { runHooks } from "./hooks/index.js";
+import { RUNTIME_CONFIG } from "./runtime-config.js";
 import { setCompactRuntimeContext } from "./tools/base.js";
 import { TOOLS } from "./tools/index.js";
+import { peekScheduledNotificationCount, tickScheduler } from "./tools/scheduler.js";
 
 const PROMPT = "\u001b[36ms01 >> \u001b[0m";
 
@@ -34,6 +36,37 @@ export async function runCli(): Promise<void> {
     lastMemoryInput: null,
     roundCounter: 0,
   };
+  let agentBusy = false;
+  const runScheduledRound = async (): Promise<void> => {
+    if (agentBusy) {
+      return;
+    }
+    await tickScheduler();
+    if ((await peekScheduledNotificationCount()) === 0) {
+      return;
+    }
+    agentBusy = true;
+    try {
+      history.push({ role: "user", content: "Handle any scheduled prompts that are due now." });
+      await agentLoop({
+        client,
+        model: MODEL,
+        promptSource,
+        tools: TOOLS,
+        messages: history,
+        runtimeState,
+      });
+      const lastMessage = history[history.length - 1];
+      if (lastMessage?.role === "assistant" && typeof lastMessage.content === "string") {
+        console.log(`\n\u001b[36m[scheduled]\u001b[0m ${lastMessage.content}\n`);
+      }
+    } finally {
+      agentBusy = false;
+    }
+  };
+  const schedulerInterval = setInterval(() => {
+    void runScheduledRound().catch(() => {});
+  }, RUNTIME_CONFIG.schedulerPollIntervalMs);
 
   try {
     while (true) {
@@ -63,6 +96,7 @@ export async function runCli(): Promise<void> {
       }
       appendSystemMessages(history, promptHooks.messages);
       history.push({ role: "user", content: query });
+      agentBusy = true;
       await agentLoop({
         client,
         model: MODEL,
@@ -71,6 +105,7 @@ export async function runCli(): Promise<void> {
         messages: history,
         runtimeState,
       });
+      agentBusy = false;
 
       const lastMessage = history[history.length - 1];
       if (lastMessage?.role === "assistant" && typeof lastMessage.content === "string") {
@@ -79,6 +114,7 @@ export async function runCli(): Promise<void> {
       console.log();
     }
   } finally {
+    clearInterval(schedulerInterval);
     rl.close();
   }
 }

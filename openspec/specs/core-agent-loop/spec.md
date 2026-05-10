@@ -85,3 +85,10 @@ CLI 入口 MUST 在每次输入循环显示固定提示符 `s01 >>`，并且在�
 #### Scenario: 不可恢复错误明确终止
 - **WHEN** 模型请求遭遇不可恢复错误或恢复预算耗尽
 - **THEN** 主循环记录失败原因并结束当前轮次
+
+### Requirement: Agent loop SHALL inject scheduled prompts before the next model request
+主循环在每次模型请求前 SHALL 扫描并 drain 已命中的 `scheduled_prompt` 通知，并通过 prompt pipeline 将其作为动态 system 输入注入。
+
+#### Scenario: 命中的调度提示在下一轮被注入
+- **WHEN** 新一轮主循环开始，且存在待消费的 durable `scheduled_prompt` 通知
+- **THEN** 主循环在发起模型请求前，将这些调度提示注入到下一次模型输入中

@@ -18,6 +18,7 @@ import {
   runTaskList,
   runTaskUpdate,
 } from "./task-board.js";
+import { runScheduleCreate, runScheduleList, runScheduleRemove, SCHEDULER_TOOLS } from "./scheduler.js";
 import {
   TEAM_TOOLS,
   runTeamAddTeammate,
@@ -92,6 +93,9 @@ const BASE_HANDLERS: Record<string, ToolHandler> = {
     runTaskUpdate(args.task_id, args.status, args.addBlockedBy, args.removeBlockedBy, args.worktree),
   task_list: async () => runTaskList(),
   task_get: async (args) => runTaskGet(args.task_id),
+  schedule_create: async (args) => runScheduleCreate(args.cron, args.prompt, args.recurring, args.durable),
+  schedule_list: async () => runScheduleList(),
+  schedule_remove: async (args) => runScheduleRemove(args.id),
   estimate_tokens: async () => runEstimateTokens(runtimeContext),
   compact: async (args) => runCompact(args.keep_recent, runtimeContext),
   background_run: async (args) => runBackgroundRun(args.command),
@@ -133,6 +137,7 @@ export const BASE_TOOLS: ChatCompletionTool[] = [
   ...MEMORY_TOOLS,
   ...TODO_TOOLS,
   ...TASK_TOOLS,
+  ...SCHEDULER_TOOLS,
   ...CONTEXT_TOOLS,
   ...BACKGROUND_TOOLS,
   ...TEAM_TOOLS,
