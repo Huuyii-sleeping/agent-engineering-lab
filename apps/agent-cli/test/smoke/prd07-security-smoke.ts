@@ -1,7 +1,7 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
-import { runBaseToolByName } from "../tools/base.js";
+import { runBaseToolByName } from "../../src/tools/base.js";
 
 function assert(condition: unknown, message: string): void {
   if (!condition) {

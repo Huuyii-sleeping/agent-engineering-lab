@@ -138,7 +138,7 @@ pnpm test:regression
 
 memory smoke 测试文件：
 
-- `src/smoke/prd08-memory-smoke.ts`
+- `test/smoke/prd08-memory-smoke.ts`
 
 ## 扩展点
 

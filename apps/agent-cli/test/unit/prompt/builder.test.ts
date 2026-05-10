@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPromptEnvelope } from "./builder.js";
+import { buildPromptEnvelope } from "../../../src/prompt/builder.js";
 
 describe("buildPromptEnvelope", () => {
   it("assembles stable sections in the expected order", () => {

@@ -1,13 +1,13 @@
 import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
-import { replayTrace } from "../observability/replay.js";
+import { replayTrace } from "../../src/observability/replay.js";
 import {
   createSpanId,
   recordObservabilityEvent,
   withExecutionContext,
-} from "../observability/runtime.js";
-import { runToolByName } from "../tools/index.js";
+} from "../../src/observability/runtime.js";
+import { runToolByName } from "../../src/tools/index.js";
 
 function assert(condition: unknown, message: string): void {
   if (!condition) {

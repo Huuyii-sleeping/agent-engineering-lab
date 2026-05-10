@@ -4,7 +4,7 @@ import path from "node:path";
 import * as process from "node:process";
 import type OpenAI from "openai";
 import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
-import { agentLoop, type AgentRuntimeState } from "../agent-loop.js";
+import { agentLoop, type AgentRuntimeState } from "../../src/agent-loop.js";
 
 function assert(condition: unknown, message: string): void {
   if (!condition) {

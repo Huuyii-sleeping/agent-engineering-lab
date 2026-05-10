@@ -47,7 +47,7 @@ pnpm test:regression
 
 - PRD-07 安全治理 smoke
 ```bash
-pnpm exec tsx src/smoke/prd07-security-smoke.ts
+pnpm exec tsx test/smoke/prd07-security-smoke.ts
 ```
 
 - PRD-08 记忆检索 smoke

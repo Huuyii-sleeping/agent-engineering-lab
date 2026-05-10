@@ -1,7 +1,7 @@
 import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
-import { buildMemoryInjectionForQuery, runMemoryAdd, runMemorySearch } from "../tools/memory.js";
+import { buildMemoryInjectionForQuery, runMemoryAdd, runMemorySearch } from "../../src/tools/memory.js";
 
 function assert(condition: unknown, message: string): void {
   if (!condition) {

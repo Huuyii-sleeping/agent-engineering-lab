@@ -1,9 +1,9 @@
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
-import { runTaskCreate, runTaskUpdate } from "../tools/task-board.js";
-import { runTeamAddTeammate, runTeamListRequests } from "../tools/team.js";
-import { runWorktreeCreate, runWorktreeList, runWorktreeRemove } from "../tools/worktree.js";
+import { runTaskCreate, runTaskUpdate } from "../../src/tools/task-board.js";
+import { runTeamAddTeammate, runTeamListRequests } from "../../src/tools/team.js";
+import { runWorktreeCreate, runWorktreeList, runWorktreeRemove } from "../../src/tools/worktree.js";
 
 async function resetRuntimeDirs(): Promise<void> {
   const targets = [".tasks", ".team", ".worktrees"];

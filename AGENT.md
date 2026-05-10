@@ -14,7 +14,7 @@
 ## 2. 编码与文本
 
 - 所有文本文件使用 UTF-8 编码。
-- 避免乱码；若修复历史乱码，保持语义不变，并在变更说明中注明。
+- 避免乱码；如修复历史乱码，保持语义不变，并在变更说明中注明。
 - 非必要不混用全角和半角标点。
 
 ## 3. 默认任务流程（OpenSpec）
@@ -56,8 +56,8 @@
 ## 8. 清理规则
 
 - 每次测试产生的运行产物、临时数据和缓存内容，在本次开发结束后就删除，不留到下一轮。
-- 每次 `git push` 之前必须再次清理并确认测试产物没有残留。
-- 以下目录或文件默认视为运行/测试产物，不纳入 commit：
+- 每次 `git push` 之前必须再次清理，并确认测试产物没有残留。
+- 以下目录或文件默认视为运行 / 测试产物，不纳入 commit：
   - `apps/agent-cli/.tasks/`
   - `apps/agent-cli/.team/`
   - `apps/agent-cli/.worktrees/`
@@ -82,18 +82,15 @@
 ## 10. Commit Message 规范（Conventional Commits）
 
 格式：
-
 `<type>(<scope>): <subject>`
 
 示例：
-
 - `feat(api): add user profile endpoint`
 - `fix(parser): handle empty input`
 - `docs(readme): clarify setup steps`
 - `chore(git): enforce commit message format`
 
 允许的 `type`：
-
 - `feat`
 - `fix`
 - `docs`
@@ -107,30 +104,35 @@
 - `revert`
 
 规则：
-
 - `scope` 可选，但建议填写。
 - `subject` 使用祈使语气，简洁明确。
 - 破坏性变更使用 `!`，例如：`feat(api)!: remove v1 endpoint`。
 
 仓库校验：
-
 - `.githooks/commit-msg` 校验提交首行格式。
 - `.gitmessage.txt` 作为默认提交模板。
 
 ## 11. 验证规则
 
 每次实现至少执行：
-
 1. `pnpm build`
 2. 对应 PRD 的 smoke / 回归测试
 3. `openspec status --change "<name>" --json`
-4. `openspec validate --changes "<name>"`
+4. `openspec validate "<name>" --type change`
 
-## 12. 失败处理规则
+## 12. 测试目录规则
+
+- `apps/agent-cli` 的所有测试文件统一放在 `apps/agent-cli/test/` 下。
+- 单元测试放在 `apps/agent-cli/test/unit/`。
+- smoke、regression、集成验证放在 `apps/agent-cli/test/smoke/`。
+- 不再把测试文件放在 `apps/agent-cli/src/` 根部、`src/**` 业务目录旁边或包根目录。
+- 新增测试脚本、文档示例和命令时，路径也必须指向 `test/` 目录。
+
+## 13. 失败处理规则
 
 - 先给出可读错误原因，再给出修复动作。
 - 遇到沙箱限制可申请提权后重试。
 
-## 13. 优先级
+## 14. 优先级
 
 - 若与系统或平台更高优先级指令冲突，以更高优先级为准。

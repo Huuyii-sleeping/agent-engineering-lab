@@ -6,6 +6,11 @@ type RuntimeConfig = {
   fileReadDefaultLimit: number;
   compactThresholdTokens: number;
   compactDefaultKeepRecent: number;
+  recoveryContinuationMaxAttempts: number;
+  recoveryCompactMaxAttempts: number;
+  recoveryTransportMaxAttempts: number;
+  recoveryBackoffBaseMs: number;
+  recoveryBackoffMaxMs: number;
   backgroundMaxOutputChars: number;
   autonomyPollIntervalMs: number;
   autonomyIdleTimeoutMs: number;
@@ -39,6 +44,11 @@ export const RUNTIME_CONFIG: RuntimeConfig = {
   fileReadDefaultLimit: readInt("AGENT_FILE_READ_DEFAULT_LIMIT", 50_000, 100),
   compactThresholdTokens: readInt("AGENT_COMPACT_THRESHOLD_TOKENS", 50_000, 100),
   compactDefaultKeepRecent: readInt("AGENT_COMPACT_DEFAULT_KEEP_RECENT", 20, 1),
+  recoveryContinuationMaxAttempts: readInt("AGENT_RECOVERY_CONTINUATION_MAX_ATTEMPTS", 2, 0),
+  recoveryCompactMaxAttempts: readInt("AGENT_RECOVERY_COMPACT_MAX_ATTEMPTS", 2, 0),
+  recoveryTransportMaxAttempts: readInt("AGENT_RECOVERY_TRANSPORT_MAX_ATTEMPTS", 3, 0),
+  recoveryBackoffBaseMs: readInt("AGENT_RECOVERY_BACKOFF_BASE_MS", 1_000, 1),
+  recoveryBackoffMaxMs: readInt("AGENT_RECOVERY_BACKOFF_MAX_MS", 8_000, 1),
   backgroundMaxOutputChars: readInt("AGENT_BACKGROUND_MAX_OUTPUT_CHARS", 4_000, 100),
   autonomyPollIntervalMs: readInt("AGENT_AUTONOMY_POLL_INTERVAL_MS", 5_000, 100),
   autonomyIdleTimeoutMs: readInt("AGENT_AUTONOMY_IDLE_TIMEOUT_MS", 60_000, 1_000),
