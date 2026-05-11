@@ -53,6 +53,14 @@ pnpm dev:web
 pnpm build:web
 ```
 
+## 发布前检查
+
+在仓库根目录执行统一发布检查：
+
+```bash
+pnpm release:check
+```
+
 ## OpenSpec 常用命令
 
 在仓库根目录执行：

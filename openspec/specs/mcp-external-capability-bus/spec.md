@@ -1,7 +1,7 @@
 # mcp-external-capability-bus Specification
 
 ## Purpose
-TBD - created by archiving change prd-19-mcp-capability-bus. Update Purpose after archive.
+定义外部 MCP server 的接入、生命周期管理与统一工具契约，使外部能力能安全进入 Agent 工具总线。
 ## Requirements
 ### Requirement: Agent SHALL load MCP servers from project configuration
 系统 SHALL 从项目级配置加载 MCP server 定义，并将其外部工具注册为主代理可见能力，而不是把外部工具硬编码进主循环。
@@ -42,4 +42,3 @@ MCP 工具 MUST 经过统一安全门禁与观测链路，不得绕开审批、�
 #### Scenario: 外部工具失败被记录
 - **WHEN** MCP 工具调用失败
 - **THEN** 系统写入对应观测事件，包含 server、tool、错误码和摘要
-

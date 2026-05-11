@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+import { Buffer } from "node:buffer";
+import process from "node:process";
+
 let buffer = Buffer.alloc(0);
 
 function send(message) {

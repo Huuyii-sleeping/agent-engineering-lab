@@ -74,14 +74,22 @@ export async function runToolByName(name: string, argumentsJson: string): Promis
     }
   }
 
-  const mcpArgs = parseToolArgs(argumentsJson);
-  const mcpGate = await enforceSecurityGate(name, mcpArgs);
-  if (!mcpGate.ok) {
-    return mcpGate.blocked;
-  }
-  const mcpOutput = await runMcpToolByName(name, mcpArgs);
-  if (mcpOutput !== null) {
-    return mcpOutput;
+  if (name.startsWith("mcp__")) {
+    if (isReplayDryRun()) {
+      return JSON.stringify({
+        ok: false,
+        error: { code: "REPLAY_DRY_RUN_BLOCKED", message: `replay dry-run blocked tool ${name}` },
+      });
+    }
+    const mcpArgs = parseToolArgs(argumentsJson);
+    const mcpGate = await enforceSecurityGate(name, mcpArgs);
+    if (!mcpGate.ok) {
+      return mcpGate.blocked;
+    }
+    const mcpOutput = await runMcpToolByName(name, mcpArgs);
+    if (mcpOutput !== null) {
+      return mcpOutput;
+    }
   }
 
   const baseOutput = await runBaseToolByName(name, argumentsJson);

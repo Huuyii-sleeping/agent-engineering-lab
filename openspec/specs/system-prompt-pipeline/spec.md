@@ -1,7 +1,7 @@
 # system-prompt-pipeline Specification
 
 ## Purpose
-TBD - created by archiving change prd-15-system-prompt-pipeline. Update Purpose after archive.
+定义统一的 system prompt 组装流水线，明确稳定规则、动态上下文与来源归属的拼装边界。
 ## Requirements
 ### Requirement: System prompt SHALL be assembled by a centralized pipeline
 系统 SHALL 通过统一的 system prompt 组装流水线生成模型请求所需的主 system prompt 与补充 system messages，而不是在主循环和配置文件中分散拼接。
@@ -30,4 +30,3 @@ TBD - created by archiving change prd-15-system-prompt-pipeline. Update Purpose 
 #### Scenario: 单测验证 section 输出
 - **WHEN** 测试仅构造某一 section 的输入
 - **THEN** 系统可独立生成该 section 的输出并断言其内容或顺序
-

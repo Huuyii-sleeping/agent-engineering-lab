@@ -1,7 +1,7 @@
 # team-communication-protocol Specification
 
 ## Purpose
-TBD - created by archiving change prd-05-team-communication-protocol. Update Purpose after archive.
+定义多代理团队协作中的队友管理、消息投递与协议请求跟踪机制，作为团队通信的稳定基线。
 ## Requirements
 ### Requirement: Agent SHALL provide teammate and message bus management
 系统 SHALL 提供队友管理和消息总线能力，使用 `.team/inbox/*.jsonl` 作为收件箱。
@@ -50,4 +50,3 @@ TBD - created by archiving change prd-05-team-communication-protocol. Update Pur
 #### Scenario: 旧协议请求兼容读取
 - **WHEN** `requests.json` 中记录缺少 `schemaVersion`
 - **THEN** 系统成功读取并保持协议流程可用
-

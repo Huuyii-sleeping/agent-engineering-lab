@@ -1,7 +1,7 @@
 # task-visualization-persistence Specification
 
 ## Purpose
-TBD - created by archiving change prd-02-task-visualization-persistence. Update Purpose after archive.
+定义会话内 todo 可视化与会话外任务持久化能力，保证任务状态可追踪、可恢复且具备提醒机制。
 ## Requirements
 ### Requirement: Agent SHALL provide todo visualization with strict status constraints
 系统 SHALL 提供 `todo(items)` 工具，用于维护会话内任务列表并可视化输出状态。
@@ -46,4 +46,3 @@ TBD - created by archiving change prd-02-task-visualization-persistence. Update 
 #### Scenario: 拒绝非法状态跳转
 - **WHEN** 已完成任务尝试变更为非 `completed`
 - **THEN** 系统返回结构化错误，错误码为 `INVALID_STATUS_TRANSITION`
-

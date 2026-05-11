@@ -1,7 +1,7 @@
 # subagent-tool-execution Specification
 
 ## Purpose
-TBD - created by archiving change prd-04-subagent-tool-execution. Update Purpose after archive.
+定义子代理在受限工具集下执行多轮 tool-calling 的行为边界，以及其对主代理的完成通知契约。
 ## Requirements
 ### Requirement: Subagent SHALL execute a tool-calling loop with base tools
 子代理 SHALL 在一次委派执行中支持多轮工具调用，并可调用基础工具集（`bash/read_file/write_file/edit_file/todo/task_*`）。
@@ -38,4 +38,3 @@ TBD - created by archiving change prd-04-subagent-tool-execution. Update Purpose
 #### Scenario: 子代理高风险工具调用被拦截
 - **WHEN** 子代理调用高风险 `bash` 且无审批
 - **THEN** 返回与主代理一致的拦截错误码
-

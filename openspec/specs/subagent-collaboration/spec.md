@@ -1,7 +1,7 @@
 # subagent-collaboration Specification
 
 ## Purpose
-TBD - created by archiving change prd-03-subagent-collaboration. Update Purpose after archive.
+定义子代理协作运行时，包括子代理创建、派发、等待、查询与关闭等生命周期管理能力。
 ## Requirements
 ### Requirement: Agent SHALL provide subagent lifecycle management tools
 系统 SHALL 提供 `subagent_spawn`、`subagent_send`、`subagent_wait`、`subagent_list`、`subagent_close`，用于子代理创建、委派、等待、查询与关闭。

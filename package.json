@@ -7,6 +7,7 @@
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
+    "release:check": "pnpm --filter agent-cli release:check",
     "dev:agent": "pnpm --filter agent-cli dev",
     "build:agent": "pnpm --filter agent-cli build",
     "start:agent": "pnpm --filter agent-cli start",

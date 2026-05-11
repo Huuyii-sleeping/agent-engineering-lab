@@ -1,7 +1,7 @@
 # background-task-runtime Specification
 
 ## Purpose
-TBD - created by archiving change prd-04-context-compression-background. Update Purpose after archive.
+定义 Agent 的后台任务运行时，使长耗时命令可以异步执行、可轮询查询，并在完成后回流到主循环。
 ## Requirements
 ### Requirement: Agent SHALL provide asynchronous background command execution
 系统 SHALL 提供 `background_run` 与 `check_background`，支持后台命令异步运行与状态查询。

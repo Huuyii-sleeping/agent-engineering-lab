@@ -1,7 +1,7 @@
 ﻿# core-agent-loop Specification
 
 ## Purpose
-TBD - created by archiving change prd-00-core-loop. Update Purpose after archive.
+定义 Agent 主循环、基础工具执行与 CLI 交互基线，作为后续能力扩展的统一运行骨架。
 ## Requirements
 ### Requirement: Agent loop SHALL handle tool-calling rounds deterministically
 主循环 MUST 在每轮前支持自治轮询入口，并在不破坏既有工具调用契约的前提下处理统一工具路由，包括 native、subagent 与 MCP 外部工具。
@@ -112,4 +112,3 @@ CLI 入口 MUST 在每次输入循环显示固定提示符 `s01 >>`，并且在�
 #### Scenario: 不同执行作用域读取各自上下文
 - **WHEN** CLI 或 HTTP service 在不同 session 中进入 `agentLoop`
 - **THEN** `estimate_tokens` 与 `compact` 仅读取当前 session 绑定的消息上下文
-

@@ -1,7 +1,7 @@
 # context-compression Specification
 
 ## Purpose
-TBD - created by archiving change prd-04-context-compression-background. Update Purpose after archive.
+定义 Agent 的上下文压缩能力，包括 token 估算、手动压缩和超阈值时的自动压缩与快照落盘。
 ## Requirements
 ### Requirement: Agent SHALL provide manual context compaction tools
 系统 SHALL 提供 `estimate_tokens` 与 `compact` 工具，支持会话 token 估算与手动压缩。
@@ -24,4 +24,3 @@ TBD - created by archiving change prd-04-context-compression-background. Update 
 #### Scenario: 快照落盘
 - **WHEN** 执行任意压缩（手动或自动）
 - **THEN** 在 `.transcripts/transcript_<ts>.jsonl` 写入压缩前会话内容
-

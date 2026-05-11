@@ -1,7 +1,7 @@
 ﻿# error-recovery-retries Specification
 
 ## Purpose
-TBD - created by archiving change prd-16-error-recovery-retries. Update Purpose after archive.
+定义 Agent 在输出截断、上下文过长和瞬时传输失败等场景下的结构化恢复与有限重试策略。
 
 ## Requirements
 ### Requirement: Recovery selector SHALL emit an explicit structured action
