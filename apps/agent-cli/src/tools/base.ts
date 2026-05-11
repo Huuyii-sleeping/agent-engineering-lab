@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
-import { isReplayDryRun } from "../observability/runtime.js";
+import { executeProtectedToolHandler } from "../runtime/tool-runtime.js";
 import {
   runAutonomyMarkActive,
   runAutonomySetOwner,
@@ -37,7 +37,6 @@ import {
 } from "./team.js";
 import {
   SECURITY_TOOLS,
-  enforceSecurityGate,
   runSecurityApprove,
   runSecurityCheck,
   runSecurityListApprovals,
@@ -79,9 +78,6 @@ export const BASE_UNKNOWN_TOOL = JSON.stringify({
   ok: false,
   error: { code: "UNKNOWN_TOOL", message: "未知工具" },
 });
-
-const TOOL_RUNTIME_ERROR = (message: string): string =>
-  JSON.stringify({ ok: false, error: { code: "TOOL_RUNTIME_ERROR", message } });
 
 const COMPACT_RUNTIME_CONTEXT = new AsyncLocalStorage<CompactRuntimeContext>();
 
@@ -254,25 +250,29 @@ export function previewBaseToolCall(name: string, argumentsJson: string): string
   return name;
 }
 
-export async function runBaseToolByName(name: string, argumentsJson: string): Promise<string> {
+export function resolveBaseToolHandler(
+  name: string,
+): { handler: ToolHandler; allowDuringReplay: boolean } | null {
   const handler = BASE_HANDLERS[name];
   if (!handler) {
+    return null;
+  }
+  return {
+    handler,
+    allowDuringReplay: REPLAY_SAFE_TOOLS.has(name),
+  };
+}
+
+export async function runBaseToolByName(name: string, argumentsJson: string): Promise<string> {
+  const resolved = resolveBaseToolHandler(name);
+  if (!resolved) {
     return BASE_UNKNOWN_TOOL;
   }
-  if (isReplayDryRun() && !REPLAY_SAFE_TOOLS.has(name)) {
-    return JSON.stringify({
-      ok: false,
-      error: { code: "REPLAY_DRY_RUN_BLOCKED", message: `replay dry-run blocked tool ${name}` },
-    });
-  }
   const args = parseToolArgs(argumentsJson);
-  const gate = await enforceSecurityGate(name, args);
-  if (!gate.ok) {
-    return gate.blocked;
-  }
-  try {
-    return await handler(args);
-  } catch (error) {
-    return TOOL_RUNTIME_ERROR(error instanceof Error ? error.message : String(error));
-  }
+  return executeProtectedToolHandler({
+    name,
+    args,
+    handler: resolved.handler,
+    allowDuringReplay: resolved.allowDuringReplay,
+  });
 }

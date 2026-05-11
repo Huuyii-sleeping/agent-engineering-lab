@@ -14,6 +14,7 @@ type ExecuteToolHandlerOptions = {
   name: string;
   args: Record<string, unknown>;
   handler: (args: Record<string, unknown>) => Promise<string>;
+  allowDuringReplay?: boolean;
 };
 
 const TOOL_RUNTIME_ERROR = (message: string): string =>
@@ -64,7 +65,7 @@ export function resolveToolExecution(
 }
 
 export async function executeProtectedToolHandler(opts: ExecuteToolHandlerOptions): Promise<string> {
-  if (isReplayDryRun()) {
+  if (isReplayDryRun() && !opts.allowDuringReplay) {
     return createReplayDryRunBlocked(opts.name);
   }
   const gate = await enforceSecurityGate(opts.name, opts.args);

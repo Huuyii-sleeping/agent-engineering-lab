@@ -6,6 +6,14 @@ import { toAssistantMessage } from "./messages.js";
 import { createSpanId, createTraceId, recordObservabilityEvent, withExecutionContext } from "./observability/runtime.js";
 import { buildPromptEnvelope } from "./prompt/builder.js";
 import type { StaticPromptSource } from "./prompt/types.js";
+import { appendSystemMessages } from "./runtime/query-messages.js";
+import { prepareQueryRound } from "./runtime/query-preparation.js";
+import {
+  analyzeToolOutput,
+  isTodoCompletionRequest,
+  markWriteSideEffect,
+  parseTaskIdFromToolOutput,
+} from "./runtime/query-tool-results.js";
 import { runDeliveryValidation } from "./delivery.js";
 import { classifyFallbackableError, MODEL_POLICY } from "./model-policy.js";
 import { RUNTIME_CONFIG } from "./runtime-config.js";
@@ -17,14 +25,8 @@ import {
   makePromptTooLongSignal,
   selectRecoveryDecision,
 } from "./recovery.js";
-import { drainBackgroundNotifications } from "./tools/background-task.js";
-import { drainScheduledNotifications, tickScheduler } from "./tools/scheduler.js";
 import { COMPACT_THRESHOLD_TOKENS, compactMessages, estimateTokensFromMessages } from "./tools/context-compact.js";
 import { previewToolCall, runToolByName } from "./tools/index.js";
-import { autoExtractMemory, buildMemoryInjectionForQuery } from "./tools/memory.js";
-import { drainSubagentNotifications } from "./tools/subagent.js";
-import { drainTeamNotifications } from "./tools/team.js";
-import { runAutonomyTick } from "./tools/autonomy.js";
 
 export type AgentRuntimeState = {
   sessionId: string;
@@ -44,16 +46,6 @@ type AgentLoopOptions = {
   messages: ChatCompletionMessageParam[];
   runtimeState: AgentRuntimeState;
 };
-
-function appendSystemMessages(messages: ChatCompletionMessageParam[], items: string[]): void {
-  for (const item of items) {
-    const content = item.trim();
-    if (!content) {
-      continue;
-    }
-    messages.push({ role: "system", content });
-  }
-}
 
 function makeHookBlockedOutput(reason: string | null): string {
   return JSON.stringify(
@@ -80,65 +72,12 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
     return `${trimmed.slice(0, max)}...`;
   };
 
-  const analyzeToolOutput = (output: string): { ok: boolean; errorCode: string | null; summary: string } => {
-    try {
-      const parsed = JSON.parse(output) as { ok?: boolean; error?: { code?: unknown } };
-      return {
-        ok: parsed.ok !== false,
-        errorCode: parsed.ok === false ? String(parsed.error?.code ?? "UNKNOWN_ERROR") : null,
-        summary: summarizeText(output, 220),
-      };
-    } catch {
-      return { ok: true, errorCode: null, summary: summarizeText(output, 220) };
-    }
-  };
-
   const parseArgs = (raw: string): Record<string, unknown> => {
     try {
       return JSON.parse(raw || "{}") as Record<string, unknown>;
     } catch {
       return {};
     }
-  };
-
-  const parseTaskIdFromOutput = (output: string): number | null => {
-    try {
-      const parsed = JSON.parse(output) as { id?: unknown; error?: unknown };
-      if (parsed && !parsed.error) {
-        const id = Number(parsed.id);
-        if (Number.isInteger(id) && id > 0) {
-          return id;
-        }
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  };
-
-  const trackWriteSideEffect = (toolName: string, args: Record<string, unknown>): void => {
-    if (toolName !== "write_file" && toolName !== "edit_file") {
-      return;
-    }
-    const target = typeof args.path === "string" ? args.path.trim() : "";
-    runtimeState.wroteWorkspaceFiles = true;
-    if (target) {
-      runtimeState.touchedPaths.add(target);
-    }
-  };
-
-  const isTodoAllCompleted = (args: Record<string, unknown>): boolean => {
-    const items = args.items;
-    if (!Array.isArray(items) || items.length === 0) {
-      return false;
-    }
-    return items.every((item) => {
-      if (typeof item !== "object" || item === null) {
-        return false;
-      }
-      const status = String((item as Record<string, unknown>).status ?? "").toLowerCase();
-      return status === "completed";
-    });
   };
 
   const makeFailureMessage = async (
@@ -177,160 +116,23 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
         },
         { traceId },
       );
-      const sessionStartHooks = await runHooks("SessionStart", {
-        session_id: runtimeState.sessionId,
-        trace_id: traceId,
-        payload: {
-          round: runtimeState.roundCounter,
-          rounds_without_todo: runtimeState.roundsWithoutTodo,
-          latest_user_input: latestUser?.content ?? "",
-        },
+      const preparedRound = await prepareQueryRound({
+        runtimeState,
+        traceId,
+        latestUserInput: latestUser?.content ?? "",
       });
-      if (sessionStartHooks.blocked) {
+      if (!preparedRound.ok) {
         stopReason = "session_start_blocked";
         messages.push({
           role: "assistant",
-          content: `Current round blocked by hook: ${sessionStartHooks.blockReason ?? "blocked by hook"}`,
+          content: `Current round blocked by hook: ${preparedRound.blockedReason}`,
         });
         return;
       }
-
-      if (latestUser?.content && runtimeState.lastMemoryInput !== latestUser.content) {
-        await autoExtractMemory("user", latestUser.content);
-        runtimeState.lastMemoryInput = latestUser.content;
-      }
-
-      try {
-        const autonomyRaw = await runAutonomyTick();
-        const autonomy = JSON.parse(autonomyRaw) as { ok?: boolean; action?: string; taskId?: number };
-        if (autonomy.ok && autonomy.action === "claimed") {
-          console.log(`\u001b[36m[autonomy]\u001b[0m claimed task #${autonomy.taskId ?? "?"}`);
-        }
-      } catch {
-        // keep agent loop resilient if autonomy tick fails
-      }
-
-      try {
-        await tickScheduler();
-      } catch {
-        // keep agent loop resilient if scheduler tick fails
-      }
-
-      const dynamicSystemMessages = [...sessionStartHooks.messages];
-      const scheduledNotifications = await drainScheduledNotifications();
-      if (scheduledNotifications.length > 0) {
-        const summaryLines = scheduledNotifications.map((item) => {
-          const preview = item.prompt.replace(/\s+/g, " ").trim().slice(0, 160);
-          return `schedule#${item.scheduleId} fired_at_ms=${item.firedAt}; prompt=${preview}`;
-        });
-        const blocks = scheduledNotifications
-          .map(
-            (item) =>
-              `<scheduled_prompt id="${item.scheduleId}" fired_at_ms="${item.firedAt}" recurring="${item.recurring}">\n${item.prompt}\n</scheduled_prompt>`,
-          )
-          .join("\n");
-        dynamicSystemMessages.push(
-          `${blocks}\n<scheduled_prompt_instruction>Treat each scheduled_prompt as a user intent that became due now. Handle it in this round.</scheduled_prompt_instruction>`,
-        );
-        console.log(`\u001b[36m[scheduled prompts]\u001b[0m\n${summaryLines.join("\n")}`);
-        for (const item of scheduledNotifications) {
-          await recordObservabilityEvent(
-            "notification",
-            {
-              source: "schedule",
-              scheduleId: item.scheduleId,
-              firedAt: item.firedAt,
-              recurring: item.recurring,
-              prompt: item.prompt,
-            },
-            { traceId },
-          );
-        }
-      }
-      const notifications = drainSubagentNotifications();
-      if (notifications.length > 0) {
-        const summaryLines = notifications.map((n) => {
-          const output = typeof n.output === "string" ? n.output.slice(0, 200) : "";
-          const error = typeof n.error === "string" ? n.error.slice(0, 200) : "";
-          if (n.status === "completed") {
-            return `agent#${n.agentId}(${n.agentName}) updated_at_ms=${n.updatedAt}; output=${output}`;
-          }
-          return `agent#${n.agentId}(${n.agentName}) updated_at_ms=${n.updatedAt}; error=${error}`;
-        });
-        const reminder = `<subagent_notifications>\n${summaryLines.join("\n")}\n</subagent_notifications>`;
-        dynamicSystemMessages.push(reminder);
-        console.log(`\u001b[36m[subagent notifications]\u001b[0m\n${summaryLines.join("\n")}`);
-      }
-      const bgNotifications = drainBackgroundNotifications();
-      if (bgNotifications.length > 0) {
-        const summaryLines = bgNotifications.map((n) => {
-          const out = n.stdout ? n.stdout.slice(0, 160) : "";
-          const err = n.stderr ? n.stderr.slice(0, 160) : "";
-          return n.status === "completed"
-            ? `task#${n.taskId} finished_at_ms=${n.finishedAt}; command=${n.command}; stdout=${out}`
-            : `task#${n.taskId} finished_at_ms=${n.finishedAt}; command=${n.command}; stderr=${err}`;
-        });
-        const reminder = `<background_notifications>\n${summaryLines.join("\n")}\n</background_notifications>`;
-        dynamicSystemMessages.push(reminder);
-        console.log(`\u001b[36m[background notifications]\u001b[0m\n${summaryLines.join("\n")}`);
-        for (const item of bgNotifications) {
-          await recordObservabilityEvent(
-            "notification",
-            {
-              source: "background",
-              taskId: item.taskId,
-              status: item.status,
-              command: item.command,
-              exitCode: item.exitCode,
-            },
-            { traceId },
-          );
-        }
-      }
-      const teamNotifications = drainTeamNotifications();
-      if (teamNotifications.length > 0) {
-        const summaryLines = teamNotifications.map((n) => {
-          const c = n.content.slice(0, 120);
-          const req = n.requestId ? ` request_id=${n.requestId}` : "";
-          return `to#${n.teammateId}(${n.teammateName}) ${n.messageType} from=${n.from}${req} created_at_ms=${n.createdAt}: ${c}`;
-        });
-        const reminder = `<team_notifications>\n${summaryLines.join("\n")}\n</team_notifications>`;
-        dynamicSystemMessages.push(reminder);
-        console.log(`\u001b[36m[team notifications]\u001b[0m\n${summaryLines.join("\n")}`);
-        for (const item of teamNotifications) {
-          await recordObservabilityEvent(
-            "notification",
-            {
-              source: "team",
-              teammateId: item.teammateId,
-              teammateName: item.teammateName,
-              messageType: item.messageType,
-              requestId: item.requestId ?? null,
-              content: item.content,
-            },
-            { traceId },
-          );
-        }
-      }
-      let memoryContext: string | null = null;
-      if (latestUser?.content) {
-        const injected = await buildMemoryInjectionForQuery(latestUser.content);
-        if (injected.content) {
-          memoryContext = injected.content;
-          console.log(
-            `\u001b[36m[memory inject]\u001b[0m entries=${injected.usedEntries} tokens=${injected.estimatedTokens}`,
-          );
-        }
-      }
-      if (runtimeState.roundsWithoutTodo >= 3) {
-        dynamicSystemMessages.push(
-          "<reminder>Please call the todo tool to update the task list and maintain progress.</reminder>",
-        );
-      }
       const promptEnvelope = buildPromptEnvelope({
         ...promptSource,
-        memoryContext,
-        dynamicMessages: dynamicSystemMessages,
+        memoryContext: preparedRound.memoryContext,
+        dynamicMessages: preparedRound.dynamicSystemMessages,
       });
       const buildRequestMessages = (continuedAssistantContent: string, continuationPrompt: string | null) => {
         const requestMessages: ChatCompletionMessageParam[] = [
@@ -669,7 +471,7 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
 
         if (!preToolHooks.blocked) {
           if (analyzed.ok) {
-            trackWriteSideEffect(toolCall.function.name, toolArgs);
+            markWriteSideEffect(runtimeState, toolCall.function.name, toolArgs);
           }
           const postToolHooks = await runHooks("PostToolUse", {
             session_id: runtimeState.sessionId,
@@ -693,7 +495,7 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
         if (toolCall.function.name === "todo") {
           usedTodo = true;
 
-          if (runtimeState.activeTaskId && isTodoAllCompleted(toolArgs)) {
+          if (runtimeState.activeTaskId && isTodoCompletionRequest(toolArgs)) {
             const autoUpdateArgs = JSON.stringify({
               task_id: runtimeState.activeTaskId,
               status: "completed",
@@ -708,7 +510,7 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
         }
 
         if (toolCall.function.name === "task_create") {
-          const createdId = parseTaskIdFromOutput(toolOutput);
+          const createdId = parseTaskIdFromToolOutput(toolOutput);
           if (createdId) {
             runtimeState.activeTaskId = createdId;
           }
