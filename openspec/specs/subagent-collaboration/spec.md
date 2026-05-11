@@ -57,3 +57,10 @@ TBD - created by archiving change prd-03-subagent-collaboration. Update Purpose 
 #### Scenario: 子代理失败写入事件
 - **WHEN** 子代理状态变为 `failed`
 - **THEN** 系统记录一条包含代理标识、状态与错误摘要的观测事件
+
+### Requirement: Subagents SHALL reuse the centralized model policy
+子代理模型请求 SHALL 复用统一模型策略、预算守卫与 fallback 逻辑，而不是单独硬编码模型。
+
+#### Scenario: 子代理请求命中统一策略
+- **WHEN** 子代理发起模型请求
+- **THEN** 系统按子代理对应角色路由模型，并记录相同的预算与模型选择信息

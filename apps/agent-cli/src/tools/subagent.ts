@@ -4,6 +4,7 @@ import type {
   ChatCompletionTool,
 } from "openai/resources/chat/completions";
 import { MODEL, createClient } from "../config.js";
+import { classifyFallbackableError, MODEL_POLICY } from "../model-policy.js";
 import { getExecutionContext, recordObservabilityEvent } from "../observability/runtime.js";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
 import { nowTimestampMs } from "../time.js";
@@ -161,17 +162,57 @@ class SubagentManager {
       ];
 
       for (let round = 0; round < RUNTIME_CONFIG.subagentMaxRounds; round += 1) {
-        const response = await client.chat.completions.create({
-          model: MODEL,
-          messages,
-          tools: BASE_TOOLS,
-          max_tokens: RUNTIME_CONFIG.subagentMaxTokens,
-        });
+        const promptTokens = Math.ceil(JSON.stringify(messages).length / 4);
+        const selection = await MODEL_POLICY.selectModel("ops", MODEL, promptTokens);
+        if (selection.budgetAction === "deny") {
+          record.status = "failed";
+          record.updatedAt = this.now();
+          record.lastError = `MODEL_BUDGET_DENIED:${selection.budgetReason ?? "budget exceeded"}`;
+          this.pushFailedNotification(record);
+          return;
+        }
+        const selectedModel = selection.model;
+        let modelUsed = selectedModel;
+        let fallbackUsed = selection.budgetAction === "downgrade";
+        let response;
+        const startedAt = Date.now();
+        try {
+          response = await client.chat.completions.create({
+            model: selectedModel,
+            messages,
+            tools: BASE_TOOLS,
+            max_tokens: RUNTIME_CONFIG.subagentMaxTokens,
+          });
+        } catch (error) {
+          if (selection.fallbackModel && classifyFallbackableError(error)) {
+            modelUsed = selection.fallbackModel;
+            fallbackUsed = true;
+            response = await client.chat.completions.create({
+              model: modelUsed,
+              messages,
+              tools: BASE_TOOLS,
+              max_tokens: RUNTIME_CONFIG.subagentMaxTokens,
+            });
+          } else {
+            throw error;
+          }
+        }
 
         const message = response.choices[0]?.message;
         if (!message) {
           break;
         }
+        await MODEL_POLICY.finalizeUsage(
+          {
+            role: "ops",
+            model: modelUsed,
+            promptTokens,
+            completionTokens: response.usage?.completion_tokens ?? 0,
+            latencyMs: Date.now() - startedAt,
+            fallbackUsed,
+          },
+          record.traceId ?? undefined,
+        );
         messages.push(toAssistantMessage(message));
 
         const functionToolCalls = message.tool_calls?.filter(

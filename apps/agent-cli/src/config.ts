@@ -29,6 +29,10 @@ export function ensureModelConfigured(): void {
   }
 }
 
+export function getDefaultModel(): string {
+  return MODEL;
+}
+
 export function createClient(): OpenAI {
   return new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,

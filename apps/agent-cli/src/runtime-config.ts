@@ -28,6 +28,8 @@ type RuntimeConfig = {
   deliveryStageTimeoutMs: number;
   deliveryRetryMaxAttempts: number;
   deliveryAutoRunEnabled: boolean;
+  modelSessionTokenBudget: number;
+  modelDailyTokenBudget: number;
 };
 
 function readInt(name: string, fallback: number, min: number): number {
@@ -85,4 +87,6 @@ export const RUNTIME_CONFIG: RuntimeConfig = {
   deliveryStageTimeoutMs: readInt("AGENT_DELIVERY_STAGE_TIMEOUT_MS", 180_000, 1_000),
   deliveryRetryMaxAttempts: readInt("AGENT_DELIVERY_RETRY_MAX_ATTEMPTS", 1, 0),
   deliveryAutoRunEnabled: readBool("AGENT_DELIVERY_AUTO_RUN_ENABLED", true),
+  modelSessionTokenBudget: readInt("AGENT_MODEL_SESSION_TOKEN_BUDGET", 200_000, 1_000),
+  modelDailyTokenBudget: readInt("AGENT_MODEL_DAILY_TOKEN_BUDGET", 2_000_000, 1_000),
 };

@@ -18,6 +18,16 @@ type ObservabilityMetrics = {
   maxToolDurationMs: number;
   estimatedPromptTokens: number;
   completionTokens: number;
+  estimatedModelCostUsd: number;
+  totalModelLatencyMs: number;
+  perModel: Record<
+    string,
+    {
+      requests: number;
+      estimatedCostUsd: number;
+      totalLatencyMs: number;
+    }
+  >;
   perTool: Record<
     string,
     {
@@ -88,6 +98,9 @@ function defaultMetrics(): ObservabilityMetrics {
     maxToolDurationMs: 0,
     estimatedPromptTokens: 0,
     completionTokens: 0,
+    estimatedModelCostUsd: 0,
+    totalModelLatencyMs: 0,
+    perModel: {},
     perTool: {},
   };
 }
@@ -132,6 +145,7 @@ class ObservabilityRuntime {
         ...parsed,
         schemaVersion: 1,
         updatedAt: parseTimestampMs(parsed.updatedAt, nowTimestampMs()),
+        perModel: parsed.perModel && typeof parsed.perModel === "object" ? parsed.perModel : {},
         perTool: parsed.perTool && typeof parsed.perTool === "object" ? parsed.perTool : {},
       };
     } catch {
@@ -159,6 +173,19 @@ class ObservabilityRuntime {
     if (kind === "model_response") {
       metrics.modelResponses += 1;
       metrics.completionTokens += Number(payload.completionTokens ?? 0) || 0;
+      return;
+    }
+    if (kind === "model_policy_usage") {
+      const model = String(payload.model ?? "unknown");
+      const latencyMs = Number(payload.latencyMs ?? 0) || 0;
+      const estimatedCostUsd = Number(payload.estimatedCostUsd ?? 0) || 0;
+      metrics.estimatedModelCostUsd += estimatedCostUsd;
+      metrics.totalModelLatencyMs += latencyMs;
+      const bucket = metrics.perModel[model] ?? { requests: 0, estimatedCostUsd: 0, totalLatencyMs: 0 };
+      bucket.requests += 1;
+      bucket.estimatedCostUsd += estimatedCostUsd;
+      bucket.totalLatencyMs += latencyMs;
+      metrics.perModel[model] = bucket;
       return;
     }
     if (kind === "notification" || kind === "background_task") {

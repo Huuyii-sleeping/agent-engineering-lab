@@ -7,6 +7,7 @@ import { createSpanId, createTraceId, recordObservabilityEvent, withExecutionCon
 import { buildPromptEnvelope } from "./prompt/builder.js";
 import type { StaticPromptSource } from "./prompt/types.js";
 import { runDeliveryValidation } from "./delivery.js";
+import { classifyFallbackableError, MODEL_POLICY } from "./model-policy.js";
 import { RUNTIME_CONFIG } from "./runtime-config.js";
 import {
   classifyErrorForRecovery,
@@ -400,9 +401,32 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
           { traceId },
         );
 
+        const selection = await MODEL_POLICY.selectModel("coding", model, estimatedPromptTokens);
+        await recordObservabilityEvent(
+          "model_policy_selection",
+          {
+            role: selection.role,
+            model: selection.model,
+            fallbackModel: selection.fallbackModel,
+            budgetAction: selection.budgetAction,
+            budgetReason: selection.budgetReason,
+            estimatedPromptCostUsd: selection.estimatedPromptCostUsd,
+          },
+          { traceId },
+        );
+        if (selection.budgetAction === "deny") {
+          stopReason = "model_budget_denied";
+          messages.push({
+            role: "assistant",
+            content: `Model request denied by budget policy: ${selection.budgetReason ?? "budget exceeded"}.`,
+          });
+          return;
+        }
+        const selectedModel = selection.model;
         try {
+          const startedAt = Date.now();
           const response = await client.chat.completions.create({
-            model,
+            model: selectedModel,
             messages: requestMessages,
             tools,
             max_tokens: 8_000,
@@ -422,12 +446,24 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
             "model_response",
             {
               round: runtimeState.roundCounter,
+              model: selectedModel,
               toolCallCount,
               completionTokens: response.usage?.completion_tokens ?? 0,
               finishReason,
               content: content ? summarizeText(content) : "",
             },
             { traceId },
+          );
+          await MODEL_POLICY.finalizeUsage(
+            {
+              role: "coding",
+              model: selectedModel,
+              promptTokens: estimatedPromptTokens,
+              completionTokens: response.usage?.completion_tokens ?? 0,
+              latencyMs: Date.now() - startedAt,
+              fallbackUsed: selection.budgetAction === "downgrade",
+            },
+            traceId,
           );
 
           const recoverySignal = classifyResponseForRecovery({
@@ -468,6 +504,53 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
               } as OpenAI.Chat.Completions.ChatCompletionMessage)
             : candidate;
         } catch (error) {
+          if (classifyFallbackableError(error)) {
+            const fallbackSelection = await MODEL_POLICY.selectFallbackModel("coding", model, estimatedPromptTokens, selectedModel);
+            if (fallbackSelection) {
+              try {
+                const retryStartedAt = Date.now();
+                const retryResponse = await client.chat.completions.create({
+                  model: fallbackSelection.model,
+                  messages: requestMessages,
+                  tools,
+                  max_tokens: 8_000,
+                });
+                const retryCandidate = retryResponse.choices[0]?.message;
+                if (retryCandidate) {
+                  const retryContent = typeof retryCandidate.content === "string" ? retryCandidate.content : "";
+                  await recordObservabilityEvent(
+                    "model_policy_selection",
+                    {
+                      role: fallbackSelection.role,
+                      model: fallbackSelection.model,
+                      fallbackModel: null,
+                      budgetAction: "downgrade",
+                      budgetReason: "request_fallback",
+                    },
+                    { traceId },
+                  );
+                  await MODEL_POLICY.finalizeUsage(
+                    {
+                      role: "coding",
+                      model: fallbackSelection.model,
+                      promptTokens: estimatedPromptTokens,
+                      completionTokens: retryResponse.usage?.completion_tokens ?? 0,
+                      latencyMs: Date.now() - retryStartedAt,
+                      fallbackUsed: true,
+                    },
+                    traceId,
+                  );
+                  message = {
+                    ...retryCandidate,
+                    content: continuedAssistantContent ? `${continuedAssistantContent}${retryContent}` : retryContent,
+                  } as OpenAI.Chat.Completions.ChatCompletionMessage;
+                  continue;
+                }
+              } catch {
+                // continue to recovery selector below
+              }
+            }
+          }
           const decision = selectRecoveryDecision(classifyErrorForRecovery(error), recoveryState);
           recoveryState = decision.nextState;
           await recordObservabilityEvent(
