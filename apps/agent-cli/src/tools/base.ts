@@ -9,6 +9,7 @@ import {
 import { BASH_TOOLS, readCommandArgs, runBash } from "./bash.js";
 import { BACKGROUND_TOOLS, runBackgroundRun, runCheckBackground } from "./background-task.js";
 import { CONTEXT_TOOLS, type CompactRuntimeContext, runCompact, runEstimateTokens } from "./context-compact.js";
+import { runDeliveryReportTool, runDeliveryValidateTool } from "../delivery.js";
 import { FILE_TOOLS, runEditFile, runReadFile, runWriteFile } from "./file-tools.js";
 import { MEMORY_TOOLS, runMemoryAdd, runMemoryList, runMemorySearch } from "./memory.js";
 import {
@@ -86,6 +87,8 @@ const BASE_HANDLERS: Record<string, ToolHandler> = {
   read_file: async (args) => runReadFile(args.path, args.limit),
   write_file: async (args) => runWriteFile(args.path, args.content),
   edit_file: async (args) => runEditFile(args.path, args.old_text, args.new_text),
+  delivery_validate: async (args) => runDeliveryValidateTool(args.changed_paths, args.mode),
+  delivery_report: async () => runDeliveryReportTool(),
   memory_add: async (args) => runMemoryAdd(args.source, args.type, args.tags, args.content, args.confidence),
   memory_search: async (args) => runMemorySearch(args.query, args.limit, args.layer, args.type),
   memory_list: async (args) => runMemoryList(args.layer, args.limit),
@@ -147,6 +150,34 @@ const BASE_HANDLERS: Record<string, ToolHandler> = {
 export const BASE_TOOLS: ChatCompletionTool[] = [
   ...BASH_TOOLS,
   ...FILE_TOOLS,
+  {
+    type: "function",
+    function: {
+      name: "delivery_validate",
+      description: "Run the centralized delivery validation pipeline and persist a delivery report.",
+      parameters: {
+        type: "object",
+        properties: {
+          changed_paths: {
+            type: "array",
+            items: { type: "string" },
+          },
+          mode: {
+            type: "string",
+            enum: ["manual", "auto"],
+          },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "delivery_report",
+      description: "Read the most recent delivery report from disk.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
   ...MEMORY_TOOLS,
   ...TODO_TOOLS,
   ...TASK_TOOLS,

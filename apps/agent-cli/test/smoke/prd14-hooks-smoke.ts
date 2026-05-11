@@ -147,6 +147,8 @@ async function main(): Promise<void> {
       activeTaskId: null,
       lastMemoryInput: null,
       roundCounter: 0,
+      touchedPaths: new Set<string>(),
+      wroteWorkspaceFiles: false,
     };
 
     await agentLoop({

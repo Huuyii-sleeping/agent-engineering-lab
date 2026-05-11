@@ -25,6 +25,9 @@ type RuntimeConfig = {
   memoryInjectMaxTokens: number;
   observabilityFieldMaxChars: number;
   hookTimeoutMs: number;
+  deliveryStageTimeoutMs: number;
+  deliveryRetryMaxAttempts: number;
+  deliveryAutoRunEnabled: boolean;
 };
 
 function readInt(name: string, fallback: number, min: number): number {
@@ -37,6 +40,21 @@ function readInt(name: string, fallback: number, min: number): number {
     return fallback;
   }
   return parsed;
+}
+
+function readBool(name: string, fallback: boolean): boolean {
+  const raw = process.env[name];
+  if (!raw) {
+    return fallback;
+  }
+  const normalized = raw.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+  return fallback;
 }
 
 export const RUNTIME_CONFIG: RuntimeConfig = {
@@ -64,4 +82,7 @@ export const RUNTIME_CONFIG: RuntimeConfig = {
   memoryInjectMaxTokens: readInt("AGENT_MEMORY_INJECT_MAX_TOKENS", 700, 100),
   observabilityFieldMaxChars: readInt("AGENT_OBSERVABILITY_FIELD_MAX_CHARS", 400, 40),
   hookTimeoutMs: readInt("AGENT_HOOK_TIMEOUT_MS", 10_000, 100),
+  deliveryStageTimeoutMs: readInt("AGENT_DELIVERY_STAGE_TIMEOUT_MS", 180_000, 1_000),
+  deliveryRetryMaxAttempts: readInt("AGENT_DELIVERY_RETRY_MAX_ATTEMPTS", 1, 0),
+  deliveryAutoRunEnabled: readBool("AGENT_DELIVERY_AUTO_RUN_ENABLED", true),
 };

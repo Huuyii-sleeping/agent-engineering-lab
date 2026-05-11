@@ -14,6 +14,7 @@ describe("runtime-config", () => {
     expect(RUNTIME_CONFIG.schedulerPollIntervalMs).toBeGreaterThan(0);
     expect(RUNTIME_CONFIG.autonomyIdleTimeoutMs).toBeGreaterThan(0);
     expect(RUNTIME_CONFIG.subagentDefaultWaitTimeoutMs).toBeGreaterThan(0);
+    expect(RUNTIME_CONFIG.deliveryStageTimeoutMs).toBeGreaterThan(0);
+    expect(RUNTIME_CONFIG.deliveryRetryMaxAttempts).toBeGreaterThanOrEqual(0);
   });
 });
-

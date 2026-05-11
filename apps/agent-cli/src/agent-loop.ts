@@ -6,6 +6,8 @@ import { toAssistantMessage } from "./messages.js";
 import { createSpanId, createTraceId, recordObservabilityEvent, withExecutionContext } from "./observability/runtime.js";
 import { buildPromptEnvelope } from "./prompt/builder.js";
 import type { StaticPromptSource } from "./prompt/types.js";
+import { runDeliveryValidation } from "./delivery.js";
+import { RUNTIME_CONFIG } from "./runtime-config.js";
 import {
   classifyErrorForRecovery,
   classifyResponseForRecovery,
@@ -29,6 +31,8 @@ export type AgentRuntimeState = {
   activeTaskId: number | null;
   lastMemoryInput: string | null;
   roundCounter: number;
+  touchedPaths: Set<string>;
+  wroteWorkspaceFiles: boolean;
 };
 
 type AgentLoopOptions = {
@@ -111,6 +115,17 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
     }
   };
 
+  const trackWriteSideEffect = (toolName: string, args: Record<string, unknown>): void => {
+    if (toolName !== "write_file" && toolName !== "edit_file") {
+      return;
+    }
+    const target = typeof args.path === "string" ? args.path.trim() : "";
+    runtimeState.wroteWorkspaceFiles = true;
+    if (target) {
+      runtimeState.touchedPaths.add(target);
+    }
+  };
+
   const isTodoAllCompleted = (args: Record<string, unknown>): boolean => {
     const items = args.items;
     if (!Array.isArray(items) || items.length === 0) {
@@ -142,6 +157,8 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
 
   while (true) {
     runtimeState.roundCounter += 1;
+    runtimeState.touchedPaths.clear();
+    runtimeState.wroteWorkspaceFiles = false;
     const traceId = createTraceId();
     let stopReason = "tool_calls_processed";
     let stopToolCallCount = 0;
@@ -568,6 +585,9 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
         });
 
         if (!preToolHooks.blocked) {
+          if (analyzed.ok) {
+            trackWriteSideEffect(toolCall.function.name, toolArgs);
+          }
           const postToolHooks = await runHooks("PostToolUse", {
             session_id: runtimeState.sessionId,
             trace_id: traceId,
@@ -618,6 +638,23 @@ export async function agentLoop(opts: AgentLoopOptions): Promise<void> {
             runtimeState.activeTaskId = null;
           }
         }
+      }
+
+      if (RUNTIME_CONFIG.deliveryAutoRunEnabled && runtimeState.wroteWorkspaceFiles) {
+        const report = await runDeliveryValidation({
+          mode: "auto",
+          changedPaths: [...runtimeState.touchedPaths],
+          traceId,
+        });
+        const summary =
+          report.summary.status === "passed"
+            ? `Auto delivery validation passed (${report.summary.passedStages}/${report.summary.totalStages} stages passed).`
+            : `Auto delivery validation failed at ${report.latestFailure?.stage ?? "unknown"}: ${report.latestFailure?.code ?? "UNKNOWN"}. ${report.latestFailure?.suggestion ?? ""}`.trim();
+        messages.push({
+          role: "assistant",
+          content: summary,
+        });
+        stopReason = report.summary.status === "passed" ? "auto_delivery_passed" : "auto_delivery_failed";
       }
 
       runtimeState.roundsWithoutTodo = usedTodo ? 0 : runtimeState.roundsWithoutTodo + 1;

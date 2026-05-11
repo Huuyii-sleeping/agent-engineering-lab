@@ -143,6 +143,8 @@ export async function runCli(): Promise<void> {
     activeTaskId: null,
     lastMemoryInput: null,
     roundCounter: 0,
+    touchedPaths: new Set<string>(),
+    wroteWorkspaceFiles: false,
   };
   let agentBusy = false;
   let waitingForInput = false;
