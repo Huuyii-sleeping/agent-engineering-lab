@@ -24,7 +24,8 @@ type ApprovalRequest = {
 
 type PolicyRule = {
   id: string;
-  tool: string;
+  tool?: string;
+  toolPrefix?: string;
   action: Decision;
   risk: RiskLevel;
   reason: string;
@@ -102,7 +103,7 @@ class SecurityManager {
 
   private defaultPolicy(): PolicyConfig {
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       rules: [
         {
           id: "bash-critical-deny",
@@ -141,6 +142,13 @@ class SecurityManager {
           risk: "high",
           reason: "background shell execution requires approval",
         },
+        {
+          id: "mcp-tool-approval",
+          toolPrefix: "mcp__",
+          action: "require_approval",
+          risk: "medium",
+          reason: "external mcp tool requires approval by default",
+        },
       ],
     };
   }
@@ -160,11 +168,20 @@ class SecurityManager {
     }
     const raw = await readFile(this.policyPath, "utf8");
     const parsed = safeJsonParse<PolicyConfig>(raw, this.defaultPolicy());
-    if (!Array.isArray(parsed.rules)) {
-      parsed.rules = this.defaultPolicy().rules;
+    const defaults = this.defaultPolicy();
+    const loadedRules = Array.isArray(parsed.rules) ? parsed.rules : defaults.rules;
+    const knownIds = new Set(loadedRules.map((rule) => rule.id));
+    const mergedRules = [...loadedRules];
+    for (const rule of defaults.rules) {
+      if (!knownIds.has(rule.id)) {
+        mergedRules.push(rule);
+      }
     }
-    this.cachedPolicy = parsed;
-    return parsed;
+    this.cachedPolicy = {
+      schemaVersion: Number.isFinite(Number(parsed.schemaVersion)) ? Number(parsed.schemaVersion) : defaults.schemaVersion,
+      rules: mergedRules,
+    };
+    return this.cachedPolicy;
   }
 
   async reloadPolicy(): Promise<string> {
@@ -213,7 +230,9 @@ class SecurityManager {
   }
 
   private matchRule(rule: PolicyRule, input: PolicyInput): boolean {
-    if (rule.tool !== input.toolName) {
+    const matchesExact = Boolean(rule.tool) && rule.tool === input.toolName;
+    const matchesPrefix = Boolean(rule.toolPrefix) && input.toolName.startsWith(String(rule.toolPrefix));
+    if (!matchesExact && !matchesPrefix) {
       return false;
     }
     if (rule.commandIncludes && rule.commandIncludes.length > 0) {
@@ -542,4 +561,3 @@ export async function enforceSecurityGate(toolName: string, args: Record<string,
   }
   return SECURITY.gate(toolName, args);
 }
-

@@ -2,14 +2,13 @@
 
 ## Purpose
 TBD - created by archiving change prd-00-core-loop. Update Purpose after archive.
-
 ## Requirements
 ### Requirement: Agent loop SHALL handle tool-calling rounds deterministically
-主循环 MUST 在每轮前支持自治轮询入口，并在不破坏既有工具调用契约的前提下处理自治状态更新。
+主循环 MUST 在每轮前支持自治轮询入口，并在不破坏既有工具调用契约的前提下处理统一工具路由，包括 native、subagent 与 MCP 外部工具。
 
-#### Scenario: 自治入口与主循环兼容
-- **WHEN** 主循环进入新一轮
-- **THEN** 自治检查先执行，随后保持原有 tool-calling 顺序和回填流程
+#### Scenario: 同一轮内混合调用 native 与 MCP 工具
+- **WHEN** 模型在同一轮工具调用中同时请求原生工具与 MCP 工具
+- **THEN** 主循环按返回顺序执行统一 router，并将每个工具结果按既有 `role: tool` 契约回填
 
 ### Requirement: Bash tool MUST enforce execution safety constraints
 `bash(command)` 工具 MUST 在执行前进行命令内容校验，MUST 拒绝被屏蔽的危险片段，MUST 执行 120 秒默认超时，且 MUST 将输出截断至最多 50,000 字符。
@@ -113,3 +112,4 @@ CLI 入口 MUST 在每次输入循环显示固定提示符 `s01 >>`，并且在�
 #### Scenario: 不同执行作用域读取各自上下文
 - **WHEN** CLI 或 HTTP service 在不同 session 中进入 `agentLoop`
 - **THEN** `estimate_tokens` 与 `compact` 仅读取当前 session 绑定的消息上下文
+

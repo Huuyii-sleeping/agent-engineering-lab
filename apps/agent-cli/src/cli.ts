@@ -1,16 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
-import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import type OpenAI from "openai";
-import type { ChatCompletionTool } from "openai/resources/chat/completions";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { agentLoop, type AgentRuntimeState } from "./agent-loop.js";
 import { createClient, ensureModelConfigured, getStaticPromptSource, MODEL } from "./config.js";
 import { runHooks } from "./hooks/index.js";
 import type { StaticPromptSource } from "./prompt/types.js";
 import { RUNTIME_CONFIG } from "./runtime-config.js";
 import { withCompactRuntimeContext } from "./tools/base.js";
-import { TOOLS } from "./tools/index.js";
+import { listTools } from "./tools/index.js";
 import { peekScheduledNotificationCount, tickScheduler } from "./tools/scheduler.js";
 
 const PROMPT = "\u001b[36ms01 >> \u001b[0m";
@@ -32,7 +31,6 @@ type ScheduledRoundOptions = {
   client: OpenAI;
   model: string;
   promptSource: StaticPromptSource;
-  tools: ChatCompletionTool[];
   printAsyncEvent: (label: string, content: string) => void;
   schedulerTick?: typeof tickScheduler;
   peekScheduledCount?: typeof peekScheduledNotificationCount;
@@ -100,12 +98,13 @@ export async function runScheduledRound(opts: ScheduledRoundOptions): Promise<bo
     opts.printAsyncEvent("scheduled due", `${dueCount} scheduled prompt${dueCount === 1 ? "" : "s"} due now.`);
     try {
       opts.history.push({ role: "user", content: "Handle any scheduled prompts that are due now." });
+      const tools = await listTools();
       await withCompactRuntimeContext({ messages: opts.history }, async () =>
         loopRunner({
           client: opts.client,
           model: opts.model,
           promptSource: opts.promptSource,
-          tools: opts.tools,
+          tools,
           messages: opts.history,
           runtimeState: opts.runtimeState,
         }),
@@ -170,7 +169,6 @@ export async function runCli(): Promise<void> {
       client,
       model: MODEL,
       promptSource,
-      tools: TOOLS,
       printAsyncEvent,
     });
   }, RUNTIME_CONFIG.schedulerPollIntervalMs);
@@ -207,12 +205,13 @@ export async function runCli(): Promise<void> {
       appendSystemMessages(history, promptHooks.messages);
       history.push({ role: "user", content: query });
       agentBusy = true;
+      const tools = await listTools();
       await withCompactRuntimeContext({ messages: history }, async () =>
         agentLoop({
           client,
           model: MODEL,
           promptSource,
-          tools: TOOLS,
+          tools,
           messages: history,
           runtimeState,
         }),

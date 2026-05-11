@@ -14,6 +14,9 @@ describe("runtime-config", () => {
     expect(RUNTIME_CONFIG.schedulerPollIntervalMs).toBeGreaterThan(0);
     expect(RUNTIME_CONFIG.autonomyIdleTimeoutMs).toBeGreaterThan(0);
     expect(RUNTIME_CONFIG.subagentDefaultWaitTimeoutMs).toBeGreaterThan(0);
+    expect(RUNTIME_CONFIG.mcpStartupTimeoutMs).toBeGreaterThan(0);
+    expect(RUNTIME_CONFIG.mcpRequestTimeoutMs).toBeGreaterThan(0);
+    expect(RUNTIME_CONFIG.mcpToolRetryMaxAttempts).toBeGreaterThanOrEqual(0);
     expect(RUNTIME_CONFIG.deliveryStageTimeoutMs).toBeGreaterThan(0);
     expect(RUNTIME_CONFIG.deliveryRetryMaxAttempts).toBeGreaterThanOrEqual(0);
     expect(RUNTIME_CONFIG.modelSessionTokenBudget).toBeGreaterThan(0);

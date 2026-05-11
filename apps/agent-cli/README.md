@@ -485,10 +485,30 @@ pnpm --filter agent-cli test:observability
 pnpm --filter agent-cli test:hooks
 pnpm --filter agent-cli test:recovery
 pnpm --filter agent-cli test:scheduler
+pnpm --filter agent-cli test:mcp
 pnpm --filter agent-cli release:check
 ```
 
 要求：
+
+### MCP 外部能力
+
+项目级 MCP server 可通过 `.codex/mcp.json` 接入。最小示例：
+
+```json
+{
+  "schemaVersion": 1,
+  "servers": [
+    {
+      "name": "demo",
+      "command": "node",
+      "args": ["./relative/path/to/server.mjs"]
+    }
+  ]
+}
+```
+
+接入后，工具会以 `mcp__<server>__<tool>` 形式暴露，并统一经过安全审批、观测和工具回填链路。
 
 - 新增工具至少补单测或 smoke test
 - 改动持久化结构时要考虑旧数据兼容

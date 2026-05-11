@@ -1,6 +1,7 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { isReplayDryRun } from "../observability/runtime.js";
 import { BASE_TOOLS, BASE_UNKNOWN_TOOL, previewBaseToolCall, runBaseToolByName } from "./base.js";
+import { listMcpTools, runMcpToolByName } from "./mcp.js";
 import { enforceSecurityGate } from "./security.js";
 import {
   SUBAGENT_TOOLS,
@@ -27,6 +28,10 @@ const SUBAGENT_HANDLERS: Record<string, ToolHandler> = {
 };
 
 export const TOOLS: ChatCompletionTool[] = [...BASE_TOOLS, ...SUBAGENT_TOOLS];
+
+export async function listTools(): Promise<ChatCompletionTool[]> {
+  return [...TOOLS, ...(await listMcpTools())];
+}
 
 function parseToolArgs(argumentsJson: string): Record<string, unknown> {
   try {
@@ -67,6 +72,16 @@ export async function runToolByName(name: string, argumentsJson: string): Promis
     } catch (error) {
       return TOOL_RUNTIME_ERROR(error instanceof Error ? error.message : String(error));
     }
+  }
+
+  const mcpArgs = parseToolArgs(argumentsJson);
+  const mcpGate = await enforceSecurityGate(name, mcpArgs);
+  if (!mcpGate.ok) {
+    return mcpGate.blocked;
+  }
+  const mcpOutput = await runMcpToolByName(name, mcpArgs);
+  if (mcpOutput !== null) {
+    return mcpOutput;
   }
 
   const baseOutput = await runBaseToolByName(name, argumentsJson);

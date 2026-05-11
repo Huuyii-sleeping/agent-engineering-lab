@@ -25,6 +25,9 @@ type RuntimeConfig = {
   memoryInjectMaxTokens: number;
   observabilityFieldMaxChars: number;
   hookTimeoutMs: number;
+  mcpStartupTimeoutMs: number;
+  mcpRequestTimeoutMs: number;
+  mcpToolRetryMaxAttempts: number;
   deliveryStageTimeoutMs: number;
   deliveryRetryMaxAttempts: number;
   deliveryAutoRunEnabled: boolean;
@@ -84,6 +87,9 @@ export const RUNTIME_CONFIG: RuntimeConfig = {
   memoryInjectMaxTokens: readInt("AGENT_MEMORY_INJECT_MAX_TOKENS", 700, 100),
   observabilityFieldMaxChars: readInt("AGENT_OBSERVABILITY_FIELD_MAX_CHARS", 400, 40),
   hookTimeoutMs: readInt("AGENT_HOOK_TIMEOUT_MS", 10_000, 100),
+  mcpStartupTimeoutMs: readInt("AGENT_MCP_STARTUP_TIMEOUT_MS", 10_000, 100),
+  mcpRequestTimeoutMs: readInt("AGENT_MCP_REQUEST_TIMEOUT_MS", 10_000, 100),
+  mcpToolRetryMaxAttempts: readInt("AGENT_MCP_TOOL_RETRY_MAX_ATTEMPTS", 1, 0),
   deliveryStageTimeoutMs: readInt("AGENT_DELIVERY_STAGE_TIMEOUT_MS", 180_000, 1_000),
   deliveryRetryMaxAttempts: readInt("AGENT_DELIVERY_RETRY_MAX_ATTEMPTS", 1, 0),
   deliveryAutoRunEnabled: readBool("AGENT_DELIVERY_AUTO_RUN_ENABLED", true),

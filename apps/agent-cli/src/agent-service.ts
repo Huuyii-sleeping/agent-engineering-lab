@@ -7,7 +7,7 @@ import { createClient, getDefaultModel, getStaticPromptSource } from "./config.j
 import { runHooks } from "./hooks/index.js";
 import type { StaticPromptSource } from "./prompt/types.js";
 import { withCompactRuntimeContext } from "./tools/base.js";
-import { TOOLS } from "./tools/index.js";
+import { listTools } from "./tools/index.js";
 
 type AgentSessionRecord = {
   id: string;
@@ -23,6 +23,7 @@ type AgentServiceDeps = {
   model?: string;
   promptSource?: StaticPromptSource;
   tools?: ChatCompletionTool[];
+  toolsResolver?: () => Promise<ChatCompletionTool[]>;
   loopRunner?: typeof agentLoop;
 };
 
@@ -100,14 +101,14 @@ export class AgentService {
   private readonly client: OpenAI;
   private readonly model: string;
   private readonly promptSource: StaticPromptSource;
-  private readonly tools: ChatCompletionTool[];
+  private readonly toolsResolver: () => Promise<ChatCompletionTool[]>;
   private readonly loopRunner: typeof agentLoop;
 
   constructor(deps: AgentServiceDeps = {}) {
     this.client = deps.client ?? createClient();
     this.model = deps.model ?? getDefaultModel();
     this.promptSource = deps.promptSource ?? getStaticPromptSource();
-    this.tools = deps.tools ?? TOOLS;
+    this.toolsResolver = deps.toolsResolver ?? (deps.tools ? async () => deps.tools ?? [] : listTools);
     this.loopRunner = deps.loopRunner ?? agentLoop;
   }
 
@@ -134,8 +135,8 @@ export class AgentService {
     return this.sessions.get(sessionId) ?? null;
   }
 
-  toolsMetadata(): Array<Record<string, string>> {
-    return listToolMetadata(this.tools);
+  async toolsMetadata(): Promise<Array<Record<string, string>>> {
+    return listToolMetadata(await this.toolsResolver());
   }
 
   async chat(input: ChatRequest): Promise<Record<string, unknown>> {
@@ -195,13 +196,14 @@ export class AgentService {
         }
       }
       session.history.push({ role: "user", content: prompt });
+      const tools = await this.toolsResolver();
 
       await withCompactRuntimeContext({ messages: session.history }, async () =>
         this.loopRunner({
           client: this.client,
           model: this.model,
           promptSource: this.promptSource,
-          tools: this.tools,
+          tools,
           messages: session.history,
           runtimeState: session.runtimeState,
         }),
@@ -234,7 +236,7 @@ export function createAgentHttpServer(service = new AgentService()): Server {
         return;
       }
       if (method === "GET" && pathname === "/tools") {
-        json(res, 200, { ok: true, tools: service.toolsMetadata() });
+        json(res, 200, { ok: true, tools: await service.toolsMetadata() });
         return;
       }
       if (method === "GET" && pathname === "/sessions") {
