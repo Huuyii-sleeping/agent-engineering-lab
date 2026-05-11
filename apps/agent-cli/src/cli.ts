@@ -9,7 +9,7 @@ import { createClient, ensureModelConfigured, getStaticPromptSource, MODEL } fro
 import { runHooks } from "./hooks/index.js";
 import type { StaticPromptSource } from "./prompt/types.js";
 import { RUNTIME_CONFIG } from "./runtime-config.js";
-import { setCompactRuntimeContext } from "./tools/base.js";
+import { withCompactRuntimeContext } from "./tools/base.js";
 import { TOOLS } from "./tools/index.js";
 import { peekScheduledNotificationCount, tickScheduler } from "./tools/scheduler.js";
 
@@ -100,14 +100,16 @@ export async function runScheduledRound(opts: ScheduledRoundOptions): Promise<bo
     opts.printAsyncEvent("scheduled due", `${dueCount} scheduled prompt${dueCount === 1 ? "" : "s"} due now.`);
     try {
       opts.history.push({ role: "user", content: "Handle any scheduled prompts that are due now." });
-      await loopRunner({
-        client: opts.client,
-        model: opts.model,
-        promptSource: opts.promptSource,
-        tools: opts.tools,
-        messages: opts.history,
-        runtimeState: opts.runtimeState,
-      });
+      await withCompactRuntimeContext({ messages: opts.history }, async () =>
+        loopRunner({
+          client: opts.client,
+          model: opts.model,
+          promptSource: opts.promptSource,
+          tools: opts.tools,
+          messages: opts.history,
+          runtimeState: opts.runtimeState,
+        }),
+      );
       const lastMessage = opts.history[opts.history.length - 1];
       if (lastMessage?.role === "assistant" && typeof lastMessage.content === "string" && lastMessage.content.trim()) {
         opts.printAsyncEvent("scheduled", lastMessage.content);
@@ -134,7 +136,6 @@ export async function runCli(): Promise<void> {
   ensureModelConfigured();
   const rl = createInterface({ input, output });
   const history: ChatCompletionMessageParam[] = [];
-  setCompactRuntimeContext({ messages: history });
   const client = createClient();
   const promptSource = getStaticPromptSource();
   const runtimeState: AgentRuntimeState = {
@@ -206,14 +207,16 @@ export async function runCli(): Promise<void> {
       appendSystemMessages(history, promptHooks.messages);
       history.push({ role: "user", content: query });
       agentBusy = true;
-      await agentLoop({
-        client,
-        model: MODEL,
-        promptSource,
-        tools: TOOLS,
-        messages: history,
-        runtimeState,
-      });
+      await withCompactRuntimeContext({ messages: history }, async () =>
+        agentLoop({
+          client,
+          model: MODEL,
+          promptSource,
+          tools: TOOLS,
+          messages: history,
+          runtimeState,
+        }),
+      );
       agentBusy = false;
 
       const lastMessage = history[history.length - 1];

@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { isReplayDryRun } from "../observability/runtime.js";
 import {
@@ -82,6 +83,8 @@ export const BASE_UNKNOWN_TOOL = JSON.stringify({
 const TOOL_RUNTIME_ERROR = (message: string): string =>
   JSON.stringify({ ok: false, error: { code: "TOOL_RUNTIME_ERROR", message } });
 
+const COMPACT_RUNTIME_CONTEXT = new AsyncLocalStorage<CompactRuntimeContext>();
+
 const BASE_HANDLERS: Record<string, ToolHandler> = {
   bash: async (args) => runBash(String(args.command ?? "")),
   read_file: async (args) => runReadFile(args.path, args.limit),
@@ -110,8 +113,8 @@ const BASE_HANDLERS: Record<string, ToolHandler> = {
   schedule_create: async (args) => runScheduleCreate(args.cron, args.prompt, args.recurring, args.durable),
   schedule_list: async () => runScheduleList(),
   schedule_remove: async (args) => runScheduleRemove(args.id),
-  estimate_tokens: async () => runEstimateTokens(runtimeContext),
-  compact: async (args) => runCompact(args.keep_recent, runtimeContext),
+  estimate_tokens: async () => runEstimateTokens(COMPACT_RUNTIME_CONTEXT.getStore()),
+  compact: async (args) => runCompact(args.keep_recent, COMPACT_RUNTIME_CONTEXT.getStore()),
   background_run: async (args) => runBackgroundRun(args.command),
   check_background: async (args) => runCheckBackground(args.task_id),
   team_add_teammate: async (args) => runTeamAddTeammate(args.name),
@@ -225,10 +228,8 @@ export const BASE_TOOLS: ChatCompletionTool[] = [
   },
 ];
 
-let runtimeContext: CompactRuntimeContext | undefined;
-
-export function setCompactRuntimeContext(context: CompactRuntimeContext): void {
-  runtimeContext = context;
+export async function withCompactRuntimeContext<T>(context: CompactRuntimeContext, fn: () => Promise<T>): Promise<T> {
+  return COMPACT_RUNTIME_CONTEXT.run(context, fn);
 }
 
 function parseToolArgs(argumentsJson: string): Record<string, unknown> {
