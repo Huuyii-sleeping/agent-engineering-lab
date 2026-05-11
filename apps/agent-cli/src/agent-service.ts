@@ -1,13 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import type OpenAI from "openai";
 import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
-import { agentLoop, type AgentRuntimeState } from "./agent-loop.js";
-import { createClient, getDefaultModel, getStaticPromptSource } from "./config.js";
-import { runHooks } from "./hooks/index.js";
-import type { StaticPromptSource } from "./prompt/types.js";
-import { withCompactRuntimeContext } from "./tools/base.js";
-import { listTools } from "./tools/index.js";
+import type { AgentRuntimeState } from "./agent-loop.js";
+import { createAgentRuntimeState, type AgentAppRuntimeDeps } from "./bootstrap/app-runtime.js";
+import { runUserQuery } from "./runtime/query-runtime.js";
 
 type AgentSessionRecord = {
   id: string;
@@ -18,14 +14,7 @@ type AgentSessionRecord = {
   runtimeState: AgentRuntimeState;
 };
 
-type AgentServiceDeps = {
-  client?: OpenAI;
-  model?: string;
-  promptSource?: StaticPromptSource;
-  tools?: ChatCompletionTool[];
-  toolsResolver?: () => Promise<ChatCompletionTool[]>;
-  loopRunner?: typeof agentLoop;
-};
+export type AgentServiceDeps = AgentAppRuntimeDeps;
 
 type ChatRequest = {
   session_id?: string;
@@ -63,18 +52,6 @@ function parseBody<T>(req: IncomingMessage): Promise<T> {
   });
 }
 
-function createRuntimeState(sessionId: string): AgentRuntimeState {
-  return {
-    sessionId,
-    roundsWithoutTodo: 0,
-    activeTaskId: null,
-    lastMemoryInput: null,
-    roundCounter: 0,
-    touchedPaths: new Set<string>(),
-    wroteWorkspaceFiles: false,
-  };
-}
-
 function summarizeSession(session: AgentSessionRecord): Record<string, unknown> {
   return {
     id: session.id,
@@ -98,18 +75,18 @@ function listToolMetadata(tools: ChatCompletionTool[]): Array<Record<string, str
 
 export class AgentService {
   private readonly sessions = new Map<string, AgentSessionRecord>();
-  private readonly client: OpenAI;
-  private readonly model: string;
-  private readonly promptSource: StaticPromptSource;
+  private readonly client: AgentServiceDeps["client"];
+  private readonly model: AgentServiceDeps["model"];
+  private readonly promptSource: AgentServiceDeps["promptSource"];
   private readonly toolsResolver: () => Promise<ChatCompletionTool[]>;
-  private readonly loopRunner: typeof agentLoop;
+  private readonly loopRunner: AgentServiceDeps["loopRunner"];
 
-  constructor(deps: AgentServiceDeps = {}) {
-    this.client = deps.client ?? createClient();
-    this.model = deps.model ?? getDefaultModel();
-    this.promptSource = deps.promptSource ?? getStaticPromptSource();
-    this.toolsResolver = deps.toolsResolver ?? (deps.tools ? async () => deps.tools ?? [] : listTools);
-    this.loopRunner = deps.loopRunner ?? agentLoop;
+  constructor(deps: AgentServiceDeps) {
+    this.client = deps.client;
+    this.model = deps.model;
+    this.promptSource = deps.promptSource;
+    this.toolsResolver = deps.toolsResolver;
+    this.loopRunner = deps.loopRunner;
   }
 
   createSession(): AgentSessionRecord {
@@ -121,7 +98,7 @@ export class AgentService {
       updatedAt: createdAt,
       busy: false,
       history: [],
-      runtimeState: createRuntimeState(id),
+      runtimeState: createAgentRuntimeState(id),
     };
     this.sessions.set(id, record);
     return record;
@@ -174,48 +151,30 @@ export class AgentService {
     session.busy = true;
     session.updatedAt = nowMs();
     try {
-      const promptHooks = await runHooks("UserPromptSubmit", {
-        session_id: session.runtimeState.sessionId,
-        payload: { prompt },
-      });
-      if (promptHooks.blocked) {
-        return {
-          ok: false,
-          error: {
-            code: "HOOK_BLOCKED",
-            message: promptHooks.blockReason ?? "prompt blocked by hook",
-          },
-          session: summarizeSession(session),
-        };
-      }
-
-      for (const item of promptHooks.messages) {
-        const content = item.trim();
-        if (content) {
-          session.history.push({ role: "system", content });
-        }
-      }
-      session.history.push({ role: "user", content: prompt });
-      const tools = await this.toolsResolver();
-
-      await withCompactRuntimeContext({ messages: session.history }, async () =>
-        this.loopRunner({
+      const result = await runUserQuery({
+        app: {
           client: this.client,
           model: this.model,
           promptSource: this.promptSource,
-          tools,
-          messages: session.history,
-          runtimeState: session.runtimeState,
-        }),
-      );
-
-      const lastMessage = [...session.history].reverse().find((item) => item.role === "assistant");
+          toolsResolver: this.toolsResolver,
+          loopRunner: this.loopRunner,
+        },
+        history: session.history,
+        runtimeState: session.runtimeState,
+        prompt,
+      });
+      if (!result.ok) {
+        return {
+          ok: false,
+          error: result.error,
+          session: summarizeSession(session),
+        };
+      }
       session.updatedAt = nowMs();
       return {
         ok: true,
         session: summarizeSession(session),
-        assistant:
-          lastMessage?.role === "assistant" && typeof lastMessage.content === "string" ? lastMessage.content : "",
+        assistant: result.assistant,
       };
     } finally {
       session.busy = false;
@@ -224,7 +183,7 @@ export class AgentService {
   }
 }
 
-export function createAgentHttpServer(service = new AgentService()): Server {
+export function createAgentHttpServer(service: AgentService): Server {
   return createServer(async (req, res) => {
     try {
       const url = req.url ? new URL(req.url, "http://127.0.0.1") : null;

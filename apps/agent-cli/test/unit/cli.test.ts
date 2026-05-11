@@ -1,5 +1,5 @@
 import type OpenAI from "openai";
-import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { describe, expect, it, vi } from "vitest";
 import { renderAsyncCliEvent, runScheduledRound } from "../../src/cli.js";
 import type { AgentRuntimeState } from "../../src/agent-loop.js";
@@ -72,10 +72,10 @@ describe("runScheduledRound", () => {
       client: {} as OpenAI,
       model: "test-model",
       promptSource: PROMPT_SOURCE,
-      tools: [] as ChatCompletionTool[],
       printAsyncEvent: (label, content) => {
         notices.push(`${label}:${content}`);
       },
+      toolsResolver: async () => [],
       schedulerTick: async () => ({ scannedAt: "now", fired: [] }),
       peekScheduledCount: async () => 1,
       loopRunner: async ({ messages }) => {
@@ -106,10 +106,10 @@ describe("runScheduledRound", () => {
       client: {} as OpenAI,
       model: "test-model",
       promptSource: PROMPT_SOURCE,
-      tools: [] as ChatCompletionTool[],
       printAsyncEvent: (label, content) => {
         notices.push(`${label}:${content}`);
       },
+      toolsResolver: async () => [],
       schedulerTick: async () => ({ scannedAt: "now", fired: [] }),
       peekScheduledCount: async () => 1,
       loopRunner: async () => {},
@@ -132,10 +132,10 @@ describe("runScheduledRound", () => {
       client: {} as OpenAI,
       model: "test-model",
       promptSource: PROMPT_SOURCE,
-      tools: [] as ChatCompletionTool[],
       printAsyncEvent: (label, content) => {
         notices.push(`${label}:${content}`);
       },
+      toolsResolver: async () => [],
       schedulerTick: async () => ({ scannedAt: "now", fired: [] }),
       peekScheduledCount: async () => 1,
       loopRunner: async () => {

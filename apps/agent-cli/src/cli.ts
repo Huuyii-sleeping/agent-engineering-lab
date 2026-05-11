@@ -2,14 +2,12 @@ import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import type OpenAI from "openai";
-import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import { agentLoop, type AgentRuntimeState } from "./agent-loop.js";
-import { createClient, ensureModelConfigured, getStaticPromptSource, MODEL } from "./config.js";
-import { runHooks } from "./hooks/index.js";
-import type { StaticPromptSource } from "./prompt/types.js";
+import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
+import type { AgentRuntimeState } from "./agent-loop.js";
+import { createAgentAppRuntime, createAgentRuntimeState, type AgentAppRuntimeDeps } from "./bootstrap/app-runtime.js";
 import { RUNTIME_CONFIG } from "./runtime-config.js";
+import { runUserQuery } from "./runtime/query-runtime.js";
 import { withCompactRuntimeContext } from "./tools/base.js";
-import { listTools } from "./tools/index.js";
 import { peekScheduledNotificationCount, tickScheduler } from "./tools/scheduler.js";
 
 const PROMPT = "\u001b[36ms01 >> \u001b[0m";
@@ -30,22 +28,13 @@ type ScheduledRoundOptions = {
   runtimeState: AgentRuntimeState;
   client: OpenAI;
   model: string;
-  promptSource: StaticPromptSource;
+  promptSource: AgentAppRuntimeDeps["promptSource"];
   printAsyncEvent: (label: string, content: string) => void;
+  toolsResolver?: () => Promise<ChatCompletionTool[]>;
   schedulerTick?: typeof tickScheduler;
   peekScheduledCount?: typeof peekScheduledNotificationCount;
-  loopRunner?: typeof agentLoop;
+  loopRunner?: AgentAppRuntimeDeps["loopRunner"];
 };
-
-function appendSystemMessages(messages: ChatCompletionMessageParam[], items: string[]): void {
-  for (const item of items) {
-    const content = item.trim();
-    if (!content) {
-      continue;
-    }
-    messages.push({ role: "system", content });
-  }
-}
 
 function formatError(error: unknown): string {
   if (error instanceof Error) {
@@ -80,9 +69,10 @@ export function renderAsyncCliEvent(opts: {
 }
 
 export async function runScheduledRound(opts: ScheduledRoundOptions): Promise<boolean> {
+  const toolsResolver = opts.toolsResolver;
   const schedulerTick = opts.schedulerTick ?? tickScheduler;
   const peekScheduledCount = opts.peekScheduledCount ?? peekScheduledNotificationCount;
-  const loopRunner = opts.loopRunner ?? agentLoop;
+  const loopRunner = opts.loopRunner;
 
   try {
     if (opts.isAgentBusy()) {
@@ -98,7 +88,10 @@ export async function runScheduledRound(opts: ScheduledRoundOptions): Promise<bo
     opts.printAsyncEvent("scheduled due", `${dueCount} scheduled prompt${dueCount === 1 ? "" : "s"} due now.`);
     try {
       opts.history.push({ role: "user", content: "Handle any scheduled prompts that are due now." });
-      const tools = await listTools();
+      if (!toolsResolver || !loopRunner) {
+        throw new Error("scheduled round requires toolsResolver and loopRunner");
+      }
+      const tools = await toolsResolver();
       await withCompactRuntimeContext({ messages: opts.history }, async () =>
         loopRunner({
           client: opts.client,
@@ -131,21 +124,13 @@ export async function runScheduledRound(opts: ScheduledRoundOptions): Promise<bo
   }
 }
 
-export async function runCli(): Promise<void> {
-  ensureModelConfigured();
+type RunCliOverrides = Partial<AgentAppRuntimeDeps>;
+
+export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
+  const app = createAgentAppRuntime(overrides);
   const rl = createInterface({ input, output });
   const history: ChatCompletionMessageParam[] = [];
-  const client = createClient();
-  const promptSource = getStaticPromptSource();
-  const runtimeState: AgentRuntimeState = {
-    sessionId: randomUUID(),
-    roundsWithoutTodo: 0,
-    activeTaskId: null,
-    lastMemoryInput: null,
-    roundCounter: 0,
-    touchedPaths: new Set<string>(),
-    wroteWorkspaceFiles: false,
-  };
+  const runtimeState = createAgentRuntimeState(randomUUID());
   let agentBusy = false;
   let waitingForInput = false;
   const printAsyncEvent = (label: string, content: string) => {
@@ -166,10 +151,12 @@ export async function runCli(): Promise<void> {
       },
       history,
       runtimeState,
-      client,
-      model: MODEL,
-      promptSource,
+      client: app.client,
+      model: app.model,
+      promptSource: app.promptSource,
       printAsyncEvent,
+      toolsResolver: app.toolsResolver,
+      loopRunner: app.loopRunner,
     });
   }, RUNTIME_CONFIG.schedulerPollIntervalMs);
 
@@ -193,36 +180,26 @@ export async function runCli(): Promise<void> {
         break;
       }
 
-      const promptHooks = await runHooks("UserPromptSubmit", {
-        session_id: runtimeState.sessionId,
-        payload: { prompt: query },
-      });
-      if (promptHooks.blocked) {
-        console.log(`\u001b[31m[hook blocked]\u001b[0m ${promptHooks.blockReason ?? "prompt blocked by hook"}`);
-        console.log();
-        continue;
-      }
-      appendSystemMessages(history, promptHooks.messages);
-      history.push({ role: "user", content: query });
       agentBusy = true;
-      const tools = await listTools();
-      await withCompactRuntimeContext({ messages: history }, async () =>
-        agentLoop({
-          client,
-          model: MODEL,
-          promptSource,
-          tools,
-          messages: history,
+      try {
+        const result = await runUserQuery({
+          app,
+          history,
           runtimeState,
-        }),
-      );
-      agentBusy = false;
-
-      const lastMessage = history[history.length - 1];
-      if (lastMessage?.role === "assistant" && typeof lastMessage.content === "string") {
-        console.log(lastMessage.content);
+          prompt: query,
+        });
+        if (!result.ok) {
+          console.log(`\u001b[31m[hook blocked]\u001b[0m ${result.error.message}`);
+          console.log();
+          continue;
+        }
+        if (result.assistant) {
+          console.log(result.assistant);
+        }
+        console.log();
+      } finally {
+        agentBusy = false;
       }
-      console.log();
     }
   } finally {
     clearInterval(schedulerInterval);

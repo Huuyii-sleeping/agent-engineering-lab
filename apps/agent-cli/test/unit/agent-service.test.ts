@@ -2,7 +2,15 @@ import type OpenAI from "openai";
 import { afterEach, describe, expect, it } from "vitest";
 import { AgentService } from "../../src/agent-service.js";
 import type { AgentRuntimeState } from "../../src/agent-loop.js";
-import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import type { StaticPromptSource } from "../../src/prompt/types.js";
+
+const PROMPT_SOURCE: StaticPromptSource = {
+  core: "test-core",
+  tools: [],
+  skills: [],
+  rules: [],
+};
 
 function createLoopRunner() {
   return async ({ messages, runtimeState }: {
@@ -26,7 +34,8 @@ describe("agent service", () => {
     const service = new AgentService({
       client: {} as OpenAI,
       model: "fake-model",
-      tools: [] as ChatCompletionTool[],
+      promptSource: PROMPT_SOURCE,
+      toolsResolver: async () => [],
       loopRunner: createLoopRunner() as never,
     });
     const first = service.createSession();
@@ -41,7 +50,8 @@ describe("agent service", () => {
     const service = new AgentService({
       client: {} as OpenAI,
       model: "fake-model",
-      tools: [] as ChatCompletionTool[],
+      promptSource: PROMPT_SOURCE,
+      toolsResolver: async () => [],
       loopRunner: createLoopRunner() as never,
     });
     const a = service.createSession();

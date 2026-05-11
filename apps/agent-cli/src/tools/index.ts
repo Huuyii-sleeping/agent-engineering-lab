@@ -1,8 +1,7 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
-import { isReplayDryRun } from "../observability/runtime.js";
+import { executeProtectedToolHandler, parseToolArgs, resolveToolExecution } from "../runtime/tool-runtime.js";
 import { BASE_TOOLS, BASE_UNKNOWN_TOOL, previewBaseToolCall, runBaseToolByName } from "./base.js";
 import { listMcpTools, runMcpToolByName } from "./mcp.js";
-import { enforceSecurityGate } from "./security.js";
 import {
   SUBAGENT_TOOLS,
   runSubagentClose,
@@ -15,9 +14,6 @@ import {
 type ToolHandler = (args: Record<string, unknown>) => Promise<string>;
 
 const UNKNOWN_TOOL = BASE_UNKNOWN_TOOL;
-
-const TOOL_RUNTIME_ERROR = (message: string): string =>
-  JSON.stringify({ ok: false, error: { code: "TOOL_RUNTIME_ERROR", message } });
 
 const SUBAGENT_HANDLERS: Record<string, ToolHandler> = {
   subagent_spawn: async (args) => runSubagentSpawn(args.name),
@@ -32,14 +28,7 @@ export const TOOLS: ChatCompletionTool[] = [...BASE_TOOLS, ...SUBAGENT_TOOLS];
 export async function listTools(): Promise<ChatCompletionTool[]> {
   return [...TOOLS, ...(await listMcpTools())];
 }
-
-function parseToolArgs(argumentsJson: string): Record<string, unknown> {
-  try {
-    return JSON.parse(argumentsJson || "{}") as Record<string, unknown>;
-  } catch {
-    return {};
-  }
-}
+const SUBAGENT_TOOL_NAMES = new Set(Object.keys(SUBAGENT_HANDLERS));
 
 export function previewToolCall(name: string, argumentsJson: string): string {
   const basePreview = previewBaseToolCall(name, argumentsJson);
@@ -54,42 +43,29 @@ export function previewToolCall(name: string, argumentsJson: string): string {
 }
 
 export async function runToolByName(name: string, argumentsJson: string): Promise<string> {
-  const subagentHandler = SUBAGENT_HANDLERS[name];
-  if (subagentHandler) {
-    if (isReplayDryRun()) {
-      return JSON.stringify({
-        ok: false,
-        error: { code: "REPLAY_DRY_RUN_BLOCKED", message: `replay dry-run blocked tool ${name}` },
-      });
+  const execution = resolveToolExecution(name, argumentsJson, SUBAGENT_TOOL_NAMES);
+
+  if (execution.target === "subagent") {
+    const subagentHandler = SUBAGENT_HANDLERS[execution.name];
+    if (!subagentHandler) {
+      return UNKNOWN_TOOL;
     }
-    const args = parseToolArgs(argumentsJson);
-    const gate = await enforceSecurityGate(name, args);
-    if (!gate.ok) {
-      return gate.blocked;
-    }
-    try {
-      return await subagentHandler(args);
-    } catch (error) {
-      return TOOL_RUNTIME_ERROR(error instanceof Error ? error.message : String(error));
-    }
+    return executeProtectedToolHandler({
+      name: execution.name,
+      args: execution.args,
+      handler: subagentHandler,
+    });
   }
 
-  if (name.startsWith("mcp__")) {
-    if (isReplayDryRun()) {
-      return JSON.stringify({
-        ok: false,
-        error: { code: "REPLAY_DRY_RUN_BLOCKED", message: `replay dry-run blocked tool ${name}` },
-      });
-    }
-    const mcpArgs = parseToolArgs(argumentsJson);
-    const mcpGate = await enforceSecurityGate(name, mcpArgs);
-    if (!mcpGate.ok) {
-      return mcpGate.blocked;
-    }
-    const mcpOutput = await runMcpToolByName(name, mcpArgs);
-    if (mcpOutput !== null) {
-      return mcpOutput;
-    }
+  if (execution.target === "mcp") {
+    return executeProtectedToolHandler({
+      name: execution.name,
+      args: execution.args,
+      handler: async (args) => {
+        const mcpOutput = await runMcpToolByName(execution.name, args);
+        return mcpOutput ?? UNKNOWN_TOOL;
+      },
+    });
   }
 
   const baseOutput = await runBaseToolByName(name, argumentsJson);

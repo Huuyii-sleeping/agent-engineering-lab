@@ -1,8 +1,16 @@
 import { once } from "node:events";
 import type OpenAI from "openai";
-import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { AgentService, createAgentHttpServer } from "../../src/agent-service.js";
 import type { AgentRuntimeState } from "../../src/agent-loop.js";
+import type { StaticPromptSource } from "../../src/prompt/types.js";
+
+const PROMPT_SOURCE: StaticPromptSource = {
+  core: "test-core",
+  tools: [],
+  skills: [],
+  rules: [],
+};
 
 function assert(condition: unknown, message: string): void {
   if (!condition) {
@@ -27,7 +35,8 @@ async function main(): Promise<void> {
   const service = new AgentService({
     client: {} as OpenAI,
     model: "fake-model",
-    tools: [] as ChatCompletionTool[],
+    promptSource: PROMPT_SOURCE,
+    toolsResolver: async () => [],
     loopRunner: createLoopRunner() as never,
   });
   const server = createAgentHttpServer(service);

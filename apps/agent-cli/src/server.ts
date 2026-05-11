@@ -1,12 +1,12 @@
 import * as process from "node:process";
-import { createAgentHttpServer } from "./agent-service.js";
-import { ensureModelConfigured } from "./config.js";
+import { AgentService, createAgentHttpServer } from "./agent-service.js";
+import { createAgentAppRuntime } from "./bootstrap/app-runtime.js";
 
 const port = Number(process.env.AGENT_HTTP_PORT ?? 3181);
 
 export async function runServer(): Promise<void> {
-  ensureModelConfigured();
-  const server = createAgentHttpServer();
+  const service = new AgentService(createAgentAppRuntime());
+  const server = createAgentHttpServer(service);
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
     server.listen(port, "0.0.0.0", () => resolve());
