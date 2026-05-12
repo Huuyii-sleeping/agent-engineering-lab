@@ -1,6 +1,7 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { executeProtectedToolHandler } from "../runtime/tool-runtime.js";
-import { DEFAULT_DELIVERY_SERVICE, DEFAULT_MEMORY_SERVICE } from "../services/index.js";
+import { DEFAULT_DELIVERY_SERVICE } from "../services/delivery-service.js";
+import { DEFAULT_MEMORY_SERVICE } from "../services/memory-service.js";
 import {
   runAutonomyMarkActive,
   runAutonomySetOwner,
