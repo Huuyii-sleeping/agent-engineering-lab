@@ -3,6 +3,7 @@ import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import type OpenAI from "openai";
 import { createAgentAppRuntime, createAgentRuntimeState } from "../../../src/bootstrap/app-runtime.js";
 import type { DeliveryServiceLike } from "../../../src/delivery-service.js";
+import type { HookServiceLike } from "../../../src/hook-service.js";
 import type { StaticPromptSource } from "../../../src/prompt/types.js";
 
 describe("bootstrap/app-runtime", () => {
@@ -33,6 +34,16 @@ describe("bootstrap/app-runtime", () => {
       runValidateTool: vi.fn(async () => ""),
       runReportTool: vi.fn(async () => ""),
     };
+    const hookService: HookServiceLike = {
+      run: vi.fn(async () => ({
+        blocked: false,
+        blockReason: null,
+        messages: [],
+        matched: 0,
+        executed: 0,
+        errors: [],
+      })),
+    };
     const queryEngine = { run: vi.fn() };
 
     const runtime = createAgentAppRuntime({
@@ -41,6 +52,7 @@ describe("bootstrap/app-runtime", () => {
       promptSource,
       toolService,
       deliveryService,
+      hookService,
       queryEngine,
     });
 
@@ -48,6 +60,7 @@ describe("bootstrap/app-runtime", () => {
     expect(runtime.promptSource).toBe(promptSource);
     expect(runtime.toolService).toBe(toolService);
     expect(runtime.deliveryService).toBe(deliveryService);
+    expect(runtime.hookService).toBe(hookService);
     expect(runtime.queryEngine).toBe(queryEngine);
   });
 });

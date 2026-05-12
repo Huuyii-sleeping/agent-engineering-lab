@@ -1,20 +1,15 @@
 import OpenAI from "openai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentRuntimeState } from "../../../src/agent-loop.js";
+import type { HookServiceLike } from "../../../src/hook-service.js";
 import { runQueryToolStage } from "../../../src/runtime/query-tools.js";
 import type { ToolServiceLike } from "../../../src/tools/service.js";
-
-vi.mock("../../../src/hooks/index.js", () => ({
-  runHooks: vi.fn(),
-}));
 
 vi.mock("../../../src/observability/runtime.js", () => ({
   createSpanId: vi.fn(() => "span-test"),
   recordObservabilityEvent: vi.fn(async () => undefined),
   withExecutionContext: vi.fn(async (_context, fn: () => Promise<unknown>) => fn()),
 }));
-
-import { runHooks } from "../../../src/hooks/index.js";
 
 function createRuntimeState(): AgentRuntimeState {
   return {
@@ -38,6 +33,19 @@ function createToolService(): ToolServiceLike {
   };
 }
 
+function createHookService(): HookServiceLike {
+  return {
+    run: vi.fn(async () => ({
+      blocked: false,
+      blockReason: null,
+      messages: [],
+      matched: 0,
+      executed: 0,
+      errors: [],
+    })),
+  };
+}
+
 function createMessage(toolCalls: Array<{ id: string; name: string; argumentsJson: string }>): OpenAI.Chat.Completions.ChatCompletionMessage {
   return {
     role: "assistant",
@@ -56,28 +64,30 @@ function createMessage(toolCalls: Array<{ id: string; name: string; argumentsJso
 describe("runtime/query-tools", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(runHooks).mockResolvedValue({
-      blocked: false,
-      blockReason: null,
-      messages: [],
-    });
   });
 
   it("records successful write side effects and appends post-tool hook messages", async () => {
     const runtimeState = createRuntimeState();
     const messages = [] as Array<{ role: string; content?: string; tool_call_id?: string }>;
     const toolService = createToolService();
+    const hookService = createHookService();
     vi.mocked(toolService.runToolByName).mockResolvedValueOnce(JSON.stringify({ ok: true }));
-    vi.mocked(runHooks)
+    vi.mocked(hookService.run)
       .mockResolvedValueOnce({
         blocked: false,
         blockReason: null,
         messages: [],
+        matched: 1,
+        executed: 1,
+        errors: [],
       })
       .mockResolvedValueOnce({
         blocked: false,
         blockReason: null,
         messages: ["write reviewed by hook"],
+        matched: 1,
+        executed: 1,
+        errors: [],
       });
 
     const result = await runQueryToolStage({
@@ -92,6 +102,7 @@ describe("runtime/query-tools", () => {
       runtimeState,
       traceId: "trace-write",
       toolService,
+      hookService,
     });
 
     expect(result.usedTodo).toBe(false);
@@ -114,10 +125,14 @@ describe("runtime/query-tools", () => {
     const runtimeState = createRuntimeState();
     const messages = [] as Array<{ role: string; content?: string; tool_call_id?: string }>;
     const toolService = createToolService();
-    vi.mocked(runHooks).mockResolvedValueOnce({
+    const hookService = createHookService();
+    vi.mocked(hookService.run).mockResolvedValueOnce({
       blocked: true,
       blockReason: "blocked by test",
       messages: ["pre block notice"],
+      matched: 1,
+      executed: 1,
+      errors: [],
     });
 
     const result = await runQueryToolStage({
@@ -132,6 +147,7 @@ describe("runtime/query-tools", () => {
       runtimeState,
       traceId: "trace-blocked",
       toolService,
+      hookService,
     });
 
     expect(result.usedTodo).toBe(false);
@@ -149,6 +165,7 @@ describe("runtime/query-tools", () => {
     const runtimeState = createRuntimeState();
     const messages = [] as Array<{ role: string; content?: string; tool_call_id?: string }>;
     const toolService = createToolService();
+    const hookService = createHookService();
     vi.mocked(toolService.runToolByName)
       .mockResolvedValueOnce(JSON.stringify({ ok: true, id: 42 }))
       .mockResolvedValueOnce(JSON.stringify({ ok: true }))
@@ -176,6 +193,7 @@ describe("runtime/query-tools", () => {
       runtimeState,
       traceId: "trace-todo",
       toolService,
+      hookService,
     });
 
     expect(result.usedTodo).toBe(true);

@@ -1,6 +1,6 @@
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import type { DeliveryServiceLike } from "../delivery-service.js";
-import { runHooks } from "../hooks/index.js";
+import type { HookServiceLike } from "../hook-service.js";
 import { appendSystemMessages } from "./query-messages.js";
 import type { AgentRuntimeState } from "./query-types.js";
 
@@ -19,6 +19,7 @@ type RunQueryStopStageOptions = {
   traceId: string;
   stopReason: string;
   stopToolCallCount: number;
+  hookService: HookServiceLike;
 };
 
 export function finalizeAssistantOnlyRound(runtimeState: AgentRuntimeState): {
@@ -59,7 +60,7 @@ export async function finalizeToolDrivenRound(
 }
 
 export async function runQueryStopStage(opts: RunQueryStopStageOptions): Promise<void> {
-  const stopHooks = await runHooks("Stop", {
+  const stopHooks = await opts.hookService.run("Stop", {
     session_id: opts.runtimeState.sessionId,
     trace_id: opts.traceId,
     payload: {

@@ -1,6 +1,7 @@
 import type OpenAI from "openai";
 import { createClient, ensureModelConfigured, getDefaultModel, getStaticPromptSource } from "../config.js";
 import { DEFAULT_DELIVERY_SERVICE, type DeliveryServiceLike } from "../delivery-service.js";
+import { DEFAULT_HOOK_SERVICE, type HookServiceLike } from "../hook-service.js";
 import type { StaticPromptSource } from "../prompt/types.js";
 import { QueryEngine } from "../runtime/query-engine.js";
 import type { AgentRuntimeState, QueryEngineLike } from "../runtime/query-types.js";
@@ -12,6 +13,7 @@ export type AgentAppRuntimeDeps = {
   promptSource: StaticPromptSource;
   toolService: ToolServiceLike;
   deliveryService: DeliveryServiceLike;
+  hookService: HookServiceLike;
   queryEngine: QueryEngineLike;
 };
 
@@ -42,6 +44,7 @@ export function createAgentAppRuntime(overrides: AgentAppRuntimeOverrides = {}):
     promptSource,
     toolService: overrides.toolService ?? DEFAULT_TOOL_SERVICE,
     deliveryService: overrides.deliveryService ?? DEFAULT_DELIVERY_SERVICE,
+    hookService: overrides.hookService ?? DEFAULT_HOOK_SERVICE,
     queryEngine:
       overrides.queryEngine ??
       new QueryEngine({
@@ -50,6 +53,7 @@ export function createAgentAppRuntime(overrides: AgentAppRuntimeOverrides = {}):
         promptSource,
         toolService: overrides.toolService ?? DEFAULT_TOOL_SERVICE,
         deliveryService: overrides.deliveryService ?? DEFAULT_DELIVERY_SERVICE,
+        hookService: overrides.hookService ?? DEFAULT_HOOK_SERVICE,
       }),
   };
 }

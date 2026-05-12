@@ -2,6 +2,7 @@ import type OpenAI from "openai";
 import { afterEach, describe, expect, it } from "vitest";
 import { AgentService } from "../../src/agent-service.js";
 import type { DeliveryServiceLike } from "../../src/delivery-service.js";
+import type { HookServiceLike } from "../../src/hook-service.js";
 import type { AgentRuntimeState } from "../../src/agent-loop.js";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import type { StaticPromptSource } from "../../src/prompt/types.js";
@@ -51,6 +52,19 @@ function createDeliveryService(): DeliveryServiceLike {
   };
 }
 
+function createHookService(): HookServiceLike {
+  return {
+    run: async () => ({
+      blocked: false,
+      blockReason: null,
+      messages: [],
+      matched: 0,
+      executed: 0,
+      errors: [],
+    }),
+  };
+}
+
 afterEach(() => {
   delete process.env.MODEL_ID;
 });
@@ -63,6 +77,7 @@ describe("agent service", () => {
       promptSource: PROMPT_SOURCE,
       toolService: createToolService(),
       deliveryService: createDeliveryService(),
+      hookService: createHookService(),
       queryEngine: createLoopRunner(),
     });
     const first = service.createSession();
@@ -80,6 +95,7 @@ describe("agent service", () => {
       promptSource: PROMPT_SOURCE,
       toolService: createToolService(),
       deliveryService: createDeliveryService(),
+      hookService: createHookService(),
       queryEngine: createLoopRunner(),
     });
     const a = service.createSession();
@@ -119,6 +135,7 @@ describe("agent service", () => {
         ],
       }),
       deliveryService: createDeliveryService(),
+      hookService: createHookService(),
       queryEngine: createLoopRunner(),
     });
 

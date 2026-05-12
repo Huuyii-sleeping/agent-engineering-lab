@@ -29,6 +29,7 @@ import { finalizeAssistantOnlyRound, runQueryStopStage } from "../../../src/runt
 import { requestQueryModel } from "../../../src/runtime/query-model.js";
 import { prepareQueryRound } from "../../../src/runtime/query-preparation.js";
 import type { DeliveryServiceLike } from "../../../src/delivery-service.js";
+import type { HookServiceLike } from "../../../src/hook-service.js";
 import type { ToolServiceLike } from "../../../src/tools/service.js";
 
 function createRuntimeState(): AgentRuntimeState {
@@ -61,6 +62,19 @@ function createDeliveryService(): DeliveryServiceLike {
     },
     runValidateTool: async () => "",
     runReportTool: async () => "",
+  };
+}
+
+function createHookService(): HookServiceLike {
+  return {
+    run: async () => ({
+      blocked: false,
+      blockReason: null,
+      messages: [],
+      matched: 0,
+      executed: 0,
+      errors: [],
+    }),
   };
 }
 
@@ -98,6 +112,7 @@ describe("runtime/query-engine", () => {
       },
       toolService: createToolService(),
       deliveryService: createDeliveryService(),
+      hookService: createHookService(),
     });
     const runtimeState = createRuntimeState();
     const messages = [{ role: "user", content: "hello engine" }] as Array<{ role: "user" | "assistant"; content: string }>;
@@ -121,6 +136,7 @@ describe("runtime/query-engine", () => {
       traceId: "trace-query-engine",
       stopReason: "assistant_response",
       stopToolCallCount: 0,
+      hookService: expect.any(Object),
     });
   });
 });

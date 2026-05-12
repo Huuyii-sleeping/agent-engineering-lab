@@ -1,9 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-vi.mock("../../../src/hooks/index.js", () => ({
-  runHooks: vi.fn(async () => ({ blocked: false, messages: [] })),
-}));
-
 vi.mock("../../../src/runtime/query-notifications.js", () => ({
   collectDynamicSystemMessages: vi.fn(async () => []),
 }));
@@ -22,7 +17,7 @@ vi.mock("../../../src/tools/autonomy.js", () => ({
 }));
 
 import type { AgentRuntimeState } from "../../../src/agent-loop.js";
-import { runHooks } from "../../../src/hooks/index.js";
+import type { HookServiceLike } from "../../../src/hook-service.js";
 import { prepareQueryRound } from "../../../src/runtime/query-preparation.js";
 import { collectDynamicSystemMessages } from "../../../src/runtime/query-notifications.js";
 import { autoExtractMemory, buildMemoryInjectionForQuery } from "../../../src/tools/memory.js";
@@ -39,9 +34,21 @@ function createRuntimeState(): AgentRuntimeState {
   };
 }
 
+function createHookService(): HookServiceLike {
+  return {
+    run: vi.fn(async () => ({
+      blocked: false,
+      blockReason: null,
+      messages: [],
+      matched: 0,
+      executed: 0,
+      errors: [],
+    })),
+  };
+}
+
 describe("runtime/query-preparation", () => {
   beforeEach(() => {
-    vi.mocked(runHooks).mockResolvedValue({ blocked: false, messages: [] });
     vi.mocked(collectDynamicSystemMessages).mockResolvedValue([]);
     vi.mocked(autoExtractMemory).mockResolvedValue();
     vi.mocked(buildMemoryInjectionForQuery).mockResolvedValue({
@@ -52,16 +59,21 @@ describe("runtime/query-preparation", () => {
   });
 
   it("returns a blocked result when session-start hooks reject the round", async () => {
-    vi.mocked(runHooks).mockResolvedValue({
+    const hookService = createHookService();
+    vi.mocked(hookService.run).mockResolvedValue({
       blocked: true,
       blockReason: "policy denied",
       messages: [],
+      matched: 1,
+      executed: 1,
+      errors: [],
     });
 
     const result = await prepareQueryRound({
       runtimeState: createRuntimeState(),
       traceId: "trace_test",
       latestUserInput: "hello",
+      hookService,
     });
 
     expect(result).toEqual({
@@ -72,10 +84,15 @@ describe("runtime/query-preparation", () => {
 
   it("collects shared dynamic messages and memory context for the round", async () => {
     const runtimeState = createRuntimeState();
+    const hookService = createHookService();
     runtimeState.roundsWithoutTodo = 3;
-    vi.mocked(runHooks).mockResolvedValue({
+    vi.mocked(hookService.run).mockResolvedValue({
       blocked: false,
+      blockReason: null,
       messages: ["seed"],
+      matched: 1,
+      executed: 1,
+      errors: [],
     });
     vi.mocked(collectDynamicSystemMessages).mockResolvedValue(["seed"]);
     vi.mocked(buildMemoryInjectionForQuery).mockResolvedValue({
@@ -88,6 +105,7 @@ describe("runtime/query-preparation", () => {
       runtimeState,
       traceId: "trace_test",
       latestUserInput: "hello",
+      hookService,
     });
 
     expect(result).toEqual({

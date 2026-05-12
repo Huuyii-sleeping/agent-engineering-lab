@@ -1,6 +1,5 @@
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import type { AgentAppRuntimeDeps } from "../bootstrap/app-runtime.js";
-import { runHooks } from "../hooks/index.js";
 import { appendSystemMessages, findLastAssistantText } from "./query-messages.js";
 import type { AgentRuntimeState } from "./query-types.js";
 import { withCompactRuntimeContext } from "../tools/base.js";
@@ -27,7 +26,7 @@ type RunUserQueryOptions = {
 
 export async function runUserQuery(opts: RunUserQueryOptions): Promise<QueryRuntimeResult> {
   const prompt = opts.prompt.trim();
-  const promptHooks = await runHooks("UserPromptSubmit", {
+  const promptHooks = await opts.app.hookService.run("UserPromptSubmit", {
     session_id: opts.runtimeState.sessionId,
     payload: { prompt },
   });

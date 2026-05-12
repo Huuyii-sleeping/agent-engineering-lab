@@ -9,6 +9,7 @@ import { RUNTIME_CONFIG } from "../runtime-config.js";
 import type { QueryEngineRunInput } from "./query-types.js";
 import type OpenAI from "openai";
 import type { DeliveryServiceLike } from "../delivery-service.js";
+import type { HookServiceLike } from "../hook-service.js";
 import type { ToolServiceLike } from "../tools/service.js";
 
 type QueryEngineDeps = {
@@ -17,6 +18,7 @@ type QueryEngineDeps = {
   promptSource: StaticPromptSource;
   toolService: ToolServiceLike;
   deliveryService: DeliveryServiceLike;
+  hookService: HookServiceLike;
 };
 
 export class QueryEngine {
@@ -25,6 +27,7 @@ export class QueryEngine {
   private readonly promptSource: StaticPromptSource;
   private readonly toolService: ToolServiceLike;
   private readonly deliveryService: DeliveryServiceLike;
+  private readonly hookService: HookServiceLike;
 
   constructor(deps: QueryEngineDeps) {
     this.client = deps.client;
@@ -32,6 +35,7 @@ export class QueryEngine {
     this.promptSource = deps.promptSource;
     this.toolService = deps.toolService;
     this.deliveryService = deps.deliveryService;
+    this.hookService = deps.hookService;
   }
 
   async run(opts: QueryEngineRunInput): Promise<void> {
@@ -69,6 +73,7 @@ export class QueryEngine {
           runtimeState: opts.runtimeState,
           traceId,
           latestUserInput: latestUser?.content ?? "",
+          hookService: this.hookService,
         });
         if (!preparedRound.ok) {
           stopReason = "session_start_blocked";
@@ -110,6 +115,7 @@ export class QueryEngine {
           runtimeState: opts.runtimeState,
           traceId,
           toolService: this.toolService,
+          hookService: this.hookService,
         });
 
         stopReason = (
@@ -129,6 +135,7 @@ export class QueryEngine {
           traceId,
           stopReason,
           stopToolCallCount,
+          hookService: this.hookService,
         });
       }
     }

@@ -3,6 +3,7 @@ import type OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { AgentService, createAgentHttpServer } from "../../src/agent-service.js";
 import type { DeliveryServiceLike } from "../../src/delivery-service.js";
+import type { HookServiceLike } from "../../src/hook-service.js";
 import type { AgentRuntimeState } from "../../src/agent-loop.js";
 import type { StaticPromptSource } from "../../src/prompt/types.js";
 import type { ToolServiceLike } from "../../src/tools/service.js";
@@ -56,6 +57,19 @@ function createDeliveryService(): DeliveryServiceLike {
   };
 }
 
+function createHookService(): HookServiceLike {
+  return {
+    run: async () => ({
+      blocked: false,
+      blockReason: null,
+      messages: [],
+      matched: 0,
+      executed: 0,
+      errors: [],
+    }),
+  };
+}
+
 async function main(): Promise<void> {
   const service = new AgentService({
     client: {} as OpenAI,
@@ -63,6 +77,7 @@ async function main(): Promise<void> {
     promptSource: PROMPT_SOURCE,
     toolService: createToolService(),
     deliveryService: createDeliveryService(),
+    hookService: createHookService(),
     queryEngine: createLoopRunner(),
   });
   const server = createAgentHttpServer(service);

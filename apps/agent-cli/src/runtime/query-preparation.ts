@@ -1,5 +1,5 @@
 import type { AgentRuntimeState } from "../agent-loop.js";
-import { runHooks } from "../hooks/index.js";
+import type { HookServiceLike } from "../hook-service.js";
 import { collectDynamicSystemMessages } from "./query-notifications.js";
 import { autoExtractMemory, buildMemoryInjectionForQuery } from "../tools/memory.js";
 import { tickScheduler } from "../tools/scheduler.js";
@@ -20,12 +20,13 @@ type PrepareQueryRoundOptions = {
   runtimeState: AgentRuntimeState;
   traceId: string;
   latestUserInput: string;
+  hookService: HookServiceLike;
 };
 
 export async function prepareQueryRound(
   opts: PrepareQueryRoundOptions,
 ): Promise<QueryRoundPreparationResult> {
-  const sessionStartHooks = await runHooks("SessionStart", {
+  const sessionStartHooks = await opts.hookService.run("SessionStart", {
     session_id: opts.runtimeState.sessionId,
     trace_id: opts.traceId,
     payload: {

@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import { runHooks } from "../hooks/index.js";
+import type { HookServiceLike } from "../hook-service.js";
 import { createSpanId, recordObservabilityEvent, withExecutionContext } from "../observability/runtime.js";
 import type { ToolServiceLike } from "../tools/service.js";
 import { appendSystemMessages } from "./query-messages.js";
@@ -23,6 +23,7 @@ type RunQueryToolStageOptions = {
   runtimeState: AgentRuntimeState;
   traceId: string;
   toolService: ToolServiceLike;
+  hookService: HookServiceLike;
 };
 
 function makeHookBlockedOutput(reason: string | null): string {
@@ -115,7 +116,7 @@ export async function runQueryToolStage(opts: RunQueryToolStageOptions): Promise
     );
     console.log(`\u001b[33m$ ${preview}\u001b[0m`);
 
-    const preToolHooks = await runHooks("PreToolUse", {
+    const preToolHooks = await opts.hookService.run("PreToolUse", {
       session_id: opts.runtimeState.sessionId,
       trace_id: opts.traceId,
       span_id: spanId,
@@ -175,7 +176,7 @@ export async function runQueryToolStage(opts: RunQueryToolStageOptions): Promise
     if (analyzed.ok) {
       markWriteSideEffect(opts.runtimeState, toolName, toolArgs);
     }
-    const postToolHooks = await runHooks("PostToolUse", {
+    const postToolHooks = await opts.hookService.run("PostToolUse", {
       session_id: opts.runtimeState.sessionId,
       trace_id: opts.traceId,
       span_id: spanId,

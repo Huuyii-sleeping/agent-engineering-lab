@@ -1,16 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentRuntimeState } from "../../../src/agent-loop.js";
+import type { HookServiceLike } from "../../../src/hook-service.js";
 import {
   finalizeAssistantOnlyRound,
   finalizeToolDrivenRound,
   runQueryStopStage,
 } from "../../../src/runtime/query-finalization.js";
-
-vi.mock("../../../src/hooks/index.js", () => ({
-  runHooks: vi.fn(),
-}));
-
-import { runHooks } from "../../../src/hooks/index.js";
 import type { DeliveryServiceLike } from "../../../src/delivery-service.js";
 
 function createRuntimeState(): AgentRuntimeState {
@@ -34,14 +29,22 @@ function createDeliveryService(): DeliveryServiceLike {
   };
 }
 
-describe("runtime/query-finalization", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(runHooks).mockResolvedValue({
+function createHookService(): HookServiceLike {
+  return {
+    run: vi.fn(async () => ({
       blocked: false,
       blockReason: null,
       messages: [],
-    });
+      matched: 0,
+      executed: 0,
+      errors: [],
+    })),
+  };
+}
+
+describe("runtime/query-finalization", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
   it("increments roundsWithoutTodo for assistant-only rounds", () => {
@@ -149,10 +152,14 @@ describe("runtime/query-finalization", () => {
   it("appends stop hook system messages at finalization time", async () => {
     const runtimeState = createRuntimeState();
     const messages = [] as Array<{ role: string; content?: string }>;
-    vi.mocked(runHooks).mockResolvedValue({
+    const hookService = createHookService();
+    vi.mocked(hookService.run).mockResolvedValue({
       blocked: false,
       blockReason: null,
       messages: ["stop hook note"],
+      matched: 1,
+      executed: 1,
+      errors: [],
     });
 
     await runQueryStopStage({
@@ -161,9 +168,10 @@ describe("runtime/query-finalization", () => {
       traceId: "trace-stop",
       stopReason: "tool_calls_processed",
       stopToolCallCount: 2,
+      hookService,
     });
 
-    expect(runHooks).toHaveBeenCalledWith("Stop", {
+    expect(hookService.run).toHaveBeenCalledWith("Stop", {
       session_id: runtimeState.sessionId,
       trace_id: "trace-stop",
       payload: {
