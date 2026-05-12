@@ -1,7 +1,7 @@
 # scheduled-prompt-runtime Specification
 
 ## Purpose
-定义持久化调度运行时，用于保存未来提示词调度、扫描到期任务，并向主循环投递可恢复的通知。
+定义持久化调度运行时，用于保存未来提示词调度、按分钟扫描到期任务、去重触发结果，并向主循环投递可恢复且可持久化的通知。
 
 ## Requirements
 ### Requirement: Scheduler SHALL persist future prompt records

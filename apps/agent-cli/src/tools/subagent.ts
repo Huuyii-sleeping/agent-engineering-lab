@@ -5,7 +5,7 @@ import type {
 } from "openai/resources/chat/completions";
 import { MODEL, createClient } from "../config.js";
 import { classifyFallbackableError } from "../model-policy.js";
-import { DEFAULT_MODEL_POLICY_SERVICE } from "../model-policy-service.js";
+import { DEFAULT_MODEL_POLICY_SERVICE } from "../services/index.js";
 import { getExecutionContext, recordObservabilityEvent } from "../observability/runtime.js";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
 import { nowTimestampMs } from "../time.js";

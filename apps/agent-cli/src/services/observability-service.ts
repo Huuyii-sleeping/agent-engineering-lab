@@ -5,7 +5,7 @@ import {
   withExecutionContext,
   type ExecutionContext,
   type ObservabilityEvent,
-} from "./observability/runtime.js";
+} from "../observability/runtime.js";
 
 export type ObservabilityServiceLike = {
   createTraceId(): string;

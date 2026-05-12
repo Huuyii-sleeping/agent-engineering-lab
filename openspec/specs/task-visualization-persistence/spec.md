@@ -1,7 +1,7 @@
 # task-visualization-persistence Specification
 
 ## Purpose
-定义会话内 todo 可视化与会话外任务持久化能力，保证任务状态可追踪、可恢复且具备提醒机制。
+定义会话内 todo 可视化与会话外任务持久化能力，保证任务状态可追踪、可恢复、可绑定工作树，并通过提醒机制推动模型维护当前计划。
 ## Requirements
 ### Requirement: Agent SHALL provide todo visualization with strict status constraints
 系统 SHALL 提供 `todo(items)` 工具，用于维护会话内任务列表并可视化输出状态。

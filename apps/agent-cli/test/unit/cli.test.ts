@@ -75,8 +75,11 @@ describe("runScheduledRound", () => {
       printAsyncEvent: (label, content) => {
         notices.push(`${label}:${content}`);
       },
-      schedulerTick: async () => ({ scannedAt: "now", fired: [] }),
-      peekScheduledCount: async () => 1,
+      runtimeCoordinationService: {
+        runAutonomyTick: async () => ({}),
+        tickScheduler: async () => {},
+        peekScheduledPromptCount: async () => 1,
+      },
       queryEngine: {
         run: async ({ messages }) => {
           messages.push({ role: "assistant", content: "scheduled reply" });
@@ -110,8 +113,11 @@ describe("runScheduledRound", () => {
       printAsyncEvent: (label, content) => {
         notices.push(`${label}:${content}`);
       },
-      schedulerTick: async () => ({ scannedAt: "now", fired: [] }),
-      peekScheduledCount: async () => 1,
+      runtimeCoordinationService: {
+        runAutonomyTick: async () => ({}),
+        tickScheduler: async () => {},
+        peekScheduledPromptCount: async () => 1,
+      },
       queryEngine: {
         run: async () => {},
       },
@@ -137,8 +143,11 @@ describe("runScheduledRound", () => {
       printAsyncEvent: (label, content) => {
         notices.push(`${label}:${content}`);
       },
-      schedulerTick: async () => ({ scannedAt: "now", fired: [] }),
-      peekScheduledCount: async () => 1,
+      runtimeCoordinationService: {
+        runAutonomyTick: async () => ({}),
+        tickScheduler: async () => {},
+        peekScheduledPromptCount: async () => 1,
+      },
       queryEngine: {
         run: async () => {
           throw new Error("scheduler loop failed");

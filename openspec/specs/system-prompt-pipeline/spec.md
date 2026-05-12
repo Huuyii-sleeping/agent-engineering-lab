@@ -1,7 +1,7 @@
 # system-prompt-pipeline Specification
 
 ## Purpose
-定义统一的 system prompt 组装流水线，明确稳定规则、动态上下文与来源归属的拼装边界。
+定义统一的 system prompt 组装流水线，明确稳定规则、动态上下文、运行时通知、记忆注入与来源归属之间的拼装边界和测试契约。
 ## Requirements
 ### Requirement: System prompt SHALL be assembled by a centralized pipeline
 系统 SHALL 通过统一的 system prompt 组装流水线生成模型请求所需的主 system prompt 与补充 system messages，而不是在主循环和配置文件中分散拼接。

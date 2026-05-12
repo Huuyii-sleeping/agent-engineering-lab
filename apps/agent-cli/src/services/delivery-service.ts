@@ -4,7 +4,7 @@ import {
   runDeliveryValidateTool,
   runDeliveryValidation,
   type DeliveryReport,
-} from "./delivery.js";
+} from "../delivery.js";
 
 export type DeliveryServiceLike = {
   loadLatestReport(): Promise<DeliveryReport | null>;

@@ -1,5 +1,5 @@
-import { runAutonomyTick } from "./tools/autonomy.js";
-import { peekScheduledNotificationCount, tickScheduler } from "./tools/scheduler.js";
+import { runAutonomyTick } from "../tools/autonomy.js";
+import { peekScheduledNotificationCount, tickScheduler } from "../tools/scheduler.js";
 
 export type AutonomyTickResult = {
   ok?: boolean;

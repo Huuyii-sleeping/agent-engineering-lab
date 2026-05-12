@@ -1,7 +1,7 @@
 ﻿# core-agent-loop Specification
 
 ## Purpose
-定义 Agent 主循环、基础工具执行与 CLI 交互基线，作为后续能力扩展的统一运行骨架。
+定义 Agent 主循环、模型请求轮次、基础工具执行、运行时恢复和 CLI 交互基线，作为所有后续能力共享的统一执行骨架与兼容契约。
 ## Requirements
 ### Requirement: Agent loop SHALL handle tool-calling rounds deterministically
 主循环 MUST 在每轮前支持自治轮询入口，并在不破坏既有工具调用契约的前提下处理统一工具路由，包括 native、subagent 与 MCP 外部工具。

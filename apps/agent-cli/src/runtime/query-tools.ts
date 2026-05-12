@@ -1,7 +1,6 @@
 import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import type { HookServiceLike } from "../hook-service.js";
-import type { ObservabilityServiceLike } from "../observability-service.js";
+import type { HookServiceLike, ObservabilityServiceLike } from "../services/index.js";
 import type { ToolServiceLike } from "../tools/service.js";
 import { appendSystemMessages } from "./query-messages.js";
 import {

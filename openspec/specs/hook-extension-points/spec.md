@@ -1,4 +1,9 @@
-## ADDED Requirements
+# hook-extension-points Specification
+
+## Purpose
+定义 Agent 的项目级 Hook 扩展点、命令型 hook 执行契约和结构化决策返回格式，使工具、会话与停止事件能够被可配置逻辑安全拦截或补充。
+
+## Requirements
 
 ### Requirement: Agent SHALL provide a unified hook runner
 系统 SHALL 提供统一 Hook 运行时，用于读取项目级 `.codex/hooks.json`、执行匹配到的命令型 hook，并归并固定事件面的处理结果。

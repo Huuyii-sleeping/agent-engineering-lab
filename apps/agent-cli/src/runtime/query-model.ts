@@ -3,8 +3,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
 import type { AgentRuntimeState } from "../agent-loop.js";
 import { classifyFallbackableError } from "../model-policy.js";
-import type { ModelPolicyServiceLike } from "../model-policy-service.js";
-import type { ObservabilityServiceLike } from "../observability-service.js";
+import type { ModelPolicyServiceLike, ObservabilityServiceLike } from "../services/index.js";
 import { buildPromptEnvelope } from "../prompt/builder.js";
 import type { StaticPromptSource } from "../prompt/types.js";
 import {

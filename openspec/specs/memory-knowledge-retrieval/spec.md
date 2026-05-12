@@ -1,7 +1,7 @@
 # memory-knowledge-retrieval Specification
 
 ## Purpose
-定义 Agent 的持久化记忆、轻量检索和主循环注入能力，支持跨会话恢复用户偏好、约束与历史决策。
+定义 Agent 的持久化记忆、轻量检索、可解释命中与主循环注入能力，支持跨会话恢复用户偏好、约束和历史决策，同时受 token 预算约束。
 
 ## Requirements
 ### Requirement: Agent SHALL persist memory across sessions

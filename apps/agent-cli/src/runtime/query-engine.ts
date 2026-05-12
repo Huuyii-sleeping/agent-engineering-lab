@@ -1,5 +1,4 @@
 import { toAssistantMessage } from "../messages.js";
-import type { ObservabilityServiceLike } from "../observability-service.js";
 import type { StaticPromptSource } from "../prompt/types.js";
 import {
   finalizeAssistantOnlyRound,
@@ -12,13 +11,16 @@ import { runQueryToolStage } from "./query-tools.js";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
 import type { QueryEngineRunInput } from "./query-types.js";
 import type OpenAI from "openai";
-import type { DeliveryServiceLike } from "../delivery-service.js";
-import type { HookServiceLike } from "../hook-service.js";
-import type { MemoryServiceLike } from "../memory-service.js";
-import type { NotificationServiceLike } from "../notification-service.js";
-import type { ModelPolicyServiceLike } from "../model-policy-service.js";
+import type {
+  DeliveryServiceLike,
+  HookServiceLike,
+  MemoryServiceLike,
+  ModelPolicyServiceLike,
+  NotificationServiceLike,
+  ObservabilityServiceLike,
+  RuntimeCoordinationServiceLike,
+} from "../services/index.js";
 import type { ToolServiceLike } from "../tools/service.js";
-import type { RuntimeCoordinationServiceLike } from "../runtime-coordination-service.js";
 
 type QueryEngineDeps = {
   client: OpenAI;

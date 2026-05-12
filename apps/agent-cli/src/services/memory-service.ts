@@ -4,7 +4,7 @@ import {
   runMemoryAdd,
   runMemoryList,
   runMemorySearch,
-} from "./tools/memory.js";
+} from "../tools/memory.js";
 
 export type MemoryInjectionResult = {
   content: string | null;

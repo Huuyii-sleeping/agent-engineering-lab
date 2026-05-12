@@ -1,7 +1,7 @@
 # team-communication-protocol Specification
 
 ## Purpose
-定义多代理团队协作中的队友管理、消息投递与协议请求跟踪机制，作为团队通信的稳定基线。
+定义多代理团队协作中的队友管理、消息投递、协议请求跟踪、收件箱持久化与兼容读取机制，作为团队通信能力的稳定运行基线。
 ## Requirements
 ### Requirement: Agent SHALL provide teammate and message bus management
 系统 SHALL 提供队友管理和消息总线能力，使用 `.team/inbox/*.jsonl` 作为收件箱。

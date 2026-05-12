@@ -1,4 +1,4 @@
-import { MODEL_POLICY, type ModelRole, type ModelSelection } from "./model-policy.js";
+import { MODEL_POLICY, type ModelRole, type ModelSelection } from "../model-policy.js";
 
 export type ModelPolicyFinalizeUsage = {
   promptTokens: number;

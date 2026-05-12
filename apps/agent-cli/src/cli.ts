@@ -10,7 +10,7 @@ import {
 } from "./bootstrap/app-runtime.js";
 import { RUNTIME_CONFIG } from "./runtime-config.js";
 import { runUserQuery } from "./runtime/query-runtime.js";
-import type { RuntimeCoordinationServiceLike } from "./runtime-coordination-service.js";
+import type { RuntimeCoordinationServiceLike } from "./services/index.js";
 import type { AgentRuntimeState } from "./runtime/query-types.js";
 import { withCompactRuntimeContext } from "./tools/context-compact.js";
 

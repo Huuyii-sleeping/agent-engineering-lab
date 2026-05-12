@@ -5,28 +5,25 @@ import {
   getDefaultModel,
   getStaticPromptSource,
 } from "../config.js";
-import { DEFAULT_DELIVERY_SERVICE, type DeliveryServiceLike } from "../delivery-service.js";
-import { DEFAULT_HOOK_SERVICE, type HookServiceLike } from "../hook-service.js";
-import { DEFAULT_MEMORY_SERVICE, type MemoryServiceLike } from "../memory-service.js";
 import {
-  DEFAULT_NOTIFICATION_SERVICE,
-  type NotificationServiceLike,
-} from "../notification-service.js";
-import {
+  DEFAULT_DELIVERY_SERVICE,
+  DEFAULT_HOOK_SERVICE,
+  DEFAULT_MEMORY_SERVICE,
   DEFAULT_MODEL_POLICY_SERVICE,
-  type ModelPolicyServiceLike,
-} from "../model-policy-service.js";
-import {
+  DEFAULT_NOTIFICATION_SERVICE,
   DEFAULT_OBSERVABILITY_SERVICE,
+  DEFAULT_RUNTIME_COORDINATION_SERVICE,
+  type DeliveryServiceLike,
+  type HookServiceLike,
+  type MemoryServiceLike,
+  type ModelPolicyServiceLike,
+  type NotificationServiceLike,
   type ObservabilityServiceLike,
-} from "../observability-service.js";
+  type RuntimeCoordinationServiceLike,
+} from "../services/index.js";
 import type { StaticPromptSource } from "../prompt/types.js";
 import { QueryEngine } from "../runtime/query-engine.js";
 import type { AgentRuntimeState, QueryEngineLike } from "../runtime/query-types.js";
-import {
-  DEFAULT_RUNTIME_COORDINATION_SERVICE,
-  type RuntimeCoordinationServiceLike,
-} from "../runtime-coordination-service.js";
 import { DEFAULT_TOOL_SERVICE, type ToolServiceLike } from "../tools/service.js";
 
 export type AgentAppRuntimeDeps = {

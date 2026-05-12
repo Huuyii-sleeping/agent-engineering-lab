@@ -1,6 +1,6 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { executeProtectedToolHandler } from "../runtime/tool-runtime.js";
-import { DEFAULT_DELIVERY_SERVICE } from "../delivery-service.js";
+import { DEFAULT_DELIVERY_SERVICE, DEFAULT_MEMORY_SERVICE } from "../services/index.js";
 import {
   runAutonomyMarkActive,
   runAutonomySetOwner,
@@ -16,7 +16,6 @@ import {
   runEstimateTokens,
 } from "./context-compact.js";
 import { FILE_TOOLS, runEditFile, runReadFile, runWriteFile } from "./file-tools.js";
-import { DEFAULT_MEMORY_SERVICE } from "../memory-service.js";
 import { MEMORY_TOOLS } from "./memory.js";
 import { TASK_TOOLS, runTaskCreate, runTaskGet, runTaskList, runTaskUpdate } from "./task-board.js";
 import {

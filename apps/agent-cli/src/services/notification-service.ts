@@ -1,13 +1,13 @@
 import {
   drainBackgroundNotifications,
   type BackgroundNotification,
-} from "./tools/background-task.js";
+} from "../tools/background-task.js";
 import {
   drainScheduledNotifications,
   type ScheduledPromptNotification,
-} from "./tools/scheduler.js";
-import { drainSubagentNotifications, type SubagentNotification } from "./tools/subagent.js";
-import { drainTeamNotifications, type TeamNotification } from "./tools/team.js";
+} from "../tools/scheduler.js";
+import { drainSubagentNotifications, type SubagentNotification } from "../tools/subagent.js";
+import { drainTeamNotifications, type TeamNotification } from "../tools/team.js";
 
 export type PendingQueryNotifications = {
   scheduled: ScheduledPromptNotification[];

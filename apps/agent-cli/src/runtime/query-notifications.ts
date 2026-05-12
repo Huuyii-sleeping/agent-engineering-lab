@@ -1,5 +1,4 @@
-import type { NotificationServiceLike } from "../notification-service.js";
-import type { ObservabilityServiceLike } from "../observability-service.js";
+import type { NotificationServiceLike, ObservabilityServiceLike } from "../services/index.js";
 
 type CollectDynamicSystemMessagesOptions = {
   traceId: string;

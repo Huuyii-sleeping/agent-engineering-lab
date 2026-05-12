@@ -1,4 +1,4 @@
-import { runHooks, type HookEventName, type HookInvocation, type HookRunResult } from "./hooks/index.js";
+import { runHooks, type HookEventName, type HookInvocation, type HookRunResult } from "../hooks/index.js";
 
 export type HookServiceLike = {
   run(event: HookEventName, invocation: Omit<HookInvocation, "event" | "cwd">): Promise<HookRunResult>;

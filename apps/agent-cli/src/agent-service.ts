@@ -2,10 +2,9 @@ import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { createAgentRuntimeState, type AgentAppRuntimeDeps } from "./bootstrap/app-runtime.js";
-import type { NotificationServiceLike } from "./notification-service.js";
 import { runUserQuery } from "./runtime/query-runtime.js";
 import type { AgentRuntimeState } from "./runtime/query-types.js";
-import type { RuntimeCoordinationServiceLike } from "./runtime-coordination-service.js";
+import type { NotificationServiceLike, RuntimeCoordinationServiceLike } from "./services/index.js";
 
 type AgentSessionRecord = {
   id: string;

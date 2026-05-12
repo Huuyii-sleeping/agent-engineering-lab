@@ -1,9 +1,11 @@
 import type { AgentRuntimeState } from "../agent-loop.js";
-import type { HookServiceLike } from "../hook-service.js";
-import type { MemoryServiceLike } from "../memory-service.js";
-import type { NotificationServiceLike } from "../notification-service.js";
-import type { ObservabilityServiceLike } from "../observability-service.js";
-import type { RuntimeCoordinationServiceLike } from "../runtime-coordination-service.js";
+import type {
+  HookServiceLike,
+  MemoryServiceLike,
+  NotificationServiceLike,
+  ObservabilityServiceLike,
+  RuntimeCoordinationServiceLike,
+} from "../services/index.js";
 import { collectDynamicSystemMessages } from "./query-notifications.js";
 
 export type QueryRoundPreparationResult =

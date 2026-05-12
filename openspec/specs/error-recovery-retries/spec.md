@@ -1,7 +1,7 @@
 ﻿# error-recovery-retries Specification
 
 ## Purpose
-定义 Agent 在输出截断、上下文过长和瞬时传输失败等场景下的结构化恢复与有限重试策略。
+定义 Agent 在输出截断、上下文过长和瞬时传输失败等场景下的结构化恢复、独立预算控制与有限重试策略，避免静默失败或无限循环。
 
 ## Requirements
 ### Requirement: Recovery selector SHALL emit an explicit structured action

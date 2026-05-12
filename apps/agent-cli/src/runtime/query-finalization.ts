@@ -1,6 +1,5 @@
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import type { DeliveryServiceLike } from "../delivery-service.js";
-import type { HookServiceLike } from "../hook-service.js";
+import type { DeliveryServiceLike, HookServiceLike } from "../services/index.js";
 import { appendSystemMessages } from "./query-messages.js";
 import type { AgentRuntimeState } from "./query-types.js";
 
