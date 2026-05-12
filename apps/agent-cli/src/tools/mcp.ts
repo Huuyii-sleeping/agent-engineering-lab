@@ -1,52 +1,22 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import * as process from "node:process";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { getExecutionContext, recordObservabilityEvent } from "../observability/runtime.js";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
-import { toChatCompletionTool, type ToolRegistration } from "./protocol.js";
-
-type JsonRpcError = {
-  code: number;
-  message: string;
-  data?: unknown;
-};
-
-type JsonRpcResponse = {
-  jsonrpc?: string;
-  id?: number;
-  result?: unknown;
-  error?: JsonRpcError;
-};
-
-type McpToolDescriptor = {
-  name: string;
-  description: string;
-  inputSchema: Record<string, unknown>;
-};
-
-type McpCallResult = {
-  content?: Array<{ type?: string; text?: string }>;
-  structuredContent?: unknown;
-  isError?: boolean;
-};
-
-type McpServerConfig = {
-  name: string;
-  command: string;
-  args: string[];
-  env: Record<string, string>;
-  cwd: string;
-  enabled: boolean;
-  requestTimeoutMs: number;
-};
-
-export type McpToolRegistration = ToolRegistration & {
-  serverName: string;
-  remoteName: string;
-  target: "mcp";
-};
+import { loadMcpServerConfigs, type McpServerConfig } from "./mcp-config.js";
+import {
+  formatMcpFailure,
+  makeToolAlias,
+  normalizeMcpCallOutput,
+  parseCallResult,
+  parseToolsList,
+  writeFrame,
+  type JsonRpcResponse,
+  type McpCallResult,
+  type McpToolDescriptor,
+  type McpToolRegistration,
+} from "./mcp-protocol.js";
+import { toChatCompletionTool } from "./protocol.js";
 
 type PendingRequest = {
   method: string;
@@ -54,163 +24,6 @@ type PendingRequest = {
   reject: (reason?: unknown) => void;
   timer: NodeJS.Timeout;
 };
-
-function fail(code: string, message: string, extra?: Record<string, unknown>): string {
-  return JSON.stringify({ ok: false, error: { code, message }, ...(extra ?? {}) }, null, 2);
-}
-
-function sanitizeSegment(value: string): string {
-  const cleaned = value.replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
-  return cleaned || "tool";
-}
-
-function makeToolAlias(serverName: string, remoteName: string, used: Set<string>): string {
-  const prefix = `mcp__${sanitizeSegment(serverName)}__${sanitizeSegment(remoteName)}`;
-  let alias = prefix;
-  let counter = 2;
-  while (used.has(alias)) {
-    alias = `${prefix}_${counter}`;
-    counter += 1;
-  }
-  used.add(alias);
-  return alias;
-}
-
-function normalizeInputSchema(value: unknown): Record<string, unknown> {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
-  }
-  return { type: "object", properties: {} };
-}
-
-function extractTextContent(result: McpCallResult): string {
-  const lines = (result.content ?? [])
-    .filter((item) => item?.type === "text" && typeof item.text === "string")
-    .map((item) => item.text?.trim() ?? "")
-    .filter(Boolean);
-  return lines.join("\n");
-}
-
-function normalizeCallOutput(serverName: string, remoteName: string, result: McpCallResult): string {
-  if (result.structuredContent !== undefined) {
-    if (typeof result.structuredContent === "string") {
-      return result.structuredContent;
-    }
-    return `${JSON.stringify(result.structuredContent, null, 2)}\n`;
-  }
-  const text = extractTextContent(result);
-  if (result.isError) {
-    return fail("MCP_TOOL_CALL_FAILED", text || `mcp tool ${serverName}/${remoteName} failed`, {
-      server: serverName,
-      remoteTool: remoteName,
-    });
-  }
-  return JSON.stringify(
-    {
-      ok: true,
-      server: serverName,
-      remoteTool: remoteName,
-      content: text,
-    },
-    null,
-    2,
-  );
-}
-
-function parseToolsList(result: unknown): McpToolDescriptor[] {
-  const tools = (result as { tools?: unknown })?.tools;
-  if (!Array.isArray(tools)) {
-    return [];
-  }
-  return tools
-    .map((item) => {
-      if (!item || typeof item !== "object") {
-        return null;
-      }
-      const tool = item as Record<string, unknown>;
-      const name = String(tool.name ?? "").trim();
-      if (!name) {
-        return null;
-      }
-      return {
-        name,
-        description: String(tool.description ?? ""),
-        inputSchema: normalizeInputSchema(tool.inputSchema),
-      } satisfies McpToolDescriptor;
-    })
-    .filter((item): item is McpToolDescriptor => Boolean(item));
-}
-
-function parseCallResult(result: unknown): McpCallResult {
-  if (!result || typeof result !== "object") {
-    return {};
-  }
-  return result as McpCallResult;
-}
-
-function parseConfigObject(raw: string): { schemaVersion?: unknown; servers?: unknown } {
-  try {
-    return JSON.parse(raw) as { schemaVersion?: unknown; servers?: unknown };
-  } catch {
-    return {};
-  }
-}
-
-function normalizeStringMap(value: unknown): Record<string, string> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return {};
-  }
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, String(item ?? "")]),
-  );
-}
-
-function normalizeServerConfig(item: unknown): McpServerConfig | null {
-  if (!item || typeof item !== "object") {
-    return null;
-  }
-  const input = item as Record<string, unknown>;
-  const name = String(input.name ?? "").trim();
-  const command = String(input.command ?? "").trim();
-  if (!name || !command) {
-    return null;
-  }
-  const args = Array.isArray(input.args) ? input.args.map((value) => String(value)) : [];
-  const cwd = input.cwd ? path.resolve(process.cwd(), String(input.cwd)) : process.cwd();
-  const timeoutOverride = Number(input.requestTimeoutMs);
-  return {
-    name,
-    command,
-    args,
-    env: normalizeStringMap(input.env),
-    cwd,
-    enabled: input.enabled !== false,
-    requestTimeoutMs:
-      Number.isFinite(timeoutOverride) && timeoutOverride >= 100
-        ? Math.trunc(timeoutOverride)
-        : RUNTIME_CONFIG.mcpRequestTimeoutMs,
-  };
-}
-
-async function loadServerConfigs(): Promise<McpServerConfig[]> {
-  const configPath = path.join(process.cwd(), ".codex", "mcp.json");
-  const raw = await readFile(configPath, "utf8").catch(() => "");
-  if (!raw.trim()) {
-    return [];
-  }
-  const parsed = parseConfigObject(raw);
-  const servers = Array.isArray(parsed.servers) ? parsed.servers : [];
-  return servers
-    .map((item) => normalizeServerConfig(item))
-    .filter((item): item is McpServerConfig => Boolean(item))
-    .filter((item) => item.enabled);
-}
-
-function writeFrame(target: NodeJS.WritableStream, payload: unknown): void {
-  const body = JSON.stringify(payload);
-  const header = `Content-Length: ${Buffer.byteLength(body, "utf8")}\r\n\r\n`;
-  target.write(`${header}${body}`, "utf8");
-}
 
 class McpServerClient {
   private processRef: ChildProcessWithoutNullStreams | null = null;
@@ -510,7 +323,7 @@ class McpRegistry {
     }
     const client = this.clients.get(tool.serverName);
     if (!client) {
-      return fail("MCP_SERVER_NOT_FOUND", `mcp server ${tool.serverName} is not registered`, {
+      return formatMcpFailure("MCP_SERVER_NOT_FOUND", `mcp server ${tool.serverName} is not registered`, {
         server: tool.serverName,
       });
     }
@@ -519,7 +332,7 @@ class McpRegistry {
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
         const result = await client.callTool(tool.remoteName, args);
-        const output = normalizeCallOutput(tool.serverName, tool.remoteName, result);
+        const output = normalizeMcpCallOutput(tool.serverName, tool.remoteName, result);
         const context = getExecutionContext();
         await recordObservabilityEvent(
           "mcp_call",
@@ -559,13 +372,13 @@ class McpRegistry {
           : /not writable|invalid|failed|exited|spawn/i.test(message)
             ? "MCP_PROTOCOL_ERROR"
             : "MCP_TOOL_CALL_FAILED";
-        return fail(code, message, {
+        return formatMcpFailure(code, message, {
           server: tool.serverName,
           remoteTool: tool.remoteName,
         });
       }
     }
-    return fail("MCP_TOOL_CALL_FAILED", `mcp tool ${alias} failed`, {
+    return formatMcpFailure("MCP_TOOL_CALL_FAILED", `mcp tool ${alias} failed`, {
       server: tool.serverName,
       remoteTool: tool.remoteName,
     });
@@ -575,7 +388,7 @@ class McpRegistry {
 let ACTIVE_REGISTRY: { key: string; registry: McpRegistry } | null = null;
 
 async function getRegistry(): Promise<McpRegistry> {
-  const servers = await loadServerConfigs();
+  const servers = await loadMcpServerConfigs();
   const key = JSON.stringify({
     cwd: process.cwd(),
     servers: servers.map((server) => ({
