@@ -25,6 +25,7 @@ import { requestQueryModel } from "../../../src/runtime/query-model.js";
 import { prepareQueryRound } from "../../../src/runtime/query-preparation.js";
 import type { DeliveryServiceLike } from "../../../src/delivery-service.js";
 import type { HookServiceLike } from "../../../src/hook-service.js";
+import type { ModelPolicyServiceLike } from "../../../src/model-policy-service.js";
 import type { ObservabilityServiceLike } from "../../../src/observability-service.js";
 import type { ToolServiceLike } from "../../../src/tools/service.js";
 
@@ -71,6 +72,22 @@ function createHookService(): HookServiceLike {
       executed: 0,
       errors: [],
     }),
+  };
+}
+
+function createModelPolicyService(): ModelPolicyServiceLike {
+  return {
+    selectModel: async () => ({
+      role: "coding",
+      model: "test-model",
+      fallbackModel: null,
+      estimatedPromptTokens: 0,
+      estimatedPromptCostUsd: 0,
+      budgetAction: "allow",
+      budgetReason: null,
+    }),
+    selectFallbackModel: async () => null,
+    finalizeUsage: async () => undefined,
   };
 }
 
@@ -127,6 +144,7 @@ describe("runtime/query-engine", () => {
       toolService: createToolService(),
       deliveryService: createDeliveryService(),
       hookService,
+      modelPolicyService: createModelPolicyService(),
       observabilityService: createObservabilityService(),
     });
     const runtimeState = createRuntimeState();

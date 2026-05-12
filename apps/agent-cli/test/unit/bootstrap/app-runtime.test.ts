@@ -4,6 +4,7 @@ import type OpenAI from "openai";
 import { createAgentAppRuntime, createAgentRuntimeState } from "../../../src/bootstrap/app-runtime.js";
 import type { DeliveryServiceLike } from "../../../src/delivery-service.js";
 import type { HookServiceLike } from "../../../src/hook-service.js";
+import type { ModelPolicyServiceLike } from "../../../src/model-policy-service.js";
 import type { ObservabilityServiceLike } from "../../../src/observability-service.js";
 import type { StaticPromptSource } from "../../../src/prompt/types.js";
 
@@ -45,6 +46,19 @@ describe("bootstrap/app-runtime", () => {
         errors: [],
       })),
     };
+    const modelPolicyService: ModelPolicyServiceLike = {
+      selectModel: vi.fn(async () => ({
+        role: "coding",
+        model: "test-model",
+        fallbackModel: null,
+        estimatedPromptTokens: 0,
+        estimatedPromptCostUsd: 0,
+        budgetAction: "allow",
+        budgetReason: null,
+      })),
+      selectFallbackModel: vi.fn(async () => null),
+      finalizeUsage: vi.fn(async () => undefined),
+    };
     const observabilityService: ObservabilityServiceLike = {
       createTraceId: vi.fn(() => "trace-test"),
       createSpanId: vi.fn(() => "span-test"),
@@ -68,6 +82,7 @@ describe("bootstrap/app-runtime", () => {
       toolService,
       deliveryService,
       hookService,
+      modelPolicyService,
       observabilityService,
       queryEngine,
     });
@@ -77,6 +92,7 @@ describe("bootstrap/app-runtime", () => {
     expect(runtime.toolService).toBe(toolService);
     expect(runtime.deliveryService).toBe(deliveryService);
     expect(runtime.hookService).toBe(hookService);
+    expect(runtime.modelPolicyService).toBe(modelPolicyService);
     expect(runtime.observabilityService).toBe(observabilityService);
     expect(runtime.queryEngine).toBe(queryEngine);
   });

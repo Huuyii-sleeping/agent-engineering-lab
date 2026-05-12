@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AgentRuntimeState } from "../../../src/agent-loop.js";
 import type { DeliveryServiceLike } from "../../../src/delivery-service.js";
 import type { HookServiceLike } from "../../../src/hook-service.js";
+import type { ModelPolicyServiceLike } from "../../../src/model-policy-service.js";
 import type { ObservabilityServiceLike } from "../../../src/observability-service.js";
 import { runUserQuery } from "../../../src/runtime/query-runtime.js";
 import type { StaticPromptSource } from "../../../src/prompt/types.js";
@@ -52,6 +53,22 @@ function createHookService(overrides: Partial<HookServiceLike> = {}): HookServic
   };
 }
 
+function createModelPolicyService(): ModelPolicyServiceLike {
+  return {
+    selectModel: async () => ({
+      role: "coding",
+      model: "test-model",
+      fallbackModel: null,
+      estimatedPromptTokens: 0,
+      estimatedPromptCostUsd: 0,
+      budgetAction: "allow",
+      budgetReason: null,
+    }),
+    selectFallbackModel: async () => null,
+    finalizeUsage: async () => undefined,
+  };
+}
+
 function createObservabilityService(): ObservabilityServiceLike {
   return {
     createTraceId: () => "trace-test",
@@ -87,6 +104,7 @@ describe("runtime/query-runtime", () => {
         },
         deliveryService: createDeliveryService(),
         hookService,
+        modelPolicyService: createModelPolicyService(),
         observabilityService: createObservabilityService(),
         queryEngine: {
           run: async ({ messages }) => {
@@ -140,6 +158,7 @@ describe("runtime/query-runtime", () => {
         },
         deliveryService: createDeliveryService(),
         hookService,
+        modelPolicyService: createModelPolicyService(),
         observabilityService: createObservabilityService(),
         queryEngine: { run },
       },

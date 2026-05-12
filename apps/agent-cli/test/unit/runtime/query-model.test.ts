@@ -2,17 +2,13 @@ import type OpenAI from "openai";
 import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentRuntimeState } from "../../../src/agent-loop.js";
+import type { ModelPolicyServiceLike } from "../../../src/model-policy-service.js";
 import type { ObservabilityServiceLike } from "../../../src/observability-service.js";
 import { requestQueryModel } from "../../../src/runtime/query-model.js";
 import type { StaticPromptSource } from "../../../src/prompt/types.js";
 
 vi.mock("../../../src/model-policy.js", () => ({
   classifyFallbackableError: vi.fn(() => false),
-  MODEL_POLICY: {
-    selectModel: vi.fn(),
-    selectFallbackModel: vi.fn(),
-    finalizeUsage: vi.fn(async () => undefined),
-  },
 }));
 
 vi.mock("../../../src/tools/context-compact.js", () => ({
@@ -33,7 +29,7 @@ vi.mock("../../../src/tools/context-compact.js", () => ({
   estimateTokensFromMessages: vi.fn(() => 20),
 }));
 
-import { MODEL_POLICY } from "../../../src/model-policy.js";
+import { classifyFallbackableError } from "../../../src/model-policy.js";
 import { compactMessages, estimateTokensFromMessages } from "../../../src/tools/context-compact.js";
 
 const PROMPT_SOURCE: StaticPromptSource = {
@@ -88,11 +84,9 @@ function createObservabilityService(): ObservabilityServiceLike {
   };
 }
 
-describe("runtime/query-model", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(estimateTokensFromMessages).mockReturnValue(20);
-    vi.mocked(MODEL_POLICY.selectModel).mockResolvedValue({
+function createModelPolicyService(): ModelPolicyServiceLike {
+  return {
+    selectModel: vi.fn(async () => ({
       role: "coding",
       model: "primary-model",
       fallbackModel: "fallback-model",
@@ -100,8 +94,17 @@ describe("runtime/query-model", () => {
       estimatedPromptCostUsd: 0.01,
       budgetAction: "allow",
       budgetReason: null,
-    });
-    vi.mocked(MODEL_POLICY.selectFallbackModel).mockResolvedValue(null);
+    })),
+    selectFallbackModel: vi.fn(async () => null),
+    finalizeUsage: vi.fn(async () => undefined),
+  };
+}
+
+describe("runtime/query-model", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(estimateTokensFromMessages).mockReturnValue(20);
+    vi.mocked(classifyFallbackableError).mockReturnValue(false);
   });
 
   it("continues after truncated text output and merges the final assistant content", async () => {
@@ -131,6 +134,7 @@ describe("runtime/query-model", () => {
     });
     const messages: ChatCompletionMessageParam[] = [{ role: "user", content: "continue" }];
     const observabilityService = createObservabilityService();
+    const modelPolicyService = createModelPolicyService();
 
     const result = await requestQueryModel({
       client,
@@ -143,6 +147,7 @@ describe("runtime/query-model", () => {
       latestUserInput: "continue",
       memoryContext: null,
       dynamicSystemMessages: [],
+      modelPolicyService,
       observabilityService,
     });
 
@@ -186,6 +191,7 @@ describe("runtime/query-model", () => {
       { role: "user", content: "trigger compact" },
     ];
     const observabilityService = createObservabilityService();
+    const modelPolicyService = createModelPolicyService();
 
     const result = await requestQueryModel({
       client,
@@ -198,6 +204,7 @@ describe("runtime/query-model", () => {
       latestUserInput: "trigger compact",
       memoryContext: null,
       dynamicSystemMessages: [],
+      modelPolicyService,
       observabilityService,
     });
 
@@ -215,7 +222,13 @@ describe("runtime/query-model", () => {
   });
 
   it("stops early and appends a denial message when budget policy rejects the request", async () => {
-    vi.mocked(MODEL_POLICY.selectModel).mockResolvedValue({
+    const client = createClient(async () => {
+      throw new Error("should not call model API when budget is denied");
+    });
+    const messages: ChatCompletionMessageParam[] = [{ role: "user", content: "budget deny" }];
+    const observabilityService = createObservabilityService();
+    const modelPolicyService = createModelPolicyService();
+    vi.mocked(modelPolicyService.selectModel).mockResolvedValue({
       role: "coding",
       model: "primary-model",
       fallbackModel: null,
@@ -224,11 +237,6 @@ describe("runtime/query-model", () => {
       budgetAction: "deny",
       budgetReason: "daily_budget_exceeded",
     });
-    const client = createClient(async () => {
-      throw new Error("should not call model API when budget is denied");
-    });
-    const messages: ChatCompletionMessageParam[] = [{ role: "user", content: "budget deny" }];
-    const observabilityService = createObservabilityService();
 
     const result = await requestQueryModel({
       client,
@@ -241,6 +249,7 @@ describe("runtime/query-model", () => {
       latestUserInput: "budget deny",
       memoryContext: null,
       dynamicSystemMessages: [],
+      modelPolicyService,
       observabilityService,
     });
 

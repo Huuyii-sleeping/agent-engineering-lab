@@ -2,6 +2,7 @@ import { QueryEngine } from "./runtime/query-engine.js";
 import type { QueryLoopOptions } from "./runtime/query-types.js";
 import { DEFAULT_DELIVERY_SERVICE } from "./delivery-service.js";
 import { DEFAULT_HOOK_SERVICE } from "./hook-service.js";
+import { DEFAULT_MODEL_POLICY_SERVICE } from "./model-policy-service.js";
 import { DEFAULT_OBSERVABILITY_SERVICE } from "./observability-service.js";
 import { DEFAULT_TOOL_SERVICE } from "./tools/service.js";
 
@@ -15,6 +16,7 @@ export async function agentLoop(opts: QueryLoopOptions): Promise<void> {
     toolService: DEFAULT_TOOL_SERVICE,
     deliveryService: DEFAULT_DELIVERY_SERVICE,
     hookService: DEFAULT_HOOK_SERVICE,
+    modelPolicyService: DEFAULT_MODEL_POLICY_SERVICE,
     observabilityService: DEFAULT_OBSERVABILITY_SERVICE,
   });
   await engine.run({

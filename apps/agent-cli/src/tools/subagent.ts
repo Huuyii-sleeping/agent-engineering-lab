@@ -4,7 +4,8 @@ import type {
   ChatCompletionTool,
 } from "openai/resources/chat/completions";
 import { MODEL, createClient } from "../config.js";
-import { classifyFallbackableError, MODEL_POLICY } from "../model-policy.js";
+import { classifyFallbackableError } from "../model-policy.js";
+import { DEFAULT_MODEL_POLICY_SERVICE } from "../model-policy-service.js";
 import { getExecutionContext, recordObservabilityEvent } from "../observability/runtime.js";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
 import { nowTimestampMs } from "../time.js";
@@ -163,7 +164,7 @@ class SubagentManager {
 
       for (let round = 0; round < RUNTIME_CONFIG.subagentMaxRounds; round += 1) {
         const promptTokens = Math.ceil(JSON.stringify(messages).length / 4);
-        const selection = await MODEL_POLICY.selectModel("ops", MODEL, promptTokens);
+        const selection = await DEFAULT_MODEL_POLICY_SERVICE.selectModel("ops", MODEL, promptTokens);
         if (selection.budgetAction === "deny") {
           record.status = "failed";
           record.updatedAt = this.now();
@@ -202,7 +203,7 @@ class SubagentManager {
         if (!message) {
           break;
         }
-        await MODEL_POLICY.finalizeUsage(
+        await DEFAULT_MODEL_POLICY_SERVICE.finalizeUsage(
           {
             role: "ops",
             model: modelUsed,

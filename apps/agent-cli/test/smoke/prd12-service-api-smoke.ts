@@ -5,6 +5,7 @@ import { AgentService, createAgentHttpServer } from "../../src/agent-service.js"
 import type { DeliveryServiceLike } from "../../src/delivery-service.js";
 import type { HookServiceLike } from "../../src/hook-service.js";
 import type { AgentRuntimeState } from "../../src/agent-loop.js";
+import type { ModelPolicyServiceLike } from "../../src/model-policy-service.js";
 import type { ObservabilityServiceLike } from "../../src/observability-service.js";
 import type { StaticPromptSource } from "../../src/prompt/types.js";
 import type { ToolServiceLike } from "../../src/tools/service.js";
@@ -71,6 +72,22 @@ function createHookService(): HookServiceLike {
   };
 }
 
+function createModelPolicyService(): ModelPolicyServiceLike {
+  return {
+    selectModel: async () => ({
+      role: "coding",
+      model: "fake-model",
+      fallbackModel: null,
+      estimatedPromptTokens: 0,
+      estimatedPromptCostUsd: 0,
+      budgetAction: "allow",
+      budgetReason: null,
+    }),
+    selectFallbackModel: async () => null,
+    finalizeUsage: async () => undefined,
+  };
+}
+
 function createObservabilityService(): ObservabilityServiceLike {
   return {
     createTraceId: () => "trace-test",
@@ -96,6 +113,7 @@ async function main(): Promise<void> {
     toolService: createToolService(),
     deliveryService: createDeliveryService(),
     hookService: createHookService(),
+    modelPolicyService: createModelPolicyService(),
     observabilityService: createObservabilityService(),
     queryEngine: createLoopRunner(),
   });

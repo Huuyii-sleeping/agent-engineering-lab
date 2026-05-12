@@ -2,7 +2,8 @@ import OpenAI from "openai";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
 import type { AgentRuntimeState } from "../agent-loop.js";
-import { classifyFallbackableError, MODEL_POLICY } from "../model-policy.js";
+import { classifyFallbackableError } from "../model-policy.js";
+import type { ModelPolicyServiceLike } from "../model-policy-service.js";
 import type { ObservabilityServiceLike } from "../observability-service.js";
 import { buildPromptEnvelope } from "../prompt/builder.js";
 import type { StaticPromptSource } from "../prompt/types.js";
@@ -37,6 +38,7 @@ type RequestQueryModelOptions = {
   latestUserInput: string;
   memoryContext: string | null;
   dynamicSystemMessages: string[];
+  modelPolicyService: ModelPolicyServiceLike;
   observabilityService: ObservabilityServiceLike;
 };
 
@@ -139,7 +141,7 @@ export async function requestQueryModel(opts: RequestQueryModelOptions): Promise
       { traceId: opts.traceId },
     );
 
-    const selection = await MODEL_POLICY.selectModel("coding", opts.model, estimatedPromptTokens);
+    const selection = await opts.modelPolicyService.selectModel("coding", opts.model, estimatedPromptTokens);
     await opts.observabilityService.recordEvent(
       "model_policy_selection",
       {
@@ -195,7 +197,7 @@ export async function requestQueryModel(opts: RequestQueryModelOptions): Promise
         },
         { traceId: opts.traceId },
       );
-      await MODEL_POLICY.finalizeUsage(
+      await opts.modelPolicyService.finalizeUsage(
         {
           role: "coding",
           model: selectedModel,
@@ -245,7 +247,12 @@ export async function requestQueryModel(opts: RequestQueryModelOptions): Promise
         : candidate;
     } catch (error) {
       if (classifyFallbackableError(error)) {
-        const fallbackSelection = await MODEL_POLICY.selectFallbackModel("coding", opts.model, estimatedPromptTokens, selectedModel);
+        const fallbackSelection = await opts.modelPolicyService.selectFallbackModel(
+          "coding",
+          opts.model,
+          estimatedPromptTokens,
+          selectedModel,
+        );
         if (fallbackSelection) {
           try {
             const retryStartedAt = Date.now();
@@ -269,7 +276,7 @@ export async function requestQueryModel(opts: RequestQueryModelOptions): Promise
                 },
                 { traceId: opts.traceId },
               );
-              await MODEL_POLICY.finalizeUsage(
+              await opts.modelPolicyService.finalizeUsage(
                 {
                   role: "coding",
                   model: fallbackSelection.model,
