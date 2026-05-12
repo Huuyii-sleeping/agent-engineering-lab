@@ -51,13 +51,14 @@ async function main(): Promise<void> {
   await withWorkspace("prd19-mcp-smoke", async () => {
     await writeMcpConfig();
 
-    const [{ agentLoop }, { withCompactRuntimeContext }, toolsModule, securityModule, mcpModule] = await Promise.all([
-      import("../../src/agent-loop.js"),
-      import("../../src/tools/base.js"),
-      import("../../src/tools/index.js"),
-      import("../../src/tools/security.js"),
-      import("../../src/tools/mcp.js"),
-    ]);
+    const [{ agentLoop }, { withCompactRuntimeContext }, toolsModule, securityModule, mcpModule] =
+      await Promise.all([
+        import("../../src/agent-loop.js"),
+        import("../../src/tools/context-compact.js"),
+        import("../../src/tools/index.js"),
+        import("../../src/tools/security.js"),
+        import("../../src/tools/mcp.js"),
+      ]);
 
     const tools = await toolsModule.listTools();
     const externalTool = tools.find(
@@ -66,7 +67,10 @@ async function main(): Promise<void> {
     assert(externalTool, "expected mcp tool to be listed");
 
     const approval = JSON.parse(
-      await securityModule.runSecurityRequestApproval("mcp__demo__echo_upper", '{"text":"mixed round"}'),
+      await securityModule.runSecurityRequestApproval(
+        "mcp__demo__echo_upper",
+        '{"text":"mixed round"}',
+      ),
     ) as { request?: { request_id?: string } };
     await securityModule.runSecurityApprove(approval.request?.request_id);
 
@@ -129,7 +133,9 @@ async function main(): Promise<void> {
       },
     } as unknown as OpenAI;
 
-    const messages: ChatCompletionMessageParam[] = [{ role: "user", content: "run native and mcp in one round" }];
+    const messages: ChatCompletionMessageParam[] = [
+      { role: "user", content: "run native and mcp in one round" },
+    ];
     await withCompactRuntimeContext({ messages }, async () =>
       agentLoop({
         client,
@@ -160,7 +166,10 @@ async function main(): Promise<void> {
     const mcpOutput = JSON.parse(String(toolMessages[1]?.content ?? "{}")) as { echoed?: string };
     assert(typeof nativeOutput.id === "number", "task_create should produce a task id");
     assert(mcpOutput.echoed === "MIXED ROUND", "mcp tool should uppercase the payload");
-    assert(messages[messages.length - 1]?.role === "assistant", "assistant reply should be appended");
+    assert(
+      messages[messages.length - 1]?.role === "assistant",
+      "assistant reply should be appended",
+    );
     assert(
       typeof messages[messages.length - 1]?.content === "string" &&
         messages[messages.length - 1]?.content.includes("mixed round complete"),

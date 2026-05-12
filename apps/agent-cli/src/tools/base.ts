@@ -1,4 +1,3 @@
-import { AsyncLocalStorage } from "node:async_hooks";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { executeProtectedToolHandler } from "../runtime/tool-runtime.js";
 import { DEFAULT_DELIVERY_SERVICE } from "../delivery-service.js";
@@ -10,18 +9,22 @@ import {
 } from "./autonomy.js";
 import { BASH_TOOLS, readCommandArgs, runBash } from "./bash.js";
 import { BACKGROUND_TOOLS, runBackgroundRun, runCheckBackground } from "./background-task.js";
-import { CONTEXT_TOOLS, type CompactRuntimeContext, runCompact, runEstimateTokens } from "./context-compact.js";
+import {
+  CONTEXT_TOOLS,
+  getCompactRuntimeContext,
+  runCompact,
+  runEstimateTokens,
+} from "./context-compact.js";
 import { FILE_TOOLS, runEditFile, runReadFile, runWriteFile } from "./file-tools.js";
 import { DEFAULT_MEMORY_SERVICE } from "../memory-service.js";
 import { MEMORY_TOOLS } from "./memory.js";
+import { TASK_TOOLS, runTaskCreate, runTaskGet, runTaskList, runTaskUpdate } from "./task-board.js";
 import {
-  TASK_TOOLS,
-  runTaskCreate,
-  runTaskGet,
-  runTaskList,
-  runTaskUpdate,
-} from "./task-board.js";
-import { runScheduleCreate, runScheduleList, runScheduleRemove, SCHEDULER_TOOLS } from "./scheduler.js";
+  runScheduleCreate,
+  runScheduleList,
+  runScheduleRemove,
+  SCHEDULER_TOOLS,
+} from "./scheduler.js";
 import {
   TEAM_TOOLS,
   runTeamAddTeammate,
@@ -80,18 +83,18 @@ export const BASE_UNKNOWN_TOOL = JSON.stringify({
   error: { code: "UNKNOWN_TOOL", message: "未知工具" },
 });
 
-const COMPACT_RUNTIME_CONTEXT = new AsyncLocalStorage<CompactRuntimeContext>();
-
 const BASE_HANDLERS: Record<string, ToolHandler> = {
   bash: async (args) => runBash(String(args.command ?? "")),
   read_file: async (args) => runReadFile(args.path, args.limit),
   write_file: async (args) => runWriteFile(args.path, args.content),
   edit_file: async (args) => runEditFile(args.path, args.old_text, args.new_text),
-  delivery_validate: async (args) => DEFAULT_DELIVERY_SERVICE.runValidateTool(args.changed_paths, args.mode),
+  delivery_validate: async (args) =>
+    DEFAULT_DELIVERY_SERVICE.runValidateTool(args.changed_paths, args.mode),
   delivery_report: async () => DEFAULT_DELIVERY_SERVICE.runReportTool(),
   memory_add: async (args) =>
     DEFAULT_MEMORY_SERVICE.runAdd(args.source, args.type, args.tags, args.content, args.confidence),
-  memory_search: async (args) => DEFAULT_MEMORY_SERVICE.runSearch(args.query, args.limit, args.layer, args.type),
+  memory_search: async (args) =>
+    DEFAULT_MEMORY_SERVICE.runSearch(args.query, args.limit, args.layer, args.type),
   memory_list: async (args) => DEFAULT_MEMORY_SERVICE.runList(args.layer, args.limit),
   todo: async (args) => runTodo(args.items),
   task_create: async (args) => runTaskCreate(args.subject, args.description),
@@ -108,18 +111,20 @@ const BASE_HANDLERS: Record<string, ToolHandler> = {
     ),
   task_list: async () => runTaskList(),
   task_get: async (args) => runTaskGet(args.task_id),
-  schedule_create: async (args) => runScheduleCreate(args.cron, args.prompt, args.recurring, args.durable),
+  schedule_create: async (args) =>
+    runScheduleCreate(args.cron, args.prompt, args.recurring, args.durable),
   schedule_list: async () => runScheduleList(),
   schedule_remove: async (args) => runScheduleRemove(args.id),
-  estimate_tokens: async () => runEstimateTokens(COMPACT_RUNTIME_CONTEXT.getStore()),
-  compact: async (args) => runCompact(args.keep_recent, COMPACT_RUNTIME_CONTEXT.getStore()),
+  estimate_tokens: async () => runEstimateTokens(getCompactRuntimeContext()),
+  compact: async (args) => runCompact(args.keep_recent, getCompactRuntimeContext()),
   background_run: async (args) => runBackgroundRun(args.command),
   check_background: async (args) => runCheckBackground(args.task_id),
   team_add_teammate: async (args) => runTeamAddTeammate(args.name),
   team_set_status: async (args) => runTeamSetStatus(args.teammate_id, args.status),
   team_message: async (args) => runTeamMessage(args.teammate_id, args.content, args.from),
   team_broadcast: async (args) => runTeamBroadcast(args.content, args.from),
-  team_shutdown_request: async (args) => runTeamShutdownRequest(args.teammate_id, args.payload, args.from),
+  team_shutdown_request: async (args) =>
+    runTeamShutdownRequest(args.teammate_id, args.payload, args.from),
   team_shutdown_response: async (args) =>
     runTeamShutdownResponse(args.request_id, args.approve, args.note, args.from),
   team_plan_approval_request: async (args) =>
@@ -141,7 +146,8 @@ const BASE_HANDLERS: Record<string, ToolHandler> = {
   worktree_run: async (args) => runWorktreeRun(args.name, args.command),
   worktree_keep: async (args) => runWorktreeKeep(args.name, args.task_id),
   worktree_remove: async (args) => runWorktreeRemove(args.name, args.force, args.task_id),
-  worktree_closeout: async (args) => runWorktreeCloseout(args.name, args.action, args.force, args.task_id),
+  worktree_closeout: async (args) =>
+    runWorktreeCloseout(args.name, args.action, args.force, args.task_id),
   autonomy_set_owner: async (args) => runAutonomySetOwner(args.owner),
   autonomy_status: async () => runAutonomyStatus(),
   autonomy_tick: async () => runAutonomyTick(),
@@ -155,7 +161,8 @@ export const BASE_TOOLS: ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "delivery_validate",
-      description: "Run the centralized delivery validation pipeline and persist a delivery report.",
+      description:
+        "Run the centralized delivery validation pipeline and persist a delivery report.",
       parameters: {
         type: "object",
         properties: {
@@ -225,10 +232,6 @@ export const BASE_TOOLS: ChatCompletionTool[] = [
     },
   },
 ];
-
-export async function withCompactRuntimeContext<T>(context: CompactRuntimeContext, fn: () => Promise<T>): Promise<T> {
-  return COMPACT_RUNTIME_CONTEXT.run(context, fn);
-}
 
 function parseToolArgs(argumentsJson: string): Record<string, unknown> {
   try {

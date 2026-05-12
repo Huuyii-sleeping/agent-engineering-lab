@@ -12,7 +12,7 @@ import { RUNTIME_CONFIG } from "./runtime-config.js";
 import { runUserQuery } from "./runtime/query-runtime.js";
 import type { RuntimeCoordinationServiceLike } from "./runtime-coordination-service.js";
 import type { AgentRuntimeState } from "./runtime/query-types.js";
-import { withCompactRuntimeContext } from "./tools/base.js";
+import { withCompactRuntimeContext } from "./tools/context-compact.js";
 
 const PROMPT = "\u001b[36ms01 >> \u001b[0m";
 

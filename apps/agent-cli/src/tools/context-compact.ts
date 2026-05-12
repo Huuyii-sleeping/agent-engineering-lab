@@ -1,7 +1,11 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
-import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
+import type {
+  ChatCompletionMessageParam,
+  ChatCompletionTool,
+} from "openai/resources/chat/completions";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
 
 export const COMPACT_THRESHOLD_TOKENS = RUNTIME_CONFIG.compactThresholdTokens;
@@ -11,6 +15,8 @@ const SUMMARY_ITEM_CHAR_LIMIT = 160;
 export type CompactRuntimeContext = {
   messages: ChatCompletionMessageParam[];
 };
+
+const COMPACT_RUNTIME_CONTEXT = new AsyncLocalStorage<CompactRuntimeContext>();
 
 type CompactResult = {
   estimatedBefore: number;
@@ -69,7 +75,9 @@ function summarizeMessages(messages: ChatCompletionMessageParam[]): string {
   const lines: string[] = [];
   for (const message of messages.slice(0, SUMMARY_LINE_LIMIT)) {
     const role = (message as { role?: string }).role ?? "unknown";
-    const content = asStringContent((message as { content?: unknown }).content).replace(/\s+/g, " ").trim();
+    const content = asStringContent((message as { content?: unknown }).content)
+      .replace(/\s+/g, " ")
+      .trim();
     if (content) {
       lines.push(`- [${role}] ${truncate(content, SUMMARY_ITEM_CHAR_LIMIT)}`);
       continue;
@@ -150,7 +158,8 @@ export const CONTEXT_TOOLS: ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "compact",
-      description: "Compact current conversation context and persist a pre-compact transcript snapshot.",
+      description:
+        "Compact current conversation context and persist a pre-compact transcript snapshot.",
       parameters: {
         type: "object",
         properties: {
@@ -169,7 +178,10 @@ export async function runEstimateTokens(context?: CompactRuntimeContext): Promis
   return JSON.stringify({ ok: true, estimatedTokens }, null, 2);
 }
 
-export async function runCompact(keepRecentArg: unknown, context?: CompactRuntimeContext): Promise<string> {
+export async function runCompact(
+  keepRecentArg: unknown,
+  context?: CompactRuntimeContext,
+): Promise<string> {
   if (!context) {
     return toCompactError("missing runtime context");
   }
@@ -179,4 +191,15 @@ export async function runCompact(keepRecentArg: unknown, context?: CompactRuntim
   } catch (error) {
     return toCompactError(error instanceof Error ? error.message : String(error));
   }
+}
+
+export function getCompactRuntimeContext(): CompactRuntimeContext | undefined {
+  return COMPACT_RUNTIME_CONTEXT.getStore();
+}
+
+export async function withCompactRuntimeContext<T>(
+  context: CompactRuntimeContext,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return COMPACT_RUNTIME_CONTEXT.run(context, fn);
 }

@@ -1,8 +1,8 @@
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import type { AgentAppRuntimeDeps } from "../bootstrap/app-runtime.js";
+import { withCompactRuntimeContext } from "../tools/context-compact.js";
 import { appendSystemMessages, findLastAssistantText } from "./query-messages.js";
 import type { AgentRuntimeState } from "./query-types.js";
-import { withCompactRuntimeContext } from "../tools/base.js";
 
 export type QueryRuntimeResult =
   | {
