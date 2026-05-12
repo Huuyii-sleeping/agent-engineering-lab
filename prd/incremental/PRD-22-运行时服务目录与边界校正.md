@@ -20,7 +20,6 @@
 - 提供稳定聚合导出入口，减少 `bootstrap`、`runtime`、`agent-service` 对零散根目录 service 文件的直接依赖。
 - 更新相关 import、测试和学习沉淀文档。
 - 保留现有运行语义、默认实例和兼容 wrapper 行为。
-
 ## 非目标（Out of Scope）
 
 - 不重写 `QueryEngine` 的执行算法。

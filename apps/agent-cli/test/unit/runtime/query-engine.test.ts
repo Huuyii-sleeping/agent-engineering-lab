@@ -26,13 +26,16 @@ import {
 } from "../../../src/runtime/query-finalization.js";
 import { requestQueryModel } from "../../../src/runtime/query-model.js";
 import { prepareQueryRound } from "../../../src/runtime/query-preparation.js";
-import type { DeliveryServiceLike } from "../../../src/delivery-service.js";
-import type { HookServiceLike } from "../../../src/hook-service.js";
-import type { MemoryServiceLike } from "../../../src/memory-service.js";
-import type { NotificationServiceLike } from "../../../src/notification-service.js";
-import type { ModelPolicyServiceLike } from "../../../src/model-policy-service.js";
-import type { ObservabilityServiceLike } from "../../../src/observability-service.js";
-import type { RuntimeCoordinationServiceLike } from "../../../src/runtime-coordination-service.js";
+import type {
+  DeliveryServiceLike,
+  HookServiceLike,
+  MemoryServiceLike,
+  ModelPolicyServiceLike,
+  NotificationServiceLike,
+  ObservabilityServiceLike,
+  RuntimeCoordinationServiceLike,
+} from "../../../src/services/index.js";
+import type { RuntimeServices } from "../../../src/services/runtime-services.js";
 import type { ToolServiceLike } from "../../../src/tools/service.js";
 
 function createRuntimeState(): AgentRuntimeState {
@@ -147,6 +150,20 @@ function createRuntimeCoordinationService(): RuntimeCoordinationServiceLike {
   };
 }
 
+function createRuntimeServices(overrides: Partial<RuntimeServices> = {}): RuntimeServices {
+  return {
+    toolService: createToolService(),
+    deliveryService: createDeliveryService(),
+    hookService: createHookService(),
+    memoryService: createMemoryService(),
+    notificationService: createNotificationService(),
+    modelPolicyService: createModelPolicyService(),
+    observabilityService: createObservabilityService(),
+    runtimeCoordinationService: createRuntimeCoordinationService(),
+    ...overrides,
+  };
+}
+
 describe("runtime/query-engine", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -170,6 +187,7 @@ describe("runtime/query-engine", () => {
       },
     });
     const hookService = createHookService();
+    const runtimeServices = createRuntimeServices({ hookService });
 
     const engine = new QueryEngine({
       client: {} as never,
@@ -180,14 +198,7 @@ describe("runtime/query-engine", () => {
         skills: [],
         rules: [],
       },
-      toolService: createToolService(),
-      deliveryService: createDeliveryService(),
-      hookService,
-      memoryService: createMemoryService(),
-      notificationService: createNotificationService(),
-      modelPolicyService: createModelPolicyService(),
-      observabilityService: createObservabilityService(),
-      runtimeCoordinationService: createRuntimeCoordinationService(),
+      runtimeServices,
     });
     const runtimeState = createRuntimeState();
     const messages = [{ role: "user", content: "hello engine" }] as Array<{

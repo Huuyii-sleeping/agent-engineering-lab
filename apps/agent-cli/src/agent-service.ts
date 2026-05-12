@@ -79,6 +79,7 @@ export class AgentService {
   private readonly modelPolicyService: AgentServiceDeps["modelPolicyService"];
   private readonly observabilityService: AgentServiceDeps["observabilityService"];
   private readonly runtimeCoordinationService: RuntimeCoordinationServiceLike;
+  private readonly runtimeServices: AgentServiceDeps["runtimeServices"];
   private readonly queryEngine: AgentServiceDeps["queryEngine"];
 
   constructor(deps: AgentServiceDeps) {
@@ -93,6 +94,7 @@ export class AgentService {
     this.modelPolicyService = deps.modelPolicyService;
     this.observabilityService = deps.observabilityService;
     this.runtimeCoordinationService = deps.runtimeCoordinationService;
+    this.runtimeServices = deps.runtimeServices;
     this.queryEngine = deps.queryEngine;
   }
 
@@ -173,6 +175,7 @@ export class AgentService {
           modelPolicyService: this.modelPolicyService,
           observabilityService: this.observabilityService,
           runtimeCoordinationService: this.runtimeCoordinationService,
+          runtimeServices: this.runtimeServices,
           queryEngine: this.queryEngine,
         },
         history: session.history,

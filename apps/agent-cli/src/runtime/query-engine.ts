@@ -11,56 +11,26 @@ import { runQueryToolStage } from "./query-tools.js";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
 import type { QueryEngineRunInput } from "./query-types.js";
 import type OpenAI from "openai";
-import type {
-  DeliveryServiceLike,
-  HookServiceLike,
-  MemoryServiceLike,
-  ModelPolicyServiceLike,
-  NotificationServiceLike,
-  ObservabilityServiceLike,
-  RuntimeCoordinationServiceLike,
-} from "../services/index.js";
-import type { ToolServiceLike } from "../tools/service.js";
+import type { RuntimeServices } from "../services/runtime-services.js";
 
 type QueryEngineDeps = {
   client: OpenAI;
   model: string;
   promptSource: StaticPromptSource;
-  toolService: ToolServiceLike;
-  deliveryService: DeliveryServiceLike;
-  hookService: HookServiceLike;
-  memoryService: MemoryServiceLike;
-  notificationService: NotificationServiceLike;
-  modelPolicyService: ModelPolicyServiceLike;
-  observabilityService: ObservabilityServiceLike;
-  runtimeCoordinationService: RuntimeCoordinationServiceLike;
+  runtimeServices: RuntimeServices;
 };
 
 export class QueryEngine {
   private readonly client: OpenAI;
   private readonly model: string;
   private readonly promptSource: StaticPromptSource;
-  private readonly toolService: ToolServiceLike;
-  private readonly deliveryService: DeliveryServiceLike;
-  private readonly hookService: HookServiceLike;
-  private readonly memoryService: MemoryServiceLike;
-  private readonly notificationService: NotificationServiceLike;
-  private readonly modelPolicyService: ModelPolicyServiceLike;
-  private readonly observabilityService: ObservabilityServiceLike;
-  private readonly runtimeCoordinationService: RuntimeCoordinationServiceLike;
+  private readonly runtimeServices: RuntimeServices;
 
   constructor(deps: QueryEngineDeps) {
     this.client = deps.client;
     this.model = deps.model;
     this.promptSource = deps.promptSource;
-    this.toolService = deps.toolService;
-    this.deliveryService = deps.deliveryService;
-    this.hookService = deps.hookService;
-    this.memoryService = deps.memoryService;
-    this.notificationService = deps.notificationService;
-    this.modelPolicyService = deps.modelPolicyService;
-    this.observabilityService = deps.observabilityService;
-    this.runtimeCoordinationService = deps.runtimeCoordinationService;
+    this.runtimeServices = deps.runtimeServices;
   }
 
   async run(opts: QueryEngineRunInput): Promise<void> {
@@ -76,7 +46,7 @@ export class QueryEngine {
       opts.runtimeState.roundCounter += 1;
       opts.runtimeState.touchedPaths.clear();
       opts.runtimeState.wroteWorkspaceFiles = false;
-      const traceId = this.observabilityService.createTraceId();
+      const traceId = this.runtimeServices.observabilityService.createTraceId();
       let stopReason = "tool_calls_processed";
       let stopToolCallCount = 0;
       const latestUser = [...opts.messages]
@@ -85,8 +55,8 @@ export class QueryEngine {
         | { role: "user"; content: string }
         | undefined;
       try {
-        const tools = opts.tools ?? (await this.toolService.listTools());
-        await this.observabilityService.recordEvent(
+        const tools = opts.tools ?? (await this.runtimeServices.toolService.listTools());
+        await this.runtimeServices.observabilityService.recordEvent(
           "loop_start",
           {
             round: opts.runtimeState.roundCounter,
@@ -98,11 +68,11 @@ export class QueryEngine {
           runtimeState: opts.runtimeState,
           traceId,
           latestUserInput: latestUser?.content ?? "",
-          hookService: this.hookService,
-          memoryService: this.memoryService,
-          notificationService: this.notificationService,
-          observabilityService: this.observabilityService,
-          runtimeCoordinationService: this.runtimeCoordinationService,
+          hookService: this.runtimeServices.hookService,
+          memoryService: this.runtimeServices.memoryService,
+          notificationService: this.runtimeServices.notificationService,
+          observabilityService: this.runtimeServices.observabilityService,
+          runtimeCoordinationService: this.runtimeServices.runtimeCoordinationService,
         });
         if (!preparedRound.ok) {
           stopReason = "session_start_blocked";
@@ -123,8 +93,8 @@ export class QueryEngine {
           latestUserInput: latestUser?.content ?? "",
           memoryContext: preparedRound.memoryContext,
           dynamicSystemMessages: preparedRound.dynamicSystemMessages,
-          modelPolicyService: this.modelPolicyService,
-          observabilityService: this.observabilityService,
+          modelPolicyService: this.runtimeServices.modelPolicyService,
+          observabilityService: this.runtimeServices.observabilityService,
         });
         if (!modelResult.ok) {
           stopReason = modelResult.stopReason;
@@ -145,9 +115,9 @@ export class QueryEngine {
           messages: opts.messages,
           runtimeState: opts.runtimeState,
           traceId,
-          toolService: this.toolService,
-          hookService: this.hookService,
-          observabilityService: this.observabilityService,
+          toolService: this.runtimeServices.toolService,
+          hookService: this.runtimeServices.hookService,
+          observabilityService: this.runtimeServices.observabilityService,
         });
 
         stopReason = (
@@ -157,7 +127,7 @@ export class QueryEngine {
             traceId,
             usedTodo: toolStage.usedTodo,
             deliveryAutoRunEnabled: RUNTIME_CONFIG.deliveryAutoRunEnabled,
-            deliveryService: this.deliveryService,
+            deliveryService: this.runtimeServices.deliveryService,
           })
         ).stopReason;
       } finally {
@@ -167,7 +137,7 @@ export class QueryEngine {
           traceId,
           stopReason,
           stopToolCallCount,
-          hookService: this.hookService,
+          hookService: this.runtimeServices.hookService,
         });
       }
     }

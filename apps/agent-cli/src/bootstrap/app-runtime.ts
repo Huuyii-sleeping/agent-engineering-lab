@@ -6,13 +6,6 @@ import {
   getStaticPromptSource,
 } from "../config.js";
 import {
-  DEFAULT_DELIVERY_SERVICE,
-  DEFAULT_HOOK_SERVICE,
-  DEFAULT_MEMORY_SERVICE,
-  DEFAULT_MODEL_POLICY_SERVICE,
-  DEFAULT_NOTIFICATION_SERVICE,
-  DEFAULT_OBSERVABILITY_SERVICE,
-  DEFAULT_RUNTIME_COORDINATION_SERVICE,
   type DeliveryServiceLike,
   type HookServiceLike,
   type MemoryServiceLike,
@@ -21,10 +14,14 @@ import {
   type ObservabilityServiceLike,
   type RuntimeCoordinationServiceLike,
 } from "../services/index.js";
+import {
+  createRuntimeServices,
+  type RuntimeServices,
+} from "../services/runtime-services.js";
 import type { StaticPromptSource } from "../prompt/types.js";
 import { QueryEngine } from "../runtime/query-engine.js";
 import type { AgentRuntimeState, QueryEngineLike } from "../runtime/query-types.js";
-import { DEFAULT_TOOL_SERVICE, type ToolServiceLike } from "../tools/service.js";
+import type { ToolServiceLike } from "../tools/service.js";
 
 export type AgentAppRuntimeDeps = {
   client: OpenAI;
@@ -38,6 +35,7 @@ export type AgentAppRuntimeDeps = {
   modelPolicyService: ModelPolicyServiceLike;
   observabilityService: ObservabilityServiceLike;
   runtimeCoordinationService: RuntimeCoordinationServiceLike;
+  runtimeServices: RuntimeServices;
   queryEngine: QueryEngineLike;
 };
 
@@ -64,41 +62,35 @@ export function createAgentAppRuntime(
   const client = overrides.client ?? createClient();
   const model = overrides.model ?? getDefaultModel();
   const promptSource = overrides.promptSource ?? getStaticPromptSource();
-  const toolService = overrides.toolService ?? DEFAULT_TOOL_SERVICE;
-  const deliveryService = overrides.deliveryService ?? DEFAULT_DELIVERY_SERVICE;
-  const hookService = overrides.hookService ?? DEFAULT_HOOK_SERVICE;
-  const memoryService = overrides.memoryService ?? DEFAULT_MEMORY_SERVICE;
-  const notificationService = overrides.notificationService ?? DEFAULT_NOTIFICATION_SERVICE;
-  const modelPolicyService = overrides.modelPolicyService ?? DEFAULT_MODEL_POLICY_SERVICE;
-  const observabilityService = overrides.observabilityService ?? DEFAULT_OBSERVABILITY_SERVICE;
-  const runtimeCoordinationService =
-    overrides.runtimeCoordinationService ?? DEFAULT_RUNTIME_COORDINATION_SERVICE;
+  const runtimeServices = createRuntimeServices({
+    ...overrides.runtimeServices,
+    toolService: overrides.toolService ?? overrides.runtimeServices?.toolService,
+    deliveryService: overrides.deliveryService ?? overrides.runtimeServices?.deliveryService,
+    hookService: overrides.hookService ?? overrides.runtimeServices?.hookService,
+    memoryService: overrides.memoryService ?? overrides.runtimeServices?.memoryService,
+    notificationService:
+      overrides.notificationService ?? overrides.runtimeServices?.notificationService,
+    modelPolicyService:
+      overrides.modelPolicyService ?? overrides.runtimeServices?.modelPolicyService,
+    observabilityService:
+      overrides.observabilityService ?? overrides.runtimeServices?.observabilityService,
+    runtimeCoordinationService:
+      overrides.runtimeCoordinationService ??
+      overrides.runtimeServices?.runtimeCoordinationService,
+  });
   return {
     client,
     model,
     promptSource,
-    toolService,
-    deliveryService,
-    hookService,
-    memoryService,
-    notificationService,
-    modelPolicyService,
-    observabilityService,
-    runtimeCoordinationService,
+    ...runtimeServices,
+    runtimeServices,
     queryEngine:
       overrides.queryEngine ??
       new QueryEngine({
         client,
         model,
         promptSource,
-        toolService,
-        deliveryService,
-        hookService,
-        memoryService,
-        notificationService,
-        modelPolicyService,
-        observabilityService,
-        runtimeCoordinationService,
+        runtimeServices,
       }),
   };
 }
