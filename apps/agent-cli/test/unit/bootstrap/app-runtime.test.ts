@@ -4,6 +4,7 @@ import type OpenAI from "openai";
 import { createAgentAppRuntime, createAgentRuntimeState } from "../../../src/bootstrap/app-runtime.js";
 import type { DeliveryServiceLike } from "../../../src/delivery-service.js";
 import type { HookServiceLike } from "../../../src/hook-service.js";
+import type { ObservabilityServiceLike } from "../../../src/observability-service.js";
 import type { StaticPromptSource } from "../../../src/prompt/types.js";
 
 describe("bootstrap/app-runtime", () => {
@@ -44,6 +45,20 @@ describe("bootstrap/app-runtime", () => {
         errors: [],
       })),
     };
+    const observabilityService: ObservabilityServiceLike = {
+      createTraceId: vi.fn(() => "trace-test"),
+      createSpanId: vi.fn(() => "span-test"),
+      withExecutionContext: vi.fn(async (_context, fn: () => Promise<unknown>) => fn()),
+      recordEvent: vi.fn(async () => ({
+        schemaVersion: 1,
+        id: "evt-test",
+        at: 0,
+        trace_id: "trace-test",
+        span_id: null,
+        kind: "test",
+        payload: {},
+      })),
+    };
     const queryEngine = { run: vi.fn() };
 
     const runtime = createAgentAppRuntime({
@@ -53,6 +68,7 @@ describe("bootstrap/app-runtime", () => {
       toolService,
       deliveryService,
       hookService,
+      observabilityService,
       queryEngine,
     });
 
@@ -61,6 +77,7 @@ describe("bootstrap/app-runtime", () => {
     expect(runtime.toolService).toBe(toolService);
     expect(runtime.deliveryService).toBe(deliveryService);
     expect(runtime.hookService).toBe(hookService);
+    expect(runtime.observabilityService).toBe(observabilityService);
     expect(runtime.queryEngine).toBe(queryEngine);
   });
 });

@@ -71,6 +71,7 @@ export class AgentService {
   private readonly toolService: AgentServiceDeps["toolService"];
   private readonly deliveryService: AgentServiceDeps["deliveryService"];
   private readonly hookService: AgentServiceDeps["hookService"];
+  private readonly observabilityService: AgentServiceDeps["observabilityService"];
   private readonly queryEngine: AgentServiceDeps["queryEngine"];
 
   constructor(deps: AgentServiceDeps) {
@@ -80,6 +81,7 @@ export class AgentService {
     this.toolService = deps.toolService;
     this.deliveryService = deps.deliveryService;
     this.hookService = deps.hookService;
+    this.observabilityService = deps.observabilityService;
     this.queryEngine = deps.queryEngine;
   }
 
@@ -153,6 +155,7 @@ export class AgentService {
           toolService: this.toolService,
           deliveryService: this.deliveryService,
           hookService: this.hookService,
+          observabilityService: this.observabilityService,
           queryEngine: this.queryEngine,
         },
         history: session.history,

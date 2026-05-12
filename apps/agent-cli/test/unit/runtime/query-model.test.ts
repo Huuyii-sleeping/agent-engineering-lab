@@ -2,12 +2,9 @@ import type OpenAI from "openai";
 import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentRuntimeState } from "../../../src/agent-loop.js";
+import type { ObservabilityServiceLike } from "../../../src/observability-service.js";
 import { requestQueryModel } from "../../../src/runtime/query-model.js";
 import type { StaticPromptSource } from "../../../src/prompt/types.js";
-
-vi.mock("../../../src/observability/runtime.js", () => ({
-  recordObservabilityEvent: vi.fn(async () => undefined),
-}));
 
 vi.mock("../../../src/model-policy.js", () => ({
   classifyFallbackableError: vi.fn(() => false),
@@ -74,6 +71,23 @@ function createClient(
   } as unknown as OpenAI;
 }
 
+function createObservabilityService(): ObservabilityServiceLike {
+  return {
+    createTraceId: vi.fn(() => "trace-test"),
+    createSpanId: vi.fn(() => "span-test"),
+    withExecutionContext: vi.fn(async (_context, fn: () => Promise<unknown>) => fn()),
+    recordEvent: vi.fn(async () => ({
+      schemaVersion: 1,
+      id: "evt-test",
+      at: 0,
+      trace_id: "trace-test",
+      span_id: null,
+      kind: "test",
+      payload: {},
+    })),
+  };
+}
+
 describe("runtime/query-model", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -116,6 +130,7 @@ describe("runtime/query-model", () => {
       };
     });
     const messages: ChatCompletionMessageParam[] = [{ role: "user", content: "continue" }];
+    const observabilityService = createObservabilityService();
 
     const result = await requestQueryModel({
       client,
@@ -128,6 +143,7 @@ describe("runtime/query-model", () => {
       latestUserInput: "continue",
       memoryContext: null,
       dynamicSystemMessages: [],
+      observabilityService,
     });
 
     expect(result.ok).toBe(true);
@@ -169,6 +185,7 @@ describe("runtime/query-model", () => {
       { role: "assistant", content: "x".repeat(180) },
       { role: "user", content: "trigger compact" },
     ];
+    const observabilityService = createObservabilityService();
 
     const result = await requestQueryModel({
       client,
@@ -181,6 +198,7 @@ describe("runtime/query-model", () => {
       latestUserInput: "trigger compact",
       memoryContext: null,
       dynamicSystemMessages: [],
+      observabilityService,
     });
 
     expect(result.ok).toBe(true);
@@ -210,6 +228,7 @@ describe("runtime/query-model", () => {
       throw new Error("should not call model API when budget is denied");
     });
     const messages: ChatCompletionMessageParam[] = [{ role: "user", content: "budget deny" }];
+    const observabilityService = createObservabilityService();
 
     const result = await requestQueryModel({
       client,
@@ -222,6 +241,7 @@ describe("runtime/query-model", () => {
       latestUserInput: "budget deny",
       memoryContext: null,
       dynamicSystemMessages: [],
+      observabilityService,
     });
 
     expect(result).toEqual({

@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import type { HookServiceLike } from "../hook-service.js";
-import { createSpanId, recordObservabilityEvent, withExecutionContext } from "../observability/runtime.js";
+import type { ObservabilityServiceLike } from "../observability-service.js";
 import type { ToolServiceLike } from "../tools/service.js";
 import { appendSystemMessages } from "./query-messages.js";
 import {
@@ -24,6 +24,7 @@ type RunQueryToolStageOptions = {
   traceId: string;
   toolService: ToolServiceLike;
   hookService: HookServiceLike;
+  observabilityService: ObservabilityServiceLike;
 };
 
 function makeHookBlockedOutput(reason: string | null): string {
@@ -46,6 +47,7 @@ async function maybeAutoCompleteTaskFromTodo(
   toolArgs: Record<string, unknown>,
   traceId: string,
   toolService: ToolServiceLike,
+  observabilityService: ObservabilityServiceLike,
 ): Promise<boolean> {
   if (toolName !== "todo") {
     return false;
@@ -59,8 +61,9 @@ async function maybeAutoCompleteTaskFromTodo(
     status: "completed",
   });
   console.log(`\u001b[33m$ task_update ${runtimeState.activeTaskId} (auto)\u001b[0m`);
-  const autoOutput = await withExecutionContext({ traceId, spanId: createSpanId() }, async () =>
-    toolService.runToolByName("task_update", autoUpdateArgs),
+  const autoOutput = await observabilityService.withExecutionContext(
+    { traceId, spanId: observabilityService.createSpanId() },
+    async () => toolService.runToolByName("task_update", autoUpdateArgs),
   );
   console.log(autoOutput);
   runtimeState.activeTaskId = null;
@@ -104,8 +107,8 @@ export async function runQueryToolStage(opts: RunQueryToolStageOptions): Promise
     const toolName = toolCall.function.name;
     const toolArgs = parseToolArgs(toolCall.function.arguments);
     const preview = opts.toolService.previewToolCall(toolName, toolCall.function.arguments);
-    const spanId = createSpanId();
-    await recordObservabilityEvent(
+    const spanId = opts.observabilityService.createSpanId();
+    await opts.observabilityService.recordEvent(
       "tool_call",
       {
         toolName,
@@ -133,7 +136,7 @@ export async function runQueryToolStage(opts: RunQueryToolStageOptions): Promise
       toolOutput = makeHookBlockedOutput(preToolHooks.blockReason);
     } else {
       const startedAt = Date.now();
-      toolOutput = await withExecutionContext({ traceId: opts.traceId, spanId }, async () =>
+      toolOutput = await opts.observabilityService.withExecutionContext({ traceId: opts.traceId, spanId }, async () =>
         opts.toolService.runToolByName(toolName, toolCall.function.arguments),
       );
       durationMs = Date.now() - startedAt;
@@ -141,7 +144,7 @@ export async function runQueryToolStage(opts: RunQueryToolStageOptions): Promise
 
     console.log(toolOutput);
     const analyzed = analyzeToolOutput(toolOutput);
-    await recordObservabilityEvent(
+    await opts.observabilityService.recordEvent(
       "tool_result",
       {
         toolName,
@@ -153,7 +156,7 @@ export async function runQueryToolStage(opts: RunQueryToolStageOptions): Promise
       { traceId: opts.traceId, spanId },
     );
     if (analyzed.errorCode?.startsWith("SECURITY_")) {
-      await recordObservabilityEvent(
+      await opts.observabilityService.recordEvent(
         "security_blocked",
         {
           toolName,
@@ -192,7 +195,14 @@ export async function runQueryToolStage(opts: RunQueryToolStageOptions): Promise
 
     if (toolName === "todo") {
       usedTodo = true;
-      await maybeAutoCompleteTaskFromTodo(opts.runtimeState, toolName, toolArgs, opts.traceId, opts.toolService);
+      await maybeAutoCompleteTaskFromTodo(
+        opts.runtimeState,
+        toolName,
+        toolArgs,
+        opts.traceId,
+        opts.toolService,
+        opts.observabilityService,
+      );
     }
 
     syncActiveTaskState(opts.runtimeState, toolName, toolArgs, toolOutput);

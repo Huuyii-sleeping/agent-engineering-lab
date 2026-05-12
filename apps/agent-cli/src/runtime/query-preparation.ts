@@ -1,5 +1,6 @@
 import type { AgentRuntimeState } from "../agent-loop.js";
 import type { HookServiceLike } from "../hook-service.js";
+import type { ObservabilityServiceLike } from "../observability-service.js";
 import { collectDynamicSystemMessages } from "./query-notifications.js";
 import { autoExtractMemory, buildMemoryInjectionForQuery } from "../tools/memory.js";
 import { tickScheduler } from "../tools/scheduler.js";
@@ -21,6 +22,7 @@ type PrepareQueryRoundOptions = {
   traceId: string;
   latestUserInput: string;
   hookService: HookServiceLike;
+  observabilityService: ObservabilityServiceLike;
 };
 
 export async function prepareQueryRound(
@@ -65,6 +67,7 @@ export async function prepareQueryRound(
 
   const dynamicSystemMessages = await collectDynamicSystemMessages({
     traceId: opts.traceId,
+    observabilityService: opts.observabilityService,
     seedMessages: sessionStartHooks.messages,
   });
 

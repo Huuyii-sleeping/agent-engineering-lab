@@ -4,6 +4,7 @@ import { AgentService } from "../../src/agent-service.js";
 import type { DeliveryServiceLike } from "../../src/delivery-service.js";
 import type { HookServiceLike } from "../../src/hook-service.js";
 import type { AgentRuntimeState } from "../../src/agent-loop.js";
+import type { ObservabilityServiceLike } from "../../src/observability-service.js";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import type { StaticPromptSource } from "../../src/prompt/types.js";
 import type { ToolServiceLike } from "../../src/tools/service.js";
@@ -65,6 +66,23 @@ function createHookService(): HookServiceLike {
   };
 }
 
+function createObservabilityService(): ObservabilityServiceLike {
+  return {
+    createTraceId: () => "trace-test",
+    createSpanId: () => "span-test",
+    withExecutionContext: async (_context, fn) => fn(),
+    recordEvent: async () => ({
+      schemaVersion: 1,
+      id: "evt-test",
+      at: 0,
+      trace_id: "trace-test",
+      span_id: null,
+      kind: "test",
+      payload: {},
+    }),
+  };
+}
+
 afterEach(() => {
   delete process.env.MODEL_ID;
 });
@@ -78,6 +96,7 @@ describe("agent service", () => {
       toolService: createToolService(),
       deliveryService: createDeliveryService(),
       hookService: createHookService(),
+      observabilityService: createObservabilityService(),
       queryEngine: createLoopRunner(),
     });
     const first = service.createSession();
@@ -96,6 +115,7 @@ describe("agent service", () => {
       toolService: createToolService(),
       deliveryService: createDeliveryService(),
       hookService: createHookService(),
+      observabilityService: createObservabilityService(),
       queryEngine: createLoopRunner(),
     });
     const a = service.createSession();
@@ -136,6 +156,7 @@ describe("agent service", () => {
       }),
       deliveryService: createDeliveryService(),
       hookService: createHookService(),
+      observabilityService: createObservabilityService(),
       queryEngine: createLoopRunner(),
     });
 

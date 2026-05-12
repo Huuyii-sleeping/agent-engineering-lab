@@ -5,6 +5,7 @@ import { AgentService, createAgentHttpServer } from "../../src/agent-service.js"
 import type { DeliveryServiceLike } from "../../src/delivery-service.js";
 import type { HookServiceLike } from "../../src/hook-service.js";
 import type { AgentRuntimeState } from "../../src/agent-loop.js";
+import type { ObservabilityServiceLike } from "../../src/observability-service.js";
 import type { StaticPromptSource } from "../../src/prompt/types.js";
 import type { ToolServiceLike } from "../../src/tools/service.js";
 
@@ -70,6 +71,23 @@ function createHookService(): HookServiceLike {
   };
 }
 
+function createObservabilityService(): ObservabilityServiceLike {
+  return {
+    createTraceId: () => "trace-test",
+    createSpanId: () => "span-test",
+    withExecutionContext: async (_context, fn) => fn(),
+    recordEvent: async () => ({
+      schemaVersion: 1,
+      id: "evt-test",
+      at: 0,
+      trace_id: "trace-test",
+      span_id: null,
+      kind: "test",
+      payload: {},
+    }),
+  };
+}
+
 async function main(): Promise<void> {
   const service = new AgentService({
     client: {} as OpenAI,
@@ -78,6 +96,7 @@ async function main(): Promise<void> {
     toolService: createToolService(),
     deliveryService: createDeliveryService(),
     hookService: createHookService(),
+    observabilityService: createObservabilityService(),
     queryEngine: createLoopRunner(),
   });
   const server = createAgentHttpServer(service);

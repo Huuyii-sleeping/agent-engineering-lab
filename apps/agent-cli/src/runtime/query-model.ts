@@ -3,7 +3,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
 import type { AgentRuntimeState } from "../agent-loop.js";
 import { classifyFallbackableError, MODEL_POLICY } from "../model-policy.js";
-import { recordObservabilityEvent } from "../observability/runtime.js";
+import type { ObservabilityServiceLike } from "../observability-service.js";
 import { buildPromptEnvelope } from "../prompt/builder.js";
 import type { StaticPromptSource } from "../prompt/types.js";
 import {
@@ -37,6 +37,7 @@ type RequestQueryModelOptions = {
   latestUserInput: string;
   memoryContext: string | null;
   dynamicSystemMessages: string[];
+  observabilityService: ObservabilityServiceLike;
 };
 
 function summarizeText(value: string, max = 160): string {
@@ -49,6 +50,7 @@ function summarizeText(value: string, max = 160): string {
 
 async function appendRecoveryFailure(
   messages: ChatCompletionMessageParam[],
+  observabilityService: ObservabilityServiceLike,
   traceId: string,
   phase: "model_request" | "model_response",
   decision: { reason: string; detail: string },
@@ -59,7 +61,7 @@ async function appendRecoveryFailure(
     detail: decision.detail,
     nextState: createInitialRecoveryState(),
   });
-  await recordObservabilityEvent("error", { phase, message: failure }, { traceId });
+  await observabilityService.recordEvent("error", { phase, message: failure }, { traceId });
   messages.push({ role: "assistant", content: failure });
 }
 
@@ -101,7 +103,7 @@ export async function requestQueryModel(opts: RequestQueryModelOptions): Promise
         recoveryState,
       );
       recoveryState = decision.nextState;
-      await recordObservabilityEvent(
+      await opts.observabilityService.recordEvent(
         "recovery_decision",
         {
           round: opts.runtimeState.roundCounter,
@@ -114,7 +116,7 @@ export async function requestQueryModel(opts: RequestQueryModelOptions): Promise
         { traceId: opts.traceId },
       );
       if (decision.action !== "compact") {
-        await appendRecoveryFailure(opts.messages, opts.traceId, "model_request", decision);
+        await appendRecoveryFailure(opts.messages, opts.observabilityService, opts.traceId, "model_request", decision);
         return { ok: false, stopReason: "recovery_failed" };
       }
       const compactResult = await compactMessages({ messages: opts.messages }, "auto");
@@ -124,7 +126,7 @@ export async function requestQueryModel(opts: RequestQueryModelOptions): Promise
       continue;
     }
 
-    await recordObservabilityEvent(
+    await opts.observabilityService.recordEvent(
       "model_request",
       {
         round: opts.runtimeState.roundCounter,
@@ -138,7 +140,7 @@ export async function requestQueryModel(opts: RequestQueryModelOptions): Promise
     );
 
     const selection = await MODEL_POLICY.selectModel("coding", opts.model, estimatedPromptTokens);
-    await recordObservabilityEvent(
+    await opts.observabilityService.recordEvent(
       "model_policy_selection",
       {
         role: selection.role,
@@ -170,14 +172,18 @@ export async function requestQueryModel(opts: RequestQueryModelOptions): Promise
 
       const candidate = response.choices[0]?.message;
       if (!candidate) {
-        await recordObservabilityEvent("error", { phase: "model_response", message: "empty model response" }, { traceId: opts.traceId });
+        await opts.observabilityService.recordEvent(
+          "error",
+          { phase: "model_response", message: "empty model response" },
+          { traceId: opts.traceId },
+        );
         return { ok: false, stopReason: "empty_model_response" };
       }
 
       const toolCallCount = candidate.tool_calls?.length ?? 0;
       const content = typeof candidate.content === "string" ? candidate.content : "";
       const finishReason = response.choices[0]?.finish_reason ?? null;
-      await recordObservabilityEvent(
+      await opts.observabilityService.recordEvent(
         "model_response",
         {
           round: opts.runtimeState.roundCounter,
@@ -209,7 +215,7 @@ export async function requestQueryModel(opts: RequestQueryModelOptions): Promise
       if (recoverySignal) {
         const decision = selectRecoveryDecision(recoverySignal, recoveryState);
         recoveryState = decision.nextState;
-        await recordObservabilityEvent(
+        await opts.observabilityService.recordEvent(
           "recovery_decision",
           {
             round: opts.runtimeState.roundCounter,
@@ -227,7 +233,7 @@ export async function requestQueryModel(opts: RequestQueryModelOptions): Promise
           console.log(`\u001b[36m[recovery continue]\u001b[0m attempts=${recoveryState.continuationAttempts}`);
           continue;
         }
-        await appendRecoveryFailure(opts.messages, opts.traceId, "model_response", decision);
+        await appendRecoveryFailure(opts.messages, opts.observabilityService, opts.traceId, "model_response", decision);
         return { ok: false, stopReason: "recovery_failed" };
       }
 
@@ -252,7 +258,7 @@ export async function requestQueryModel(opts: RequestQueryModelOptions): Promise
             const retryCandidate = retryResponse.choices[0]?.message;
             if (retryCandidate) {
               const retryContent = typeof retryCandidate.content === "string" ? retryCandidate.content : "";
-              await recordObservabilityEvent(
+              await opts.observabilityService.recordEvent(
                 "model_policy_selection",
                 {
                   role: fallbackSelection.role,
@@ -288,7 +294,7 @@ export async function requestQueryModel(opts: RequestQueryModelOptions): Promise
 
       const decision = selectRecoveryDecision(classifyErrorForRecovery(error), recoveryState);
       recoveryState = decision.nextState;
-      await recordObservabilityEvent(
+      await opts.observabilityService.recordEvent(
         "recovery_decision",
         {
           round: opts.runtimeState.roundCounter,
@@ -313,7 +319,7 @@ export async function requestQueryModel(opts: RequestQueryModelOptions): Promise
         await sleep(decision.delayMs);
         continue;
       }
-      await appendRecoveryFailure(opts.messages, opts.traceId, "model_request", decision);
+      await appendRecoveryFailure(opts.messages, opts.observabilityService, opts.traceId, "model_request", decision);
       return { ok: false, stopReason: "recovery_failed" };
     }
   }

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AgentRuntimeState } from "../../../src/agent-loop.js";
 import type { DeliveryServiceLike } from "../../../src/delivery-service.js";
 import type { HookServiceLike } from "../../../src/hook-service.js";
+import type { ObservabilityServiceLike } from "../../../src/observability-service.js";
 import { runUserQuery } from "../../../src/runtime/query-runtime.js";
 import type { StaticPromptSource } from "../../../src/prompt/types.js";
 
@@ -51,6 +52,23 @@ function createHookService(overrides: Partial<HookServiceLike> = {}): HookServic
   };
 }
 
+function createObservabilityService(): ObservabilityServiceLike {
+  return {
+    createTraceId: () => "trace-test",
+    createSpanId: () => "span-test",
+    withExecutionContext: async (_context, fn) => fn(),
+    recordEvent: async () => ({
+      schemaVersion: 1,
+      id: "evt-test",
+      at: 0,
+      trace_id: "trace-test",
+      span_id: null,
+      kind: "test",
+      payload: {},
+    }),
+  };
+}
+
 describe("runtime/query-runtime", () => {
   it("runs a user query through shared runtime deps and returns assistant text", async () => {
     const history: ChatCompletionMessageParam[] = [];
@@ -69,6 +87,7 @@ describe("runtime/query-runtime", () => {
         },
         deliveryService: createDeliveryService(),
         hookService,
+        observabilityService: createObservabilityService(),
         queryEngine: {
           run: async ({ messages }) => {
             messages.push({ role: "assistant", content: "shared runtime reply" });
@@ -121,6 +140,7 @@ describe("runtime/query-runtime", () => {
         },
         deliveryService: createDeliveryService(),
         hookService,
+        observabilityService: createObservabilityService(),
         queryEngine: { run },
       },
       history: [],

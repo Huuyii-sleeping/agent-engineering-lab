@@ -1,5 +1,5 @@
 import { toAssistantMessage } from "../messages.js";
-import { createTraceId, recordObservabilityEvent } from "../observability/runtime.js";
+import type { ObservabilityServiceLike } from "../observability-service.js";
 import type { StaticPromptSource } from "../prompt/types.js";
 import { finalizeAssistantOnlyRound, finalizeToolDrivenRound, runQueryStopStage } from "./query-finalization.js";
 import { requestQueryModel } from "./query-model.js";
@@ -19,6 +19,7 @@ type QueryEngineDeps = {
   toolService: ToolServiceLike;
   deliveryService: DeliveryServiceLike;
   hookService: HookServiceLike;
+  observabilityService: ObservabilityServiceLike;
 };
 
 export class QueryEngine {
@@ -28,6 +29,7 @@ export class QueryEngine {
   private readonly toolService: ToolServiceLike;
   private readonly deliveryService: DeliveryServiceLike;
   private readonly hookService: HookServiceLike;
+  private readonly observabilityService: ObservabilityServiceLike;
 
   constructor(deps: QueryEngineDeps) {
     this.client = deps.client;
@@ -36,6 +38,7 @@ export class QueryEngine {
     this.toolService = deps.toolService;
     this.deliveryService = deps.deliveryService;
     this.hookService = deps.hookService;
+    this.observabilityService = deps.observabilityService;
   }
 
   async run(opts: QueryEngineRunInput): Promise<void> {
@@ -51,7 +54,7 @@ export class QueryEngine {
       opts.runtimeState.roundCounter += 1;
       opts.runtimeState.touchedPaths.clear();
       opts.runtimeState.wroteWorkspaceFiles = false;
-      const traceId = createTraceId();
+      const traceId = this.observabilityService.createTraceId();
       let stopReason = "tool_calls_processed";
       let stopToolCallCount = 0;
       const latestUser = [...opts.messages]
@@ -61,7 +64,7 @@ export class QueryEngine {
         | undefined;
       try {
         const tools = opts.tools ?? (await this.toolService.listTools());
-        await recordObservabilityEvent(
+        await this.observabilityService.recordEvent(
           "loop_start",
           {
             round: opts.runtimeState.roundCounter,
@@ -74,6 +77,7 @@ export class QueryEngine {
           traceId,
           latestUserInput: latestUser?.content ?? "",
           hookService: this.hookService,
+          observabilityService: this.observabilityService,
         });
         if (!preparedRound.ok) {
           stopReason = "session_start_blocked";
@@ -94,6 +98,7 @@ export class QueryEngine {
           latestUserInput: latestUser?.content ?? "",
           memoryContext: preparedRound.memoryContext,
           dynamicSystemMessages: preparedRound.dynamicSystemMessages,
+          observabilityService: this.observabilityService,
         });
         if (!modelResult.ok) {
           stopReason = modelResult.stopReason;
@@ -116,6 +121,7 @@ export class QueryEngine {
           traceId,
           toolService: this.toolService,
           hookService: this.hookService,
+          observabilityService: this.observabilityService,
         });
 
         stopReason = (

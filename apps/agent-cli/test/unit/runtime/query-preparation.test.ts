@@ -18,6 +18,7 @@ vi.mock("../../../src/tools/autonomy.js", () => ({
 
 import type { AgentRuntimeState } from "../../../src/agent-loop.js";
 import type { HookServiceLike } from "../../../src/hook-service.js";
+import type { ObservabilityServiceLike } from "../../../src/observability-service.js";
 import { prepareQueryRound } from "../../../src/runtime/query-preparation.js";
 import { collectDynamicSystemMessages } from "../../../src/runtime/query-notifications.js";
 import { autoExtractMemory, buildMemoryInjectionForQuery } from "../../../src/tools/memory.js";
@@ -47,6 +48,23 @@ function createHookService(): HookServiceLike {
   };
 }
 
+function createObservabilityService(): ObservabilityServiceLike {
+  return {
+    createTraceId: vi.fn(() => "trace-test"),
+    createSpanId: vi.fn(() => "span-test"),
+    withExecutionContext: vi.fn(async (_context, fn: () => Promise<unknown>) => fn()),
+    recordEvent: vi.fn(async () => ({
+      schemaVersion: 1,
+      id: "evt-test",
+      at: 0,
+      trace_id: "trace-test",
+      span_id: null,
+      kind: "test",
+      payload: {},
+    })),
+  };
+}
+
 describe("runtime/query-preparation", () => {
   beforeEach(() => {
     vi.mocked(collectDynamicSystemMessages).mockResolvedValue([]);
@@ -60,6 +78,7 @@ describe("runtime/query-preparation", () => {
 
   it("returns a blocked result when session-start hooks reject the round", async () => {
     const hookService = createHookService();
+    const observabilityService = createObservabilityService();
     vi.mocked(hookService.run).mockResolvedValue({
       blocked: true,
       blockReason: "policy denied",
@@ -74,6 +93,7 @@ describe("runtime/query-preparation", () => {
       traceId: "trace_test",
       latestUserInput: "hello",
       hookService,
+      observabilityService,
     });
 
     expect(result).toEqual({
@@ -85,6 +105,7 @@ describe("runtime/query-preparation", () => {
   it("collects shared dynamic messages and memory context for the round", async () => {
     const runtimeState = createRuntimeState();
     const hookService = createHookService();
+    const observabilityService = createObservabilityService();
     runtimeState.roundsWithoutTodo = 3;
     vi.mocked(hookService.run).mockResolvedValue({
       blocked: false,
@@ -106,6 +127,7 @@ describe("runtime/query-preparation", () => {
       traceId: "trace_test",
       latestUserInput: "hello",
       hookService,
+      observabilityService,
     });
 
     expect(result).toEqual({

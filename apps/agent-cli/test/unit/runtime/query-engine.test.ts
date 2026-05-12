@@ -1,11 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentRuntimeState } from "../../../src/runtime/query-types.js";
 
-vi.mock("../../../src/observability/runtime.js", () => ({
-  createTraceId: vi.fn(() => "trace-query-engine"),
-  recordObservabilityEvent: vi.fn(async () => undefined),
-}));
-
 vi.mock("../../../src/runtime/query-preparation.js", () => ({
   prepareQueryRound: vi.fn(),
 }));
@@ -30,6 +25,7 @@ import { requestQueryModel } from "../../../src/runtime/query-model.js";
 import { prepareQueryRound } from "../../../src/runtime/query-preparation.js";
 import type { DeliveryServiceLike } from "../../../src/delivery-service.js";
 import type { HookServiceLike } from "../../../src/hook-service.js";
+import type { ObservabilityServiceLike } from "../../../src/observability-service.js";
 import type { ToolServiceLike } from "../../../src/tools/service.js";
 
 function createRuntimeState(): AgentRuntimeState {
@@ -78,6 +74,23 @@ function createHookService(): HookServiceLike {
   };
 }
 
+function createObservabilityService(): ObservabilityServiceLike {
+  return {
+    createTraceId: vi.fn(() => "trace-query-engine"),
+    createSpanId: vi.fn(() => "span-test"),
+    withExecutionContext: vi.fn(async (_context, fn: () => Promise<unknown>) => fn()),
+    recordEvent: vi.fn(async () => ({
+      schemaVersion: 1,
+      id: "evt-test",
+      at: 0,
+      trace_id: "trace-query-engine",
+      span_id: null,
+      kind: "loop_start",
+      payload: {},
+    })),
+  };
+}
+
 describe("runtime/query-engine", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -100,6 +113,7 @@ describe("runtime/query-engine", () => {
         content: "engine reply",
       },
     });
+    const hookService = createHookService();
 
     const engine = new QueryEngine({
       client: {} as never,
@@ -112,7 +126,8 @@ describe("runtime/query-engine", () => {
       },
       toolService: createToolService(),
       deliveryService: createDeliveryService(),
-      hookService: createHookService(),
+      hookService,
+      observabilityService: createObservabilityService(),
     });
     const runtimeState = createRuntimeState();
     const messages = [{ role: "user", content: "hello engine" }] as Array<{ role: "user" | "assistant"; content: string }>;
@@ -136,7 +151,7 @@ describe("runtime/query-engine", () => {
       traceId: "trace-query-engine",
       stopReason: "assistant_response",
       stopToolCallCount: 0,
-      hookService: expect.any(Object),
+      hookService,
     });
   });
 });

@@ -1,4 +1,4 @@
-import { recordObservabilityEvent } from "../observability/runtime.js";
+import type { ObservabilityServiceLike } from "../observability-service.js";
 import { drainBackgroundNotifications } from "../tools/background-task.js";
 import { drainScheduledNotifications } from "../tools/scheduler.js";
 import { drainSubagentNotifications } from "../tools/subagent.js";
@@ -6,6 +6,7 @@ import { drainTeamNotifications } from "../tools/team.js";
 
 type CollectDynamicSystemMessagesOptions = {
   traceId: string;
+  observabilityService: ObservabilityServiceLike;
   seedMessages?: string[];
 };
 
@@ -35,7 +36,7 @@ export async function collectDynamicSystemMessages(
     );
     console.log(`\u001b[36m[scheduled prompts]\u001b[0m\n${summaryLines.join("\n")}`);
     for (const item of scheduledNotifications) {
-      await recordObservabilityEvent(
+      await opts.observabilityService.recordEvent(
         "notification",
         {
           source: "schedule",
@@ -75,7 +76,7 @@ export async function collectDynamicSystemMessages(
     dynamicSystemMessages.push(`<background_notifications>\n${summaryLines.join("\n")}\n</background_notifications>`);
     console.log(`\u001b[36m[background notifications]\u001b[0m\n${summaryLines.join("\n")}`);
     for (const item of backgroundNotifications) {
-      await recordObservabilityEvent(
+      await opts.observabilityService.recordEvent(
         "notification",
         {
           source: "background",
@@ -99,7 +100,7 @@ export async function collectDynamicSystemMessages(
     dynamicSystemMessages.push(`<team_notifications>\n${summaryLines.join("\n")}\n</team_notifications>`);
     console.log(`\u001b[36m[team notifications]\u001b[0m\n${summaryLines.join("\n")}`);
     for (const item of teamNotifications) {
-      await recordObservabilityEvent(
+      await opts.observabilityService.recordEvent(
         "notification",
         {
           source: "team",
