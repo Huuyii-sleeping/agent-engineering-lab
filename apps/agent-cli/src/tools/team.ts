@@ -21,7 +21,13 @@ type TeamMessage = {
   id: string;
   from: string;
   to: string;
-  type: "message" | "broadcast" | "shutdown_request" | "shutdown_response" | "plan_approval" | "plan_approval_response";
+  type:
+    | "message"
+    | "broadcast"
+    | "shutdown_request"
+    | "shutdown_response"
+    | "plan_approval"
+    | "plan_approval_response";
   content: string;
   request_id?: string;
   createdAt: number;
@@ -38,7 +44,7 @@ type TeamRequest = {
   updatedAt: number;
 };
 
-type TeamNotification = {
+export type TeamNotification = {
   teammateId: number;
   teammateName: string;
   messageType: TeamMessage["type"];
@@ -88,7 +94,9 @@ class TeamManager {
       id: Number(item.id),
       name: String(item.name ?? ""),
       status:
-        item.status === "working" || item.status === "idle" || item.status === "shutdown" ? item.status : "idle",
+        item.status === "working" || item.status === "idle" || item.status === "shutdown"
+          ? item.status
+          : "idle",
       updatedAt: parseTimestampMs(item.updatedAt, nowTimestampMs()),
     }));
   }
@@ -104,7 +112,10 @@ class TeamManager {
     return parsed.map((item) => ({
       schemaVersion: Number.isInteger(Number(item.schemaVersion)) ? Number(item.schemaVersion) : 1,
       request_id: String(item.request_id ?? ""),
-      type: item.type === "shutdown_request" || item.type === "plan_approval" ? item.type : "plan_approval",
+      type:
+        item.type === "shutdown_request" || item.type === "plan_approval"
+          ? item.type
+          : "plan_approval",
       from: String(item.from ?? "main"),
       to: String(item.to ?? ""),
       status:
@@ -189,7 +200,11 @@ class TeamManager {
     return this.ok({ teammate });
   }
 
-  async sendMessage(teammateIdArg: unknown, contentArg: unknown, fromArg: unknown): Promise<string> {
+  async sendMessage(
+    teammateIdArg: unknown,
+    contentArg: unknown,
+    fromArg: unknown,
+  ): Promise<string> {
     const teammateId = Number(teammateIdArg);
     const content = String(contentArg ?? "").trim();
     const from = String(fromArg ?? "main");
@@ -325,7 +340,8 @@ class TeamManager {
     if (!target) {
       return this.fail("TEAMMATE_NOT_FOUND", `teammate ${request.to} not found`);
     }
-    const messageType = protocol === "shutdown_request" ? "shutdown_response" : "plan_approval_response";
+    const messageType =
+      protocol === "shutdown_request" ? "shutdown_response" : "plan_approval_response";
     const message: TeamMessage = {
       id: makeRequestId(),
       from,
@@ -541,7 +557,11 @@ export async function runTeamSetStatus(teammateId: unknown, status: unknown): Pr
   return TEAM.setStatus(teammateId, status);
 }
 
-export async function runTeamMessage(teammateId: unknown, content: unknown, from: unknown): Promise<string> {
+export async function runTeamMessage(
+  teammateId: unknown,
+  content: unknown,
+  from: unknown,
+): Promise<string> {
   return TEAM.sendMessage(teammateId, content, from);
 }
 
@@ -549,7 +569,11 @@ export async function runTeamBroadcast(content: unknown, from: unknown): Promise
   return TEAM.broadcast(content, from);
 }
 
-export async function runTeamShutdownRequest(teammateId: unknown, payload: unknown, from: unknown): Promise<string> {
+export async function runTeamShutdownRequest(
+  teammateId: unknown,
+  payload: unknown,
+  from: unknown,
+): Promise<string> {
   return TEAM.createProtocolRequest("shutdown_request", teammateId, payload, from);
 }
 

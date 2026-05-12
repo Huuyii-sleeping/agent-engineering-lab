@@ -3,12 +3,16 @@ import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import type OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import { createAgentAppRuntime, createAgentRuntimeState, type AgentAppRuntimeDeps } from "./bootstrap/app-runtime.js";
+import {
+  createAgentAppRuntime,
+  createAgentRuntimeState,
+  type AgentAppRuntimeDeps,
+} from "./bootstrap/app-runtime.js";
 import { RUNTIME_CONFIG } from "./runtime-config.js";
 import { runUserQuery } from "./runtime/query-runtime.js";
+import type { RuntimeCoordinationServiceLike } from "./runtime-coordination-service.js";
 import type { AgentRuntimeState } from "./runtime/query-types.js";
 import { withCompactRuntimeContext } from "./tools/base.js";
-import { peekScheduledNotificationCount, tickScheduler } from "./tools/scheduler.js";
 
 const PROMPT = "\u001b[36ms01 >> \u001b[0m";
 
@@ -30,8 +34,7 @@ type ScheduledRoundOptions = {
   model: string;
   promptSource: AgentAppRuntimeDeps["promptSource"];
   printAsyncEvent: (label: string, content: string) => void;
-  schedulerTick?: typeof tickScheduler;
-  peekScheduledCount?: typeof peekScheduledNotificationCount;
+  runtimeCoordinationService?: RuntimeCoordinationServiceLike;
   queryEngine?: AgentAppRuntimeDeps["queryEngine"];
 };
 
@@ -68,24 +71,32 @@ export function renderAsyncCliEvent(opts: {
 }
 
 export async function runScheduledRound(opts: ScheduledRoundOptions): Promise<boolean> {
-  const schedulerTick = opts.schedulerTick ?? tickScheduler;
-  const peekScheduledCount = opts.peekScheduledCount ?? peekScheduledNotificationCount;
+  const runtimeCoordinationService = opts.runtimeCoordinationService;
   const queryEngine = opts.queryEngine;
 
   try {
     if (opts.isAgentBusy()) {
       return false;
     }
-    await schedulerTick();
-    const dueCount = await peekScheduledCount();
+    if (!runtimeCoordinationService) {
+      throw new Error("scheduled round requires runtimeCoordinationService");
+    }
+    await runtimeCoordinationService.tickScheduler();
+    const dueCount = await runtimeCoordinationService.peekScheduledPromptCount();
     if (dueCount === 0) {
       return false;
     }
 
     opts.setAgentBusy(true);
-    opts.printAsyncEvent("scheduled due", `${dueCount} scheduled prompt${dueCount === 1 ? "" : "s"} due now.`);
+    opts.printAsyncEvent(
+      "scheduled due",
+      `${dueCount} scheduled prompt${dueCount === 1 ? "" : "s"} due now.`,
+    );
     try {
-      opts.history.push({ role: "user", content: "Handle any scheduled prompts that are due now." });
+      opts.history.push({
+        role: "user",
+        content: "Handle any scheduled prompts that are due now.",
+      });
       if (!queryEngine) {
         throw new Error("scheduled round requires queryEngine");
       }
@@ -96,7 +107,11 @@ export async function runScheduledRound(opts: ScheduledRoundOptions): Promise<bo
         }),
       );
       const lastMessage = opts.history[opts.history.length - 1];
-      if (lastMessage?.role === "assistant" && typeof lastMessage.content === "string" && lastMessage.content.trim()) {
+      if (
+        lastMessage?.role === "assistant" &&
+        typeof lastMessage.content === "string" &&
+        lastMessage.content.trim()
+      ) {
         opts.printAsyncEvent("scheduled", lastMessage.content);
       } else {
         opts.printAsyncEvent(
@@ -148,6 +163,7 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
       model: app.model,
       promptSource: app.promptSource,
       printAsyncEvent,
+      runtimeCoordinationService: app.runtimeCoordinationService,
       queryEngine: app.queryEngine,
     });
   }, RUNTIME_CONFIG.schedulerPollIntervalMs);

@@ -3,20 +3,14 @@ vi.mock("../../../src/runtime/query-notifications.js", () => ({
   collectDynamicSystemMessages: vi.fn(async () => []),
 }));
 
-vi.mock("../../../src/tools/scheduler.js", () => ({
-  tickScheduler: vi.fn(async () => undefined),
-}));
-
-vi.mock("../../../src/tools/autonomy.js", () => ({
-  runAutonomyTick: vi.fn(async () => '{"ok":false}'),
-}));
-
 import type { AgentRuntimeState } from "../../../src/agent-loop.js";
 import type { HookServiceLike } from "../../../src/hook-service.js";
 import type { MemoryServiceLike } from "../../../src/memory-service.js";
+import type { NotificationServiceLike } from "../../../src/notification-service.js";
 import type { ObservabilityServiceLike } from "../../../src/observability-service.js";
 import { prepareQueryRound } from "../../../src/runtime/query-preparation.js";
 import { collectDynamicSystemMessages } from "../../../src/runtime/query-notifications.js";
+import type { RuntimeCoordinationServiceLike } from "../../../src/runtime-coordination-service.js";
 
 function createRuntimeState(): AgentRuntimeState {
   return {
@@ -74,6 +68,25 @@ function createMemoryService(): MemoryServiceLike {
   };
 }
 
+function createNotificationService(): NotificationServiceLike {
+  return {
+    drainPendingQueryNotifications: vi.fn(async () => ({
+      scheduled: [],
+      subagent: [],
+      background: [],
+      team: [],
+    })),
+  };
+}
+
+function createRuntimeCoordinationService(): RuntimeCoordinationServiceLike {
+  return {
+    runAutonomyTick: vi.fn(async () => ({ ok: false, action: "noop" })),
+    tickScheduler: vi.fn(async () => undefined),
+    peekScheduledPromptCount: vi.fn(async () => 0),
+  };
+}
+
 describe("runtime/query-preparation", () => {
   beforeEach(() => {
     vi.mocked(collectDynamicSystemMessages).mockResolvedValue([]);
@@ -82,7 +95,9 @@ describe("runtime/query-preparation", () => {
   it("returns a blocked result when session-start hooks reject the round", async () => {
     const hookService = createHookService();
     const memoryService = createMemoryService();
+    const notificationService = createNotificationService();
     const observabilityService = createObservabilityService();
+    const runtimeCoordinationService = createRuntimeCoordinationService();
     vi.mocked(hookService.run).mockResolvedValue({
       blocked: true,
       blockReason: "policy denied",
@@ -98,7 +113,9 @@ describe("runtime/query-preparation", () => {
       latestUserInput: "hello",
       hookService,
       memoryService,
+      notificationService,
       observabilityService,
+      runtimeCoordinationService,
     });
 
     expect(result).toEqual({
@@ -111,7 +128,9 @@ describe("runtime/query-preparation", () => {
     const runtimeState = createRuntimeState();
     const hookService = createHookService();
     const memoryService = createMemoryService();
+    const notificationService = createNotificationService();
     const observabilityService = createObservabilityService();
+    const runtimeCoordinationService = createRuntimeCoordinationService();
     runtimeState.roundsWithoutTodo = 3;
     vi.mocked(hookService.run).mockResolvedValue({
       blocked: false,
@@ -134,7 +153,9 @@ describe("runtime/query-preparation", () => {
       latestUserInput: "hello",
       hookService,
       memoryService,
+      notificationService,
       observabilityService,
+      runtimeCoordinationService,
     });
 
     expect(result).toEqual({

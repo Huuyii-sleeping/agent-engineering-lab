@@ -1,7 +1,11 @@
 import { toAssistantMessage } from "../messages.js";
 import type { ObservabilityServiceLike } from "../observability-service.js";
 import type { StaticPromptSource } from "../prompt/types.js";
-import { finalizeAssistantOnlyRound, finalizeToolDrivenRound, runQueryStopStage } from "./query-finalization.js";
+import {
+  finalizeAssistantOnlyRound,
+  finalizeToolDrivenRound,
+  runQueryStopStage,
+} from "./query-finalization.js";
 import { requestQueryModel } from "./query-model.js";
 import { prepareQueryRound } from "./query-preparation.js";
 import { runQueryToolStage } from "./query-tools.js";
@@ -11,8 +15,10 @@ import type OpenAI from "openai";
 import type { DeliveryServiceLike } from "../delivery-service.js";
 import type { HookServiceLike } from "../hook-service.js";
 import type { MemoryServiceLike } from "../memory-service.js";
+import type { NotificationServiceLike } from "../notification-service.js";
 import type { ModelPolicyServiceLike } from "../model-policy-service.js";
 import type { ToolServiceLike } from "../tools/service.js";
+import type { RuntimeCoordinationServiceLike } from "../runtime-coordination-service.js";
 
 type QueryEngineDeps = {
   client: OpenAI;
@@ -22,8 +28,10 @@ type QueryEngineDeps = {
   deliveryService: DeliveryServiceLike;
   hookService: HookServiceLike;
   memoryService: MemoryServiceLike;
+  notificationService: NotificationServiceLike;
   modelPolicyService: ModelPolicyServiceLike;
   observabilityService: ObservabilityServiceLike;
+  runtimeCoordinationService: RuntimeCoordinationServiceLike;
 };
 
 export class QueryEngine {
@@ -34,8 +42,10 @@ export class QueryEngine {
   private readonly deliveryService: DeliveryServiceLike;
   private readonly hookService: HookServiceLike;
   private readonly memoryService: MemoryServiceLike;
+  private readonly notificationService: NotificationServiceLike;
   private readonly modelPolicyService: ModelPolicyServiceLike;
   private readonly observabilityService: ObservabilityServiceLike;
+  private readonly runtimeCoordinationService: RuntimeCoordinationServiceLike;
 
   constructor(deps: QueryEngineDeps) {
     this.client = deps.client;
@@ -45,8 +55,10 @@ export class QueryEngine {
     this.deliveryService = deps.deliveryService;
     this.hookService = deps.hookService;
     this.memoryService = deps.memoryService;
+    this.notificationService = deps.notificationService;
     this.modelPolicyService = deps.modelPolicyService;
     this.observabilityService = deps.observabilityService;
+    this.runtimeCoordinationService = deps.runtimeCoordinationService;
   }
 
   async run(opts: QueryEngineRunInput): Promise<void> {
@@ -86,7 +98,9 @@ export class QueryEngine {
           latestUserInput: latestUser?.content ?? "",
           hookService: this.hookService,
           memoryService: this.memoryService,
+          notificationService: this.notificationService,
           observabilityService: this.observabilityService,
+          runtimeCoordinationService: this.runtimeCoordinationService,
         });
         if (!preparedRound.ok) {
           stopReason = "session_start_blocked";

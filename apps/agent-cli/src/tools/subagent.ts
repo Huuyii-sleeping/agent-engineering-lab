@@ -26,7 +26,7 @@ type SubagentRecord = {
   lastError: string | null;
 };
 
-type SubagentNotification = {
+export type SubagentNotification = {
   agentId: number;
   agentName: string;
   status: "completed" | "failed";
@@ -164,7 +164,11 @@ class SubagentManager {
 
       for (let round = 0; round < RUNTIME_CONFIG.subagentMaxRounds; round += 1) {
         const promptTokens = Math.ceil(JSON.stringify(messages).length / 4);
-        const selection = await DEFAULT_MODEL_POLICY_SERVICE.selectModel("ops", MODEL, promptTokens);
+        const selection = await DEFAULT_MODEL_POLICY_SERVICE.selectModel(
+          "ops",
+          MODEL,
+          promptTokens,
+        );
         if (selection.budgetAction === "deny") {
           record.status = "failed";
           record.updatedAt = this.now();
@@ -217,7 +221,8 @@ class SubagentManager {
         messages.push(toAssistantMessage(message));
 
         const functionToolCalls = message.tool_calls?.filter(
-          (toolCall): toolCall is ChatCompletionMessageFunctionToolCall => toolCall.type === "function",
+          (toolCall): toolCall is ChatCompletionMessageFunctionToolCall =>
+            toolCall.type === "function",
         );
 
         if (!functionToolCalls || functionToolCalls.length === 0) {
@@ -230,7 +235,10 @@ class SubagentManager {
         }
 
         for (const toolCall of functionToolCalls) {
-          const toolOutput = await runBaseToolByName(toolCall.function.name, toolCall.function.arguments);
+          const toolOutput = await runBaseToolByName(
+            toolCall.function.name,
+            toolCall.function.arguments,
+          );
           messages.push({
             role: "tool",
             tool_call_id: toolCall.id,
@@ -290,7 +298,9 @@ class SubagentManager {
     }
 
     const timeoutMsRaw =
-      timeoutMsArg === undefined ? RUNTIME_CONFIG.subagentDefaultWaitTimeoutMs : Number(timeoutMsArg);
+      timeoutMsArg === undefined
+        ? RUNTIME_CONFIG.subagentDefaultWaitTimeoutMs
+        : Number(timeoutMsArg);
     if (!Number.isInteger(timeoutMsRaw) || timeoutMsRaw <= 0) {
       return err("INVALID_ARGUMENT", "timeout_ms must be a positive integer");
     }

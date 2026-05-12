@@ -19,7 +19,7 @@ type BackgroundTask = {
   stderr: string;
 };
 
-type BackgroundNotification = {
+export type BackgroundNotification = {
   taskId: number;
   status: "completed" | "failed";
   command: string;
@@ -58,7 +58,10 @@ class BackgroundManager {
     const command = String(commandArg ?? "").trim();
     if (!command) {
       return JSON.stringify(
-        { ok: false, error: { code: "INVALID_ARGUMENT", message: "background_run requires command" } },
+        {
+          ok: false,
+          error: { code: "INVALID_ARGUMENT", message: "background_run requires command" },
+        },
         null,
         2,
       );
@@ -164,14 +167,21 @@ class BackgroundManager {
     const id = Number(taskIdArg);
     if (!Number.isInteger(id) || id <= 0) {
       return JSON.stringify(
-        { ok: false, error: { code: "INVALID_ARGUMENT", message: "task_id must be a positive integer" } },
+        {
+          ok: false,
+          error: { code: "INVALID_ARGUMENT", message: "task_id must be a positive integer" },
+        },
         null,
         2,
       );
     }
     const task = this.tasks.get(id);
     if (!task) {
-      return JSON.stringify({ ok: false, error: { code: "TASK_NOT_FOUND", message: `task ${id} not found` } }, null, 2);
+      return JSON.stringify(
+        { ok: false, error: { code: "TASK_NOT_FOUND", message: `task ${id} not found` } },
+        null,
+        2,
+      );
     }
     return JSON.stringify({ ok: true, task: taskSnapshot(task) }, null, 2);
   }

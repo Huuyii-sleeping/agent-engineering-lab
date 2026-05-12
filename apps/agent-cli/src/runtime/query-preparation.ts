@@ -1,10 +1,10 @@
 import type { AgentRuntimeState } from "../agent-loop.js";
 import type { HookServiceLike } from "../hook-service.js";
 import type { MemoryServiceLike } from "../memory-service.js";
+import type { NotificationServiceLike } from "../notification-service.js";
 import type { ObservabilityServiceLike } from "../observability-service.js";
+import type { RuntimeCoordinationServiceLike } from "../runtime-coordination-service.js";
 import { collectDynamicSystemMessages } from "./query-notifications.js";
-import { tickScheduler } from "../tools/scheduler.js";
-import { runAutonomyTick } from "../tools/autonomy.js";
 
 export type QueryRoundPreparationResult =
   | {
@@ -23,7 +23,9 @@ type PrepareQueryRoundOptions = {
   latestUserInput: string;
   hookService: HookServiceLike;
   memoryService: MemoryServiceLike;
+  notificationService: NotificationServiceLike;
   observabilityService: ObservabilityServiceLike;
+  runtimeCoordinationService: RuntimeCoordinationServiceLike;
 };
 
 export async function prepareQueryRound(
@@ -51,8 +53,7 @@ export async function prepareQueryRound(
   }
 
   try {
-    const autonomyRaw = await runAutonomyTick();
-    const autonomy = JSON.parse(autonomyRaw) as { ok?: boolean; action?: string; taskId?: number };
+    const autonomy = await opts.runtimeCoordinationService.runAutonomyTick();
     if (autonomy.ok && autonomy.action === "claimed") {
       console.log(`\u001b[36m[autonomy]\u001b[0m claimed task #${autonomy.taskId ?? "?"}`);
     }
@@ -61,13 +62,14 @@ export async function prepareQueryRound(
   }
 
   try {
-    await tickScheduler();
+    await opts.runtimeCoordinationService.tickScheduler();
   } catch {
     // keep query preparation resilient if scheduler tick fails
   }
 
   const dynamicSystemMessages = await collectDynamicSystemMessages({
     traceId: opts.traceId,
+    notificationService: opts.notificationService,
     observabilityService: opts.observabilityService,
     seedMessages: sessionStartHooks.messages,
   });

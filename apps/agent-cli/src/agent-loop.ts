@@ -3,11 +3,18 @@ import type { QueryLoopOptions } from "./runtime/query-types.js";
 import { DEFAULT_DELIVERY_SERVICE } from "./delivery-service.js";
 import { DEFAULT_HOOK_SERVICE } from "./hook-service.js";
 import { DEFAULT_MEMORY_SERVICE } from "./memory-service.js";
+import { DEFAULT_NOTIFICATION_SERVICE } from "./notification-service.js";
 import { DEFAULT_MODEL_POLICY_SERVICE } from "./model-policy-service.js";
 import { DEFAULT_OBSERVABILITY_SERVICE } from "./observability-service.js";
+import { DEFAULT_RUNTIME_COORDINATION_SERVICE } from "./runtime-coordination-service.js";
 import { DEFAULT_TOOL_SERVICE } from "./tools/service.js";
 
-export type { AgentRuntimeState, QueryEngineLike, QueryEngineRunInput, QueryLoopOptions } from "./runtime/query-types.js";
+export type {
+  AgentRuntimeState,
+  QueryEngineLike,
+  QueryEngineRunInput,
+  QueryLoopOptions,
+} from "./runtime/query-types.js";
 
 export async function agentLoop(opts: QueryLoopOptions): Promise<void> {
   const engine = new QueryEngine({
@@ -18,8 +25,10 @@ export async function agentLoop(opts: QueryLoopOptions): Promise<void> {
     deliveryService: DEFAULT_DELIVERY_SERVICE,
     hookService: DEFAULT_HOOK_SERVICE,
     memoryService: DEFAULT_MEMORY_SERVICE,
+    notificationService: DEFAULT_NOTIFICATION_SERVICE,
     modelPolicyService: DEFAULT_MODEL_POLICY_SERVICE,
     observabilityService: DEFAULT_OBSERVABILITY_SERVICE,
+    runtimeCoordinationService: DEFAULT_RUNTIME_COORDINATION_SERVICE,
   });
   await engine.run({
     tools: opts.tools,

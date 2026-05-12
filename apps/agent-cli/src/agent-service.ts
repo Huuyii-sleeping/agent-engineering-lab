@@ -2,8 +2,10 @@ import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { createAgentRuntimeState, type AgentAppRuntimeDeps } from "./bootstrap/app-runtime.js";
+import type { NotificationServiceLike } from "./notification-service.js";
 import { runUserQuery } from "./runtime/query-runtime.js";
 import type { AgentRuntimeState } from "./runtime/query-types.js";
+import type { RuntimeCoordinationServiceLike } from "./runtime-coordination-service.js";
 
 type AgentSessionRecord = {
   id: string;
@@ -35,7 +37,9 @@ function json(res: ServerResponse, statusCode: number, payload: unknown): void {
 function parseBody<T>(req: IncomingMessage): Promise<T> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk))));
+    req.on("data", (chunk) =>
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk))),
+    );
     req.on("error", reject);
     req.on("end", () => {
       const raw = Buffer.concat(chunks).toString("utf8").trim();
@@ -72,8 +76,10 @@ export class AgentService {
   private readonly deliveryService: AgentServiceDeps["deliveryService"];
   private readonly hookService: AgentServiceDeps["hookService"];
   private readonly memoryService: AgentServiceDeps["memoryService"];
+  private readonly notificationService: NotificationServiceLike;
   private readonly modelPolicyService: AgentServiceDeps["modelPolicyService"];
   private readonly observabilityService: AgentServiceDeps["observabilityService"];
+  private readonly runtimeCoordinationService: RuntimeCoordinationServiceLike;
   private readonly queryEngine: AgentServiceDeps["queryEngine"];
 
   constructor(deps: AgentServiceDeps) {
@@ -84,8 +90,10 @@ export class AgentService {
     this.deliveryService = deps.deliveryService;
     this.hookService = deps.hookService;
     this.memoryService = deps.memoryService;
+    this.notificationService = deps.notificationService;
     this.modelPolicyService = deps.modelPolicyService;
     this.observabilityService = deps.observabilityService;
+    this.runtimeCoordinationService = deps.runtimeCoordinationService;
     this.queryEngine = deps.queryEngine;
   }
 
@@ -128,7 +136,9 @@ export class AgentService {
       };
     }
 
-    const session = input.session_id ? this.getSession(String(input.session_id)) : this.createSession();
+    const session = input.session_id
+      ? this.getSession(String(input.session_id))
+      : this.createSession();
     if (!session) {
       return {
         ok: false,
@@ -160,8 +170,10 @@ export class AgentService {
           deliveryService: this.deliveryService,
           hookService: this.hookService,
           memoryService: this.memoryService,
+          notificationService: this.notificationService,
           modelPolicyService: this.modelPolicyService,
           observabilityService: this.observabilityService,
+          runtimeCoordinationService: this.runtimeCoordinationService,
           queryEngine: this.queryEngine,
         },
         history: session.history,
@@ -204,7 +216,10 @@ export function createAgentHttpServer(service: AgentService): Server {
         return;
       }
       if (method === "GET" && pathname === "/sessions") {
-        json(res, 200, { ok: true, sessions: service.listSessions().map((item) => summarizeSession(item)) });
+        json(res, 200, {
+          ok: true,
+          sessions: service.listSessions().map((item) => summarizeSession(item)),
+        });
         return;
       }
       if (method === "POST" && pathname === "/sessions") {

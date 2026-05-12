@@ -1,11 +1,9 @@
+import type { NotificationServiceLike } from "../notification-service.js";
 import type { ObservabilityServiceLike } from "../observability-service.js";
-import { drainBackgroundNotifications } from "../tools/background-task.js";
-import { drainScheduledNotifications } from "../tools/scheduler.js";
-import { drainSubagentNotifications } from "../tools/subagent.js";
-import { drainTeamNotifications } from "../tools/team.js";
 
 type CollectDynamicSystemMessagesOptions = {
   traceId: string;
+  notificationService: NotificationServiceLike;
   observabilityService: ObservabilityServiceLike;
   seedMessages?: string[];
 };
@@ -18,8 +16,9 @@ export async function collectDynamicSystemMessages(
   opts: CollectDynamicSystemMessagesOptions,
 ): Promise<string[]> {
   const dynamicSystemMessages = [...(opts.seedMessages ?? [])];
+  const notifications = await opts.notificationService.drainPendingQueryNotifications();
 
-  const scheduledNotifications = await drainScheduledNotifications();
+  const scheduledNotifications = notifications.scheduled;
   if (scheduledNotifications.length > 0) {
     const summaryLines = scheduledNotifications.map((item) => {
       const preview = summarizePrompt(item.prompt);
@@ -50,7 +49,7 @@ export async function collectDynamicSystemMessages(
     }
   }
 
-  const subagentNotifications = drainSubagentNotifications();
+  const subagentNotifications = notifications.subagent;
   if (subagentNotifications.length > 0) {
     const summaryLines = subagentNotifications.map((item) => {
       const output = typeof item.output === "string" ? item.output.slice(0, 200) : "";
@@ -60,11 +59,13 @@ export async function collectDynamicSystemMessages(
       }
       return `agent#${item.agentId}(${item.agentName}) updated_at_ms=${item.updatedAt}; error=${error}`;
     });
-    dynamicSystemMessages.push(`<subagent_notifications>\n${summaryLines.join("\n")}\n</subagent_notifications>`);
+    dynamicSystemMessages.push(
+      `<subagent_notifications>\n${summaryLines.join("\n")}\n</subagent_notifications>`,
+    );
     console.log(`\u001b[36m[subagent notifications]\u001b[0m\n${summaryLines.join("\n")}`);
   }
 
-  const backgroundNotifications = drainBackgroundNotifications();
+  const backgroundNotifications = notifications.background;
   if (backgroundNotifications.length > 0) {
     const summaryLines = backgroundNotifications.map((item) => {
       const out = item.stdout ? item.stdout.slice(0, 160) : "";
@@ -73,7 +74,9 @@ export async function collectDynamicSystemMessages(
         ? `task#${item.taskId} finished_at_ms=${item.finishedAt}; command=${item.command}; stdout=${out}`
         : `task#${item.taskId} finished_at_ms=${item.finishedAt}; command=${item.command}; stderr=${err}`;
     });
-    dynamicSystemMessages.push(`<background_notifications>\n${summaryLines.join("\n")}\n</background_notifications>`);
+    dynamicSystemMessages.push(
+      `<background_notifications>\n${summaryLines.join("\n")}\n</background_notifications>`,
+    );
     console.log(`\u001b[36m[background notifications]\u001b[0m\n${summaryLines.join("\n")}`);
     for (const item of backgroundNotifications) {
       await opts.observabilityService.recordEvent(
@@ -90,14 +93,16 @@ export async function collectDynamicSystemMessages(
     }
   }
 
-  const teamNotifications = drainTeamNotifications();
+  const teamNotifications = notifications.team;
   if (teamNotifications.length > 0) {
     const summaryLines = teamNotifications.map((item) => {
       const content = item.content.slice(0, 120);
       const request = item.requestId ? ` request_id=${item.requestId}` : "";
       return `to#${item.teammateId}(${item.teammateName}) ${item.messageType} from=${item.from}${request} created_at_ms=${item.createdAt}: ${content}`;
     });
-    dynamicSystemMessages.push(`<team_notifications>\n${summaryLines.join("\n")}\n</team_notifications>`);
+    dynamicSystemMessages.push(
+      `<team_notifications>\n${summaryLines.join("\n")}\n</team_notifications>`,
+    );
     console.log(`\u001b[36m[team notifications]\u001b[0m\n${summaryLines.join("\n")}`);
     for (const item of teamNotifications) {
       await opts.observabilityService.recordEvent(

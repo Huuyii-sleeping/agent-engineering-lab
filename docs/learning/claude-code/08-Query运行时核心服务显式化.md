@@ -25,6 +25,8 @@
 - `ObservabilityService`
 - `ModelPolicyService`
 - `MemoryService`
+- `NotificationService`
+- `RuntimeCoordinationService`
 
 它们分别解决的是四类不同的运行时依赖：
 
@@ -40,6 +42,10 @@
   - model selection、fallback selection、usage finalize
 - `MemoryService`
   - auto extract、query memory injection、memory tool-facing add/search/list
+- `NotificationService`
+  - scheduled / subagent / background / team 通知汇聚与 query 侧消费入口
+- `RuntimeCoordinationService`
+  - autonomy tick、scheduler tick、scheduled due count 这类运行时轮询协调能力
 
 这样之后，app runtime 才真正开始像 composition root，而不是一组零散 helper 的聚合点。
 
@@ -57,6 +63,8 @@
 - 注入 fake `observabilityService`
 - 注入 fake `modelPolicyService`
 - 注入 fake `memoryService`
+- 注入 fake `notificationService`
+- 注入 fake `runtimeCoordinationService`
 
 这件事的价值非常直接：
 
@@ -81,14 +89,17 @@
 4. 新增 `observability-service.ts`
 5. 新增 `model-policy-service.ts`
 6. 新增 `memory-service.ts`
-7. 让 `bootstrap/app-runtime.ts` 把这些 service 都纳入共享装配
-8. 让 `agent-loop.ts` 保留 compatibility wrapper，但补齐默认 service
-9. 让 `AgentService` 透传这些共享 runtime service
-10. 让 `QueryEngine` 显式持有这些 service
-11. 让 `query-runtime / query-preparation / query-model / query-tools / query-finalization / query-notifications` 改走这些 service
-12. 让 subagent 的 model policy 调用也开始走默认 `ModelPolicyService`
-13. 让 query preparation 与 base memory tools 开始走 `MemoryService`
-14. 把相关 unit test / smoke test 改成基于 service 注入验证
+7. 新增 `notification-service.ts`
+8. 新增 `runtime-coordination-service.ts`
+9. 让 `bootstrap/app-runtime.ts` 把这些 service 都纳入共享装配
+10. 让 `agent-loop.ts` 保留 compatibility wrapper，但补齐默认 service
+11. 让 `AgentService` 透传这些共享 runtime service
+12. 让 `QueryEngine` 显式持有这些 service
+13. 让 `query-runtime / query-preparation / query-model / query-tools / query-finalization / query-notifications` 改走这些 service
+14. 让 CLI scheduled round 也改走共享 runtime coordination service
+15. 让 subagent 的 model policy 调用也开始走默认 `ModelPolicyService`
+16. 让 query preparation 与 base memory tools 开始走 `MemoryService`
+17. 把相关 unit test / smoke test 改成基于 service 注入验证
 
 ## 这一组里每个 service 分别解决了什么
 
@@ -172,6 +183,32 @@
 - base memory tools 开始改走默认 `MemoryService`
 - memory 能力开始进入共享 runtime service 依赖面
 
+### `NotificationService`
+
+解决的问题：
+
+- `query-notifications` 还直接依赖 scheduler / subagent / background / team 的 drain 函数
+- 通知来源虽然已经被识别出来了，但 query 侧还没有统一消费入口
+
+落地后：
+
+- 各类待消费通知开始先汇聚到 `notificationService`
+- `query-notifications` 退回通知格式化与 observability 记录阶段
+- 后面要继续换通知来源时，不用再直接改 query stage
+
+### `RuntimeCoordinationService`
+
+解决的问题：
+
+- `query-preparation` 还直接调用 autonomy / scheduler 模块函数
+- CLI scheduled round 也还各自拿 scheduler 入口，交互表面和 query runtime 没共享同一条协调边界
+
+落地后：
+
+- autonomy tick 与 scheduler tick 开始进入统一 runtime coordination service
+- scheduled due count 也进入同一注入面，CLI 与 `QueryEngine` 共享协调边界
+- `query-preparation` 不再负责解析 autonomy 原始 JSON 结果
+
 ## 这组改造采纳了什么
 
 ### 采纳
@@ -205,9 +242,11 @@
 - `ObservabilityService`
 - `ModelPolicyService`
 - `MemoryService`
+- `NotificationService`
+- `RuntimeCoordinationService`
 
 下一步更自然的方向是：
 
 - 继续判断哪些 runtime 能力值得进入同一组 service 边界
-- 看 autonomy / scheduler / notification 这类能力要不要继续显式化
+- 看这些 service 是否还要进一步往更稳定的目录与对象形态收口
 - 再决定这些 service 要不要进入更系统的目录与装配形态

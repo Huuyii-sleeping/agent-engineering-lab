@@ -20,14 +20,19 @@ vi.mock("../../../src/runtime/query-finalization.js", () => ({
 }));
 
 import { QueryEngine } from "../../../src/runtime/query-engine.js";
-import { finalizeAssistantOnlyRound, runQueryStopStage } from "../../../src/runtime/query-finalization.js";
+import {
+  finalizeAssistantOnlyRound,
+  runQueryStopStage,
+} from "../../../src/runtime/query-finalization.js";
 import { requestQueryModel } from "../../../src/runtime/query-model.js";
 import { prepareQueryRound } from "../../../src/runtime/query-preparation.js";
 import type { DeliveryServiceLike } from "../../../src/delivery-service.js";
 import type { HookServiceLike } from "../../../src/hook-service.js";
 import type { MemoryServiceLike } from "../../../src/memory-service.js";
+import type { NotificationServiceLike } from "../../../src/notification-service.js";
 import type { ModelPolicyServiceLike } from "../../../src/model-policy-service.js";
 import type { ObservabilityServiceLike } from "../../../src/observability-service.js";
+import type { RuntimeCoordinationServiceLike } from "../../../src/runtime-coordination-service.js";
 import type { ToolServiceLike } from "../../../src/tools/service.js";
 
 function createRuntimeState(): AgentRuntimeState {
@@ -90,6 +95,17 @@ function createMemoryService(): MemoryServiceLike {
   };
 }
 
+function createNotificationService(): NotificationServiceLike {
+  return {
+    drainPendingQueryNotifications: async () => ({
+      scheduled: [],
+      subagent: [],
+      background: [],
+      team: [],
+    }),
+  };
+}
+
 function createModelPolicyService(): ModelPolicyServiceLike {
   return {
     selectModel: async () => ({
@@ -120,6 +136,14 @@ function createObservabilityService(): ObservabilityServiceLike {
       kind: "loop_start",
       payload: {},
     })),
+  };
+}
+
+function createRuntimeCoordinationService(): RuntimeCoordinationServiceLike {
+  return {
+    runAutonomyTick: async () => ({ ok: false, action: "noop" }),
+    tickScheduler: async () => undefined,
+    peekScheduledPromptCount: async () => 0,
   };
 }
 
@@ -160,11 +184,16 @@ describe("runtime/query-engine", () => {
       deliveryService: createDeliveryService(),
       hookService,
       memoryService: createMemoryService(),
+      notificationService: createNotificationService(),
       modelPolicyService: createModelPolicyService(),
       observabilityService: createObservabilityService(),
+      runtimeCoordinationService: createRuntimeCoordinationService(),
     });
     const runtimeState = createRuntimeState();
-    const messages = [{ role: "user", content: "hello engine" }] as Array<{ role: "user" | "assistant"; content: string }>;
+    const messages = [{ role: "user", content: "hello engine" }] as Array<{
+      role: "user" | "assistant";
+      content: string;
+    }>;
 
     await engine.run({
       tools: [],
