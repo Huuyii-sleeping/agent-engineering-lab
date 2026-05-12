@@ -1,4 +1,4 @@
-# 第十三轮学习沉淀：tool 协议层与 registration 第二轮
+# Tool 协议层与 Builtin-MCP 统一注册视图
 
 ## 这轮真正学到的东西
 
