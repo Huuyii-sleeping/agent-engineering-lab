@@ -2,7 +2,6 @@
 
 ## Purpose
 定义 worktree 执行车道的进入、最近命令记录、统一收尾与脏改动保护契约，确保任务与 worktree 生命周期可以一致追踪与安全回收。
-
 ## Requirements
 ### Requirement: Worktree runtime SHALL record lane entry and recent command metadata
 系统 SHALL 在 worktree 运行时持久化最近进入时间、最近命令时间和最近命令摘要，以便恢复“最后在哪条车道、最近做了什么”。
@@ -36,3 +35,18 @@
 #### Scenario: 强制移除脏 worktree
 - **WHEN** 调用方显式传入 `force=true` 且选择 `action=remove`
 - **THEN** 系统允许继续移除，并在 closeout 结果中标记此次回收为强制执行
+
+### Requirement: Worktree boundary corrections MUST preserve closeout dirty guard and task sync semantics
+Worktree 边界校正 MUST 保持 create、enter、run、closeout、dirty guard 与 task sync 的现有语义不变。
+
+#### Scenario: 执行 worktree lifecycle
+- **WHEN** 模型调用 `worktree_create`、`worktree_enter`、`worktree_run` 和 `worktree_closeout`
+- **THEN** 系统继续写入同样的 worktree record、event log、recent command metadata 和 task worktree state
+
+#### Scenario: 移除 dirty worktree
+- **WHEN** `worktree_remove` 或 `worktree_closeout(action=remove)` 检测到 dirty git files 且未设置 `force=true`
+- **THEN** 系统继续返回 `DIRTY_WORKTREE` 结构化错误和 `dirtyFiles`
+
+#### Scenario: 强制移除 dirty worktree
+- **WHEN** 调用方设置 `force=true`
+- **THEN** 系统继续允许移除并在 closeout 结果中记录 `forced=true`
