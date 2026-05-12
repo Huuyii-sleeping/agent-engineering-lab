@@ -15,9 +15,14 @@ describe("bootstrap/app-runtime", () => {
   });
 
   it("uses explicit overrides when building app runtime deps", () => {
-    const tools = [{ type: "function", function: { name: "echo", parameters: { type: "object", properties: {} } } }] as
-      ChatCompletionTool[];
-    const toolsResolver = vi.fn(async () => tools);
+    const tools = [{ type: "function", function: { name: "echo", parameters: { type: "object", properties: {} } } }] as ChatCompletionTool[];
+    const toolService = {
+      listTools: vi.fn(async () => tools),
+      listToolRegistrations: vi.fn(async () => []),
+      listToolMetadata: vi.fn(async () => []),
+      previewToolCall: vi.fn(() => "echo"),
+      runToolByName: vi.fn(async () => ""),
+    };
     const promptSource: StaticPromptSource = { core: "core", tools: [], skills: [], rules: [] };
     const queryEngine = { run: vi.fn() };
 
@@ -25,13 +30,13 @@ describe("bootstrap/app-runtime", () => {
       client: {} as OpenAI,
       model: "test-model",
       promptSource,
-      toolsResolver,
+      toolService,
       queryEngine,
     });
 
     expect(runtime.model).toBe("test-model");
     expect(runtime.promptSource).toBe(promptSource);
-    expect(runtime.toolsResolver).toBe(toolsResolver);
+    expect(runtime.toolService).toBe(toolService);
     expect(runtime.queryEngine).toBe(queryEngine);
   });
 });

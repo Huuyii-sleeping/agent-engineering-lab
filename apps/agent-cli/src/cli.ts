@@ -2,11 +2,11 @@ import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import type OpenAI from "openai";
-import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
-import type { AgentRuntimeState } from "./agent-loop.js";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { createAgentAppRuntime, createAgentRuntimeState, type AgentAppRuntimeDeps } from "./bootstrap/app-runtime.js";
 import { RUNTIME_CONFIG } from "./runtime-config.js";
 import { runUserQuery } from "./runtime/query-runtime.js";
+import type { AgentRuntimeState } from "./runtime/query-types.js";
 import { withCompactRuntimeContext } from "./tools/base.js";
 import { peekScheduledNotificationCount, tickScheduler } from "./tools/scheduler.js";
 
@@ -30,7 +30,6 @@ type ScheduledRoundOptions = {
   model: string;
   promptSource: AgentAppRuntimeDeps["promptSource"];
   printAsyncEvent: (label: string, content: string) => void;
-  toolsResolver?: () => Promise<ChatCompletionTool[]>;
   schedulerTick?: typeof tickScheduler;
   peekScheduledCount?: typeof peekScheduledNotificationCount;
   queryEngine?: AgentAppRuntimeDeps["queryEngine"];
@@ -69,7 +68,6 @@ export function renderAsyncCliEvent(opts: {
 }
 
 export async function runScheduledRound(opts: ScheduledRoundOptions): Promise<boolean> {
-  const toolsResolver = opts.toolsResolver;
   const schedulerTick = opts.schedulerTick ?? tickScheduler;
   const peekScheduledCount = opts.peekScheduledCount ?? peekScheduledNotificationCount;
   const queryEngine = opts.queryEngine;
@@ -84,17 +82,15 @@ export async function runScheduledRound(opts: ScheduledRoundOptions): Promise<bo
       return false;
     }
 
-      opts.setAgentBusy(true);
-      opts.printAsyncEvent("scheduled due", `${dueCount} scheduled prompt${dueCount === 1 ? "" : "s"} due now.`);
-      try {
-        opts.history.push({ role: "user", content: "Handle any scheduled prompts that are due now." });
-        if (!toolsResolver || !queryEngine) {
-          throw new Error("scheduled round requires toolsResolver and queryEngine");
-        }
-      const tools = await toolsResolver();
+    opts.setAgentBusy(true);
+    opts.printAsyncEvent("scheduled due", `${dueCount} scheduled prompt${dueCount === 1 ? "" : "s"} due now.`);
+    try {
+      opts.history.push({ role: "user", content: "Handle any scheduled prompts that are due now." });
+      if (!queryEngine) {
+        throw new Error("scheduled round requires queryEngine");
+      }
       await withCompactRuntimeContext({ messages: opts.history }, async () =>
         queryEngine.run({
-          tools,
           messages: opts.history,
           runtimeState: opts.runtimeState,
         }),
@@ -152,7 +148,6 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
       model: app.model,
       promptSource: app.promptSource,
       printAsyncEvent,
-      toolsResolver: app.toolsResolver,
       queryEngine: app.queryEngine,
     });
   }, RUNTIME_CONFIG.schedulerPollIntervalMs);

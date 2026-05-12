@@ -1,9 +1,8 @@
 import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import type { AgentRuntimeState } from "../agent-loop.js";
 import { runHooks } from "../hooks/index.js";
 import { createSpanId, recordObservabilityEvent, withExecutionContext } from "../observability/runtime.js";
-import { previewToolCall, runToolByName } from "../tools/index.js";
+import type { ToolServiceLike } from "../tools/service.js";
 import { appendSystemMessages } from "./query-messages.js";
 import {
   analyzeToolOutput,
@@ -12,6 +11,7 @@ import {
   parseTaskIdFromToolOutput,
 } from "./query-tool-results.js";
 import { parseToolArgs } from "./tool-runtime.js";
+import type { AgentRuntimeState } from "./query-types.js";
 
 export type QueryToolStageResult = {
   usedTodo: boolean;
@@ -22,6 +22,7 @@ type RunQueryToolStageOptions = {
   messages: ChatCompletionMessageParam[];
   runtimeState: AgentRuntimeState;
   traceId: string;
+  toolService: ToolServiceLike;
 };
 
 function makeHookBlockedOutput(reason: string | null): string {
@@ -43,6 +44,7 @@ async function maybeAutoCompleteTaskFromTodo(
   toolName: string,
   toolArgs: Record<string, unknown>,
   traceId: string,
+  toolService: ToolServiceLike,
 ): Promise<boolean> {
   if (toolName !== "todo") {
     return false;
@@ -57,7 +59,7 @@ async function maybeAutoCompleteTaskFromTodo(
   });
   console.log(`\u001b[33m$ task_update ${runtimeState.activeTaskId} (auto)\u001b[0m`);
   const autoOutput = await withExecutionContext({ traceId, spanId: createSpanId() }, async () =>
-    runToolByName("task_update", autoUpdateArgs),
+    toolService.runToolByName("task_update", autoUpdateArgs),
   );
   console.log(autoOutput);
   runtimeState.activeTaskId = null;
@@ -100,7 +102,7 @@ export async function runQueryToolStage(opts: RunQueryToolStageOptions): Promise
 
     const toolName = toolCall.function.name;
     const toolArgs = parseToolArgs(toolCall.function.arguments);
-    const preview = previewToolCall(toolName, toolCall.function.arguments);
+    const preview = opts.toolService.previewToolCall(toolName, toolCall.function.arguments);
     const spanId = createSpanId();
     await recordObservabilityEvent(
       "tool_call",
@@ -131,7 +133,7 @@ export async function runQueryToolStage(opts: RunQueryToolStageOptions): Promise
     } else {
       const startedAt = Date.now();
       toolOutput = await withExecutionContext({ traceId: opts.traceId, spanId }, async () =>
-        runToolByName(toolName, toolCall.function.arguments),
+        opts.toolService.runToolByName(toolName, toolCall.function.arguments),
       );
       durationMs = Date.now() - startedAt;
     }
@@ -189,7 +191,7 @@ export async function runQueryToolStage(opts: RunQueryToolStageOptions): Promise
 
     if (toolName === "todo") {
       usedTodo = true;
-      await maybeAutoCompleteTaskFromTodo(opts.runtimeState, toolName, toolArgs, opts.traceId);
+      await maybeAutoCompleteTaskFromTodo(opts.runtimeState, toolName, toolArgs, opts.traceId, opts.toolService);
     }
 
     syncActiveTaskState(opts.runtimeState, toolName, toolArgs, toolOutput);

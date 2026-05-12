@@ -4,6 +4,7 @@ import { AgentService } from "../../src/agent-service.js";
 import type { AgentRuntimeState } from "../../src/agent-loop.js";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import type { StaticPromptSource } from "../../src/prompt/types.js";
+import type { ToolServiceLike } from "../../src/tools/service.js";
 
 const PROMPT_SOURCE: StaticPromptSource = {
   core: "test-core",
@@ -27,6 +28,17 @@ function createLoopRunner() {
   };
 }
 
+function createToolService(overrides: Partial<ToolServiceLike> = {}): ToolServiceLike {
+  return {
+    listTools: async () => [],
+    listToolRegistrations: async () => [],
+    listToolMetadata: async () => [],
+    previewToolCall: () => "",
+    runToolByName: async () => "",
+    ...overrides,
+  };
+}
+
 afterEach(() => {
   delete process.env.MODEL_ID;
 });
@@ -37,7 +49,7 @@ describe("agent service", () => {
       client: {} as OpenAI,
       model: "fake-model",
       promptSource: PROMPT_SOURCE,
-      toolsResolver: async () => [],
+      toolService: createToolService(),
       queryEngine: createLoopRunner(),
     });
     const first = service.createSession();
@@ -53,7 +65,7 @@ describe("agent service", () => {
       client: {} as OpenAI,
       model: "fake-model",
       promptSource: PROMPT_SOURCE,
-      toolsResolver: async () => [],
+      toolService: createToolService(),
       queryEngine: createLoopRunner(),
     });
     const a = service.createSession();
@@ -74,25 +86,24 @@ describe("agent service", () => {
       client: {} as OpenAI,
       model: "fake-model",
       promptSource: PROMPT_SOURCE,
-      toolsResolver: async () => [],
-      toolRegistrationsResolver: async () => [
-        {
-          name: "read_file",
-          description: "Read a file",
-          target: "base",
-          allowDuringReplay: true,
-          parameters: { type: "object", properties: {} },
-        },
-        {
-          name: "mcp__demo__echo_upper",
-          description: "Echo upper",
-          target: "mcp",
-          allowDuringReplay: false,
-          parameters: { type: "object", properties: {} },
-          serverName: "demo",
-          remoteName: "echo_upper",
-        },
-      ],
+      toolService: createToolService({
+        listToolMetadata: async () => [
+          {
+            name: "mcp__demo__echo_upper",
+            description: "Echo upper",
+            target: "mcp",
+            replaySafe: "false",
+            serverName: "demo",
+            remoteName: "echo_upper",
+          },
+          {
+            name: "read_file",
+            description: "Read a file",
+            target: "base",
+            replaySafe: "true",
+          },
+        ],
+      }),
       queryEngine: createLoopRunner(),
     });
 

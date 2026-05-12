@@ -28,6 +28,7 @@ import { QueryEngine } from "../../../src/runtime/query-engine.js";
 import { finalizeAssistantOnlyRound, runQueryStopStage } from "../../../src/runtime/query-finalization.js";
 import { requestQueryModel } from "../../../src/runtime/query-model.js";
 import { prepareQueryRound } from "../../../src/runtime/query-preparation.js";
+import type { ToolServiceLike } from "../../../src/tools/service.js";
 
 function createRuntimeState(): AgentRuntimeState {
   return {
@@ -38,6 +39,16 @@ function createRuntimeState(): AgentRuntimeState {
     roundCounter: 0,
     touchedPaths: new Set<string>(),
     wroteWorkspaceFiles: false,
+  };
+}
+
+function createToolService(): ToolServiceLike {
+  return {
+    listTools: async () => [],
+    listToolRegistrations: async () => [],
+    listToolMetadata: async () => [],
+    previewToolCall: () => "",
+    runToolByName: async () => "",
   };
 }
 
@@ -73,6 +84,7 @@ describe("runtime/query-engine", () => {
         skills: [],
         rules: [],
       },
+      toolService: createToolService(),
     });
     const runtimeState = createRuntimeState();
     const messages = [{ role: "user", content: "hello engine" }] as Array<{ role: "user" | "assistant"; content: string }>;

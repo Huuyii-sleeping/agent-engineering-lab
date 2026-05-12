@@ -4,6 +4,7 @@ import type { ChatCompletionMessageParam } from "openai/resources/chat/completio
 import { AgentService, createAgentHttpServer } from "../../src/agent-service.js";
 import type { AgentRuntimeState } from "../../src/agent-loop.js";
 import type { StaticPromptSource } from "../../src/prompt/types.js";
+import type { ToolServiceLike } from "../../src/tools/service.js";
 
 const PROMPT_SOURCE: StaticPromptSource = {
   core: "test-core",
@@ -33,12 +34,22 @@ function createLoopRunner() {
   };
 }
 
+function createToolService(): ToolServiceLike {
+  return {
+    listTools: async () => [],
+    listToolRegistrations: async () => [],
+    listToolMetadata: async () => [],
+    previewToolCall: () => "",
+    runToolByName: async () => "",
+  };
+}
+
 async function main(): Promise<void> {
   const service = new AgentService({
     client: {} as OpenAI,
     model: "fake-model",
     promptSource: PROMPT_SOURCE,
-    toolsResolver: async () => [],
+    toolService: createToolService(),
     queryEngine: createLoopRunner(),
   });
   const server = createAgentHttpServer(service);

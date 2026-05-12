@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentRuntimeState } from "../../../src/agent-loop.js";
 import { runQueryToolStage } from "../../../src/runtime/query-tools.js";
+import type { ToolServiceLike } from "../../../src/tools/service.js";
 
 vi.mock("../../../src/hooks/index.js", () => ({
   runHooks: vi.fn(),
@@ -13,13 +14,7 @@ vi.mock("../../../src/observability/runtime.js", () => ({
   withExecutionContext: vi.fn(async (_context, fn: () => Promise<unknown>) => fn()),
 }));
 
-vi.mock("../../../src/tools/index.js", () => ({
-  previewToolCall: vi.fn((name: string) => `preview:${name}`),
-  runToolByName: vi.fn(),
-}));
-
 import { runHooks } from "../../../src/hooks/index.js";
-import { runToolByName } from "../../../src/tools/index.js";
 
 function createRuntimeState(): AgentRuntimeState {
   return {
@@ -30,6 +25,16 @@ function createRuntimeState(): AgentRuntimeState {
     roundCounter: 1,
     touchedPaths: new Set<string>(),
     wroteWorkspaceFiles: false,
+  };
+}
+
+function createToolService(): ToolServiceLike {
+  return {
+    listTools: async () => [],
+    listToolRegistrations: async () => [],
+    listToolMetadata: async () => [],
+    previewToolCall: vi.fn((name: string) => `preview:${name}`),
+    runToolByName: vi.fn(),
   };
 }
 
@@ -61,7 +66,8 @@ describe("runtime/query-tools", () => {
   it("records successful write side effects and appends post-tool hook messages", async () => {
     const runtimeState = createRuntimeState();
     const messages = [] as Array<{ role: string; content?: string; tool_call_id?: string }>;
-    vi.mocked(runToolByName).mockResolvedValueOnce(JSON.stringify({ ok: true }));
+    const toolService = createToolService();
+    vi.mocked(toolService.runToolByName).mockResolvedValueOnce(JSON.stringify({ ok: true }));
     vi.mocked(runHooks)
       .mockResolvedValueOnce({
         blocked: false,
@@ -85,6 +91,7 @@ describe("runtime/query-tools", () => {
       messages,
       runtimeState,
       traceId: "trace-write",
+      toolService,
     });
 
     expect(result.usedTodo).toBe(false);
@@ -106,6 +113,7 @@ describe("runtime/query-tools", () => {
   it("returns hook-blocked tool output without executing the underlying tool", async () => {
     const runtimeState = createRuntimeState();
     const messages = [] as Array<{ role: string; content?: string; tool_call_id?: string }>;
+    const toolService = createToolService();
     vi.mocked(runHooks).mockResolvedValueOnce({
       blocked: true,
       blockReason: "blocked by test",
@@ -123,10 +131,11 @@ describe("runtime/query-tools", () => {
       messages,
       runtimeState,
       traceId: "trace-blocked",
+      toolService,
     });
 
     expect(result.usedTodo).toBe(false);
-    expect(runToolByName).not.toHaveBeenCalled();
+    expect(toolService.runToolByName).not.toHaveBeenCalled();
     expect(messages).toHaveLength(2);
     expect(messages[0]).toEqual({
       role: "system",
@@ -139,7 +148,8 @@ describe("runtime/query-tools", () => {
   it("auto-completes the active task when todo marks every item completed", async () => {
     const runtimeState = createRuntimeState();
     const messages = [] as Array<{ role: string; content?: string; tool_call_id?: string }>;
-    vi.mocked(runToolByName)
+    const toolService = createToolService();
+    vi.mocked(toolService.runToolByName)
       .mockResolvedValueOnce(JSON.stringify({ ok: true, id: 42 }))
       .mockResolvedValueOnce(JSON.stringify({ ok: true }))
       .mockResolvedValueOnce(JSON.stringify({ ok: true }));
@@ -165,11 +175,12 @@ describe("runtime/query-tools", () => {
       messages,
       runtimeState,
       traceId: "trace-todo",
+      toolService,
     });
 
     expect(result.usedTodo).toBe(true);
-    expect(runToolByName).toHaveBeenNthCalledWith(1, "task_create", JSON.stringify({ title: "demo task" }));
-    expect(runToolByName).toHaveBeenNthCalledWith(
+    expect(toolService.runToolByName).toHaveBeenNthCalledWith(1, "task_create", JSON.stringify({ title: "demo task" }));
+    expect(toolService.runToolByName).toHaveBeenNthCalledWith(
       2,
       "todo",
       JSON.stringify({
@@ -179,7 +190,7 @@ describe("runtime/query-tools", () => {
         ],
       }),
     );
-    expect(runToolByName).toHaveBeenNthCalledWith(
+    expect(toolService.runToolByName).toHaveBeenNthCalledWith(
       3,
       "task_update",
       JSON.stringify({

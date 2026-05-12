@@ -75,7 +75,6 @@ describe("runScheduledRound", () => {
       printAsyncEvent: (label, content) => {
         notices.push(`${label}:${content}`);
       },
-      toolsResolver: async () => [],
       schedulerTick: async () => ({ scannedAt: "now", fired: [] }),
       peekScheduledCount: async () => 1,
       queryEngine: {
@@ -111,7 +110,6 @@ describe("runScheduledRound", () => {
       printAsyncEvent: (label, content) => {
         notices.push(`${label}:${content}`);
       },
-      toolsResolver: async () => [],
       schedulerTick: async () => ({ scannedAt: "now", fired: [] }),
       peekScheduledCount: async () => 1,
       queryEngine: {
@@ -139,7 +137,6 @@ describe("runScheduledRound", () => {
       printAsyncEvent: (label, content) => {
         notices.push(`${label}:${content}`);
       },
-      toolsResolver: async () => [],
       schedulerTick: async () => ({ scannedAt: "now", fired: [] }),
       peekScheduledCount: async () => 1,
       queryEngine: {

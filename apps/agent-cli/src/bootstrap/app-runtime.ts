@@ -1,18 +1,15 @@
 import type OpenAI from "openai";
-import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { createClient, ensureModelConfigured, getDefaultModel, getStaticPromptSource } from "../config.js";
 import type { StaticPromptSource } from "../prompt/types.js";
 import { QueryEngine } from "../runtime/query-engine.js";
 import type { AgentRuntimeState, QueryEngineLike } from "../runtime/query-types.js";
-import { listToolRegistrations, listTools } from "../tools/index.js";
-import type { ToolRegistration } from "../tools/protocol.js";
+import { DEFAULT_TOOL_SERVICE, type ToolServiceLike } from "../tools/service.js";
 
 export type AgentAppRuntimeDeps = {
   client: OpenAI;
   model: string;
   promptSource: StaticPromptSource;
-  toolsResolver: () => Promise<ChatCompletionTool[]>;
-  toolRegistrationsResolver?: () => Promise<ToolRegistration[]>;
+  toolService: ToolServiceLike;
   queryEngine: QueryEngineLike;
 };
 
@@ -41,8 +38,14 @@ export function createAgentAppRuntime(overrides: AgentAppRuntimeOverrides = {}):
     client,
     model,
     promptSource,
-    toolsResolver: overrides.toolsResolver ?? listTools,
-    toolRegistrationsResolver: overrides.toolRegistrationsResolver ?? listToolRegistrations,
-    queryEngine: overrides.queryEngine ?? new QueryEngine({ client, model, promptSource }),
+    toolService: overrides.toolService ?? DEFAULT_TOOL_SERVICE,
+    queryEngine:
+      overrides.queryEngine ??
+      new QueryEngine({
+        client,
+        model,
+        promptSource,
+        toolService: overrides.toolService ?? DEFAULT_TOOL_SERVICE,
+      }),
   };
 }

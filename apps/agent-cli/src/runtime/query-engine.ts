@@ -8,22 +8,26 @@ import { runQueryToolStage } from "./query-tools.js";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
 import type { QueryEngineRunInput } from "./query-types.js";
 import type OpenAI from "openai";
+import type { ToolServiceLike } from "../tools/service.js";
 
 type QueryEngineDeps = {
   client: OpenAI;
   model: string;
   promptSource: StaticPromptSource;
+  toolService: ToolServiceLike;
 };
 
 export class QueryEngine {
   private readonly client: OpenAI;
   private readonly model: string;
   private readonly promptSource: StaticPromptSource;
+  private readonly toolService: ToolServiceLike;
 
   constructor(deps: QueryEngineDeps) {
     this.client = deps.client;
     this.model = deps.model;
     this.promptSource = deps.promptSource;
+    this.toolService = deps.toolService;
   }
 
   async run(opts: QueryEngineRunInput): Promise<void> {
@@ -48,6 +52,7 @@ export class QueryEngine {
         | { role: "user"; content: string }
         | undefined;
       try {
+        const tools = opts.tools ?? (await this.toolService.listTools());
         await recordObservabilityEvent(
           "loop_start",
           {
@@ -73,7 +78,7 @@ export class QueryEngine {
           client: this.client,
           model: this.model,
           promptSource: this.promptSource,
-          tools: opts.tools,
+          tools,
           messages: opts.messages,
           runtimeState: opts.runtimeState,
           traceId,
@@ -100,6 +105,7 @@ export class QueryEngine {
           messages: opts.messages,
           runtimeState: opts.runtimeState,
           traceId,
+          toolService: this.toolService,
         });
 
         stopReason = (

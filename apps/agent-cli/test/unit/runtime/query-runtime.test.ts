@@ -32,7 +32,13 @@ describe("runtime/query-runtime", () => {
         client: {} as OpenAI,
         model: "test-model",
         promptSource: PROMPT_SOURCE,
-        toolsResolver: async () => [] as ChatCompletionTool[],
+        toolService: {
+          listTools: async () => [] as ChatCompletionTool[],
+          listToolRegistrations: async () => [],
+          listToolMetadata: async () => [],
+          previewToolCall: () => "",
+          runToolByName: async () => "",
+        },
         queryEngine: {
           run: async ({ messages }) => {
             messages.push({ role: "assistant", content: "shared runtime reply" });
