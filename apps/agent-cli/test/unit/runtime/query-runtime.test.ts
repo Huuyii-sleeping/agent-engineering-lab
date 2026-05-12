@@ -2,6 +2,7 @@ import type OpenAI from "openai";
 import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
 import { describe, expect, it } from "vitest";
 import type { AgentRuntimeState } from "../../../src/agent-loop.js";
+import type { DeliveryServiceLike } from "../../../src/delivery-service.js";
 import { runUserQuery } from "../../../src/runtime/query-runtime.js";
 import type { StaticPromptSource } from "../../../src/prompt/types.js";
 
@@ -24,6 +25,17 @@ function createRuntimeState(): AgentRuntimeState {
   };
 }
 
+function createDeliveryService(): DeliveryServiceLike {
+  return {
+    loadLatestReport: async () => null,
+    runValidation: async () => {
+      throw new Error("not used");
+    },
+    runValidateTool: async () => "",
+    runReportTool: async () => "",
+  };
+}
+
 describe("runtime/query-runtime", () => {
   it("runs a user query through shared runtime deps and returns assistant text", async () => {
     const history: ChatCompletionMessageParam[] = [];
@@ -39,6 +51,7 @@ describe("runtime/query-runtime", () => {
           previewToolCall: () => "",
           runToolByName: async () => "",
         },
+        deliveryService: createDeliveryService(),
         queryEngine: {
           run: async ({ messages }) => {
             messages.push({ role: "assistant", content: "shared runtime reply" });

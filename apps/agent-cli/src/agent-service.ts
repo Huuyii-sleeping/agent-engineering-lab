@@ -69,6 +69,7 @@ export class AgentService {
   private readonly model: AgentServiceDeps["model"];
   private readonly promptSource: AgentServiceDeps["promptSource"];
   private readonly toolService: AgentServiceDeps["toolService"];
+  private readonly deliveryService: AgentServiceDeps["deliveryService"];
   private readonly queryEngine: AgentServiceDeps["queryEngine"];
 
   constructor(deps: AgentServiceDeps) {
@@ -76,6 +77,7 @@ export class AgentService {
     this.model = deps.model;
     this.promptSource = deps.promptSource;
     this.toolService = deps.toolService;
+    this.deliveryService = deps.deliveryService;
     this.queryEngine = deps.queryEngine;
   }
 
@@ -147,6 +149,7 @@ export class AgentService {
           model: this.model,
           promptSource: this.promptSource,
           toolService: this.toolService,
+          deliveryService: this.deliveryService,
           queryEngine: this.queryEngine,
         },
         history: session.history,

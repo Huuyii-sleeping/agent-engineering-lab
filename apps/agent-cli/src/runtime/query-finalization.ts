@@ -1,8 +1,8 @@
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import type { AgentRuntimeState } from "../agent-loop.js";
-import { runDeliveryValidation } from "../delivery.js";
+import type { DeliveryServiceLike } from "../delivery-service.js";
 import { runHooks } from "../hooks/index.js";
 import { appendSystemMessages } from "./query-messages.js";
+import type { AgentRuntimeState } from "./query-types.js";
 
 type FinalizeToolDrivenRoundOptions = {
   messages: ChatCompletionMessageParam[];
@@ -10,6 +10,7 @@ type FinalizeToolDrivenRoundOptions = {
   traceId: string;
   usedTodo: boolean;
   deliveryAutoRunEnabled: boolean;
+  deliveryService: DeliveryServiceLike;
 };
 
 type RunQueryStopStageOptions = {
@@ -37,7 +38,7 @@ export async function finalizeToolDrivenRound(
   let stopReason: "tool_calls_processed" | "auto_delivery_passed" | "auto_delivery_failed" = "tool_calls_processed";
 
   if (opts.deliveryAutoRunEnabled && opts.runtimeState.wroteWorkspaceFiles) {
-    const report = await runDeliveryValidation({
+    const report = await opts.deliveryService.runValidation({
       mode: "auto",
       changedPaths: [...opts.runtimeState.touchedPaths],
       traceId: opts.traceId,

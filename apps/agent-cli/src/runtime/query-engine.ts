@@ -8,6 +8,7 @@ import { runQueryToolStage } from "./query-tools.js";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
 import type { QueryEngineRunInput } from "./query-types.js";
 import type OpenAI from "openai";
+import type { DeliveryServiceLike } from "../delivery-service.js";
 import type { ToolServiceLike } from "../tools/service.js";
 
 type QueryEngineDeps = {
@@ -15,6 +16,7 @@ type QueryEngineDeps = {
   model: string;
   promptSource: StaticPromptSource;
   toolService: ToolServiceLike;
+  deliveryService: DeliveryServiceLike;
 };
 
 export class QueryEngine {
@@ -22,12 +24,14 @@ export class QueryEngine {
   private readonly model: string;
   private readonly promptSource: StaticPromptSource;
   private readonly toolService: ToolServiceLike;
+  private readonly deliveryService: DeliveryServiceLike;
 
   constructor(deps: QueryEngineDeps) {
     this.client = deps.client;
     this.model = deps.model;
     this.promptSource = deps.promptSource;
     this.toolService = deps.toolService;
+    this.deliveryService = deps.deliveryService;
   }
 
   async run(opts: QueryEngineRunInput): Promise<void> {
@@ -115,6 +119,7 @@ export class QueryEngine {
             traceId,
             usedTodo: toolStage.usedTodo,
             deliveryAutoRunEnabled: RUNTIME_CONFIG.deliveryAutoRunEnabled,
+            deliveryService: this.deliveryService,
           })
         ).stopReason;
       } finally {

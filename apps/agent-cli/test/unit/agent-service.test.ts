@@ -1,6 +1,7 @@
 import type OpenAI from "openai";
 import { afterEach, describe, expect, it } from "vitest";
 import { AgentService } from "../../src/agent-service.js";
+import type { DeliveryServiceLike } from "../../src/delivery-service.js";
 import type { AgentRuntimeState } from "../../src/agent-loop.js";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import type { StaticPromptSource } from "../../src/prompt/types.js";
@@ -39,6 +40,17 @@ function createToolService(overrides: Partial<ToolServiceLike> = {}): ToolServic
   };
 }
 
+function createDeliveryService(): DeliveryServiceLike {
+  return {
+    loadLatestReport: async () => null,
+    runValidation: async () => {
+      throw new Error("not used");
+    },
+    runValidateTool: async () => "",
+    runReportTool: async () => "",
+  };
+}
+
 afterEach(() => {
   delete process.env.MODEL_ID;
 });
@@ -50,6 +62,7 @@ describe("agent service", () => {
       model: "fake-model",
       promptSource: PROMPT_SOURCE,
       toolService: createToolService(),
+      deliveryService: createDeliveryService(),
       queryEngine: createLoopRunner(),
     });
     const first = service.createSession();
@@ -66,6 +79,7 @@ describe("agent service", () => {
       model: "fake-model",
       promptSource: PROMPT_SOURCE,
       toolService: createToolService(),
+      deliveryService: createDeliveryService(),
       queryEngine: createLoopRunner(),
     });
     const a = service.createSession();
@@ -104,6 +118,7 @@ describe("agent service", () => {
           },
         ],
       }),
+      deliveryService: createDeliveryService(),
       queryEngine: createLoopRunner(),
     });
 

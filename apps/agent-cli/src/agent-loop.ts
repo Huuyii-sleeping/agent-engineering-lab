@@ -1,5 +1,6 @@
 import { QueryEngine } from "./runtime/query-engine.js";
 import type { QueryLoopOptions } from "./runtime/query-types.js";
+import { DEFAULT_DELIVERY_SERVICE } from "./delivery-service.js";
 import { DEFAULT_TOOL_SERVICE } from "./tools/service.js";
 
 export type { AgentRuntimeState, QueryEngineLike, QueryEngineRunInput, QueryLoopOptions } from "./runtime/query-types.js";
@@ -10,6 +11,7 @@ export async function agentLoop(opts: QueryLoopOptions): Promise<void> {
     model: opts.model,
     promptSource: opts.promptSource,
     toolService: DEFAULT_TOOL_SERVICE,
+    deliveryService: DEFAULT_DELIVERY_SERVICE,
   });
   await engine.run({
     tools: opts.tools,

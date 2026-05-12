@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import type OpenAI from "openai";
 import { createAgentAppRuntime, createAgentRuntimeState } from "../../../src/bootstrap/app-runtime.js";
+import type { DeliveryServiceLike } from "../../../src/delivery-service.js";
 import type { StaticPromptSource } from "../../../src/prompt/types.js";
 
 describe("bootstrap/app-runtime", () => {
@@ -24,6 +25,14 @@ describe("bootstrap/app-runtime", () => {
       runToolByName: vi.fn(async () => ""),
     };
     const promptSource: StaticPromptSource = { core: "core", tools: [], skills: [], rules: [] };
+    const deliveryService: DeliveryServiceLike = {
+      loadLatestReport: vi.fn(async () => null),
+      runValidation: vi.fn(async () => {
+        throw new Error("not used");
+      }),
+      runValidateTool: vi.fn(async () => ""),
+      runReportTool: vi.fn(async () => ""),
+    };
     const queryEngine = { run: vi.fn() };
 
     const runtime = createAgentAppRuntime({
@@ -31,12 +40,14 @@ describe("bootstrap/app-runtime", () => {
       model: "test-model",
       promptSource,
       toolService,
+      deliveryService,
       queryEngine,
     });
 
     expect(runtime.model).toBe("test-model");
     expect(runtime.promptSource).toBe(promptSource);
     expect(runtime.toolService).toBe(toolService);
+    expect(runtime.deliveryService).toBe(deliveryService);
     expect(runtime.queryEngine).toBe(queryEngine);
   });
 });

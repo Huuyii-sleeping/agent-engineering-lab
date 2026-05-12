@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { executeProtectedToolHandler } from "../runtime/tool-runtime.js";
+import { DEFAULT_DELIVERY_SERVICE } from "../delivery-service.js";
 import {
   runAutonomyMarkActive,
   runAutonomySetOwner,
@@ -10,7 +11,6 @@ import {
 import { BASH_TOOLS, readCommandArgs, runBash } from "./bash.js";
 import { BACKGROUND_TOOLS, runBackgroundRun, runCheckBackground } from "./background-task.js";
 import { CONTEXT_TOOLS, type CompactRuntimeContext, runCompact, runEstimateTokens } from "./context-compact.js";
-import { runDeliveryReportTool, runDeliveryValidateTool } from "../delivery.js";
 import { FILE_TOOLS, runEditFile, runReadFile, runWriteFile } from "./file-tools.js";
 import { MEMORY_TOOLS, runMemoryAdd, runMemoryList, runMemorySearch } from "./memory.js";
 import {
@@ -86,8 +86,8 @@ const BASE_HANDLERS: Record<string, ToolHandler> = {
   read_file: async (args) => runReadFile(args.path, args.limit),
   write_file: async (args) => runWriteFile(args.path, args.content),
   edit_file: async (args) => runEditFile(args.path, args.old_text, args.new_text),
-  delivery_validate: async (args) => runDeliveryValidateTool(args.changed_paths, args.mode),
-  delivery_report: async () => runDeliveryReportTool(),
+  delivery_validate: async (args) => DEFAULT_DELIVERY_SERVICE.runValidateTool(args.changed_paths, args.mode),
+  delivery_report: async () => DEFAULT_DELIVERY_SERVICE.runReportTool(),
   memory_add: async (args) => runMemoryAdd(args.source, args.type, args.tags, args.content, args.confidence),
   memory_search: async (args) => runMemorySearch(args.query, args.limit, args.layer, args.type),
   memory_list: async (args) => runMemoryList(args.layer, args.limit),

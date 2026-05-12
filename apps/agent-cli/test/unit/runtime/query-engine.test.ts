@@ -28,6 +28,7 @@ import { QueryEngine } from "../../../src/runtime/query-engine.js";
 import { finalizeAssistantOnlyRound, runQueryStopStage } from "../../../src/runtime/query-finalization.js";
 import { requestQueryModel } from "../../../src/runtime/query-model.js";
 import { prepareQueryRound } from "../../../src/runtime/query-preparation.js";
+import type { DeliveryServiceLike } from "../../../src/delivery-service.js";
 import type { ToolServiceLike } from "../../../src/tools/service.js";
 
 function createRuntimeState(): AgentRuntimeState {
@@ -49,6 +50,17 @@ function createToolService(): ToolServiceLike {
     listToolMetadata: async () => [],
     previewToolCall: () => "",
     runToolByName: async () => "",
+  };
+}
+
+function createDeliveryService(): DeliveryServiceLike {
+  return {
+    loadLatestReport: async () => null,
+    runValidation: async () => {
+      throw new Error("not expected in assistant-only round");
+    },
+    runValidateTool: async () => "",
+    runReportTool: async () => "",
   };
 }
 
@@ -85,6 +97,7 @@ describe("runtime/query-engine", () => {
         rules: [],
       },
       toolService: createToolService(),
+      deliveryService: createDeliveryService(),
     });
     const runtimeState = createRuntimeState();
     const messages = [{ role: "user", content: "hello engine" }] as Array<{ role: "user" | "assistant"; content: string }>;

@@ -6,16 +6,12 @@ import {
   runQueryStopStage,
 } from "../../../src/runtime/query-finalization.js";
 
-vi.mock("../../../src/delivery.js", () => ({
-  runDeliveryValidation: vi.fn(),
-}));
-
 vi.mock("../../../src/hooks/index.js", () => ({
   runHooks: vi.fn(),
 }));
 
-import { runDeliveryValidation } from "../../../src/delivery.js";
 import { runHooks } from "../../../src/hooks/index.js";
+import type { DeliveryServiceLike } from "../../../src/delivery-service.js";
 
 function createRuntimeState(): AgentRuntimeState {
   return {
@@ -26,6 +22,15 @@ function createRuntimeState(): AgentRuntimeState {
     roundCounter: 1,
     touchedPaths: new Set<string>(),
     wroteWorkspaceFiles: false,
+  };
+}
+
+function createDeliveryService(): DeliveryServiceLike {
+  return {
+    loadLatestReport: async () => null,
+    runValidation: vi.fn(),
+    runValidateTool: async () => "",
+    runReportTool: async () => "",
   };
 }
 
@@ -54,7 +59,8 @@ describe("runtime/query-finalization", () => {
     runtimeState.wroteWorkspaceFiles = true;
     runtimeState.touchedPaths.add("apps/agent-cli/src/runtime/query-tools.ts");
     const messages = [] as Array<{ role: string; content?: string }>;
-    vi.mocked(runDeliveryValidation).mockResolvedValue({
+    const deliveryService = createDeliveryService();
+    vi.mocked(deliveryService.runValidation).mockResolvedValue({
       schemaVersion: 1,
       generatedAt: 0,
       mode: "auto",
@@ -78,6 +84,7 @@ describe("runtime/query-finalization", () => {
       traceId: "trace-finalize-pass",
       usedTodo: true,
       deliveryAutoRunEnabled: true,
+      deliveryService,
     });
 
     expect(result.stopReason).toBe("auto_delivery_passed");
@@ -96,7 +103,8 @@ describe("runtime/query-finalization", () => {
     runtimeState.wroteWorkspaceFiles = true;
     runtimeState.touchedPaths.add("apps/agent-cli/src/agent-loop.ts");
     const messages = [] as Array<{ role: string; content?: string }>;
-    vi.mocked(runDeliveryValidation).mockResolvedValue({
+    const deliveryService = createDeliveryService();
+    vi.mocked(deliveryService.runValidation).mockResolvedValue({
       schemaVersion: 1,
       generatedAt: 0,
       mode: "auto",
@@ -125,6 +133,7 @@ describe("runtime/query-finalization", () => {
       traceId: "trace-finalize-fail",
       usedTodo: false,
       deliveryAutoRunEnabled: true,
+      deliveryService,
     });
 
     expect(result.stopReason).toBe("auto_delivery_failed");

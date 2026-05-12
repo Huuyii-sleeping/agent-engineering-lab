@@ -2,6 +2,7 @@ import { once } from "node:events";
 import type OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { AgentService, createAgentHttpServer } from "../../src/agent-service.js";
+import type { DeliveryServiceLike } from "../../src/delivery-service.js";
 import type { AgentRuntimeState } from "../../src/agent-loop.js";
 import type { StaticPromptSource } from "../../src/prompt/types.js";
 import type { ToolServiceLike } from "../../src/tools/service.js";
@@ -44,12 +45,24 @@ function createToolService(): ToolServiceLike {
   };
 }
 
+function createDeliveryService(): DeliveryServiceLike {
+  return {
+    loadLatestReport: async () => null,
+    runValidation: async () => {
+      throw new Error("not used");
+    },
+    runValidateTool: async () => "",
+    runReportTool: async () => "",
+  };
+}
+
 async function main(): Promise<void> {
   const service = new AgentService({
     client: {} as OpenAI,
     model: "fake-model",
     promptSource: PROMPT_SOURCE,
     toolService: createToolService(),
+    deliveryService: createDeliveryService(),
     queryEngine: createLoopRunner(),
   });
   const server = createAgentHttpServer(service);
