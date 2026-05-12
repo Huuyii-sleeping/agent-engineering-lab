@@ -12,7 +12,8 @@ import { BASH_TOOLS, readCommandArgs, runBash } from "./bash.js";
 import { BACKGROUND_TOOLS, runBackgroundRun, runCheckBackground } from "./background-task.js";
 import { CONTEXT_TOOLS, type CompactRuntimeContext, runCompact, runEstimateTokens } from "./context-compact.js";
 import { FILE_TOOLS, runEditFile, runReadFile, runWriteFile } from "./file-tools.js";
-import { MEMORY_TOOLS, runMemoryAdd, runMemoryList, runMemorySearch } from "./memory.js";
+import { DEFAULT_MEMORY_SERVICE } from "../memory-service.js";
+import { MEMORY_TOOLS } from "./memory.js";
 import {
   TASK_TOOLS,
   runTaskCreate,
@@ -88,9 +89,10 @@ const BASE_HANDLERS: Record<string, ToolHandler> = {
   edit_file: async (args) => runEditFile(args.path, args.old_text, args.new_text),
   delivery_validate: async (args) => DEFAULT_DELIVERY_SERVICE.runValidateTool(args.changed_paths, args.mode),
   delivery_report: async () => DEFAULT_DELIVERY_SERVICE.runReportTool(),
-  memory_add: async (args) => runMemoryAdd(args.source, args.type, args.tags, args.content, args.confidence),
-  memory_search: async (args) => runMemorySearch(args.query, args.limit, args.layer, args.type),
-  memory_list: async (args) => runMemoryList(args.layer, args.limit),
+  memory_add: async (args) =>
+    DEFAULT_MEMORY_SERVICE.runAdd(args.source, args.type, args.tags, args.content, args.confidence),
+  memory_search: async (args) => DEFAULT_MEMORY_SERVICE.runSearch(args.query, args.limit, args.layer, args.type),
+  memory_list: async (args) => DEFAULT_MEMORY_SERVICE.runList(args.layer, args.limit),
   todo: async (args) => runTodo(args.items),
   task_create: async (args) => runTaskCreate(args.subject, args.description),
   task_update: async (args) =>

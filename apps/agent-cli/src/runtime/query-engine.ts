@@ -10,6 +10,7 @@ import type { QueryEngineRunInput } from "./query-types.js";
 import type OpenAI from "openai";
 import type { DeliveryServiceLike } from "../delivery-service.js";
 import type { HookServiceLike } from "../hook-service.js";
+import type { MemoryServiceLike } from "../memory-service.js";
 import type { ModelPolicyServiceLike } from "../model-policy-service.js";
 import type { ToolServiceLike } from "../tools/service.js";
 
@@ -20,6 +21,7 @@ type QueryEngineDeps = {
   toolService: ToolServiceLike;
   deliveryService: DeliveryServiceLike;
   hookService: HookServiceLike;
+  memoryService: MemoryServiceLike;
   modelPolicyService: ModelPolicyServiceLike;
   observabilityService: ObservabilityServiceLike;
 };
@@ -31,6 +33,7 @@ export class QueryEngine {
   private readonly toolService: ToolServiceLike;
   private readonly deliveryService: DeliveryServiceLike;
   private readonly hookService: HookServiceLike;
+  private readonly memoryService: MemoryServiceLike;
   private readonly modelPolicyService: ModelPolicyServiceLike;
   private readonly observabilityService: ObservabilityServiceLike;
 
@@ -41,6 +44,7 @@ export class QueryEngine {
     this.toolService = deps.toolService;
     this.deliveryService = deps.deliveryService;
     this.hookService = deps.hookService;
+    this.memoryService = deps.memoryService;
     this.modelPolicyService = deps.modelPolicyService;
     this.observabilityService = deps.observabilityService;
   }
@@ -81,6 +85,7 @@ export class QueryEngine {
           traceId,
           latestUserInput: latestUser?.content ?? "",
           hookService: this.hookService,
+          memoryService: this.memoryService,
           observabilityService: this.observabilityService,
         });
         if (!preparedRound.ok) {

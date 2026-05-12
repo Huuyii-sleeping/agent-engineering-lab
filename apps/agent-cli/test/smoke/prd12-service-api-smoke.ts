@@ -5,6 +5,7 @@ import { AgentService, createAgentHttpServer } from "../../src/agent-service.js"
 import type { DeliveryServiceLike } from "../../src/delivery-service.js";
 import type { HookServiceLike } from "../../src/hook-service.js";
 import type { AgentRuntimeState } from "../../src/agent-loop.js";
+import type { MemoryServiceLike } from "../../src/memory-service.js";
 import type { ModelPolicyServiceLike } from "../../src/model-policy-service.js";
 import type { ObservabilityServiceLike } from "../../src/observability-service.js";
 import type { StaticPromptSource } from "../../src/prompt/types.js";
@@ -72,6 +73,20 @@ function createHookService(): HookServiceLike {
   };
 }
 
+function createMemoryService(): MemoryServiceLike {
+  return {
+    autoExtract: async () => undefined,
+    buildInjectionForQuery: async () => ({
+      content: null,
+      usedEntries: 0,
+      estimatedTokens: 0,
+    }),
+    runAdd: async () => "",
+    runSearch: async () => "",
+    runList: async () => "",
+  };
+}
+
 function createModelPolicyService(): ModelPolicyServiceLike {
   return {
     selectModel: async () => ({
@@ -113,6 +128,7 @@ async function main(): Promise<void> {
     toolService: createToolService(),
     deliveryService: createDeliveryService(),
     hookService: createHookService(),
+    memoryService: createMemoryService(),
     modelPolicyService: createModelPolicyService(),
     observabilityService: createObservabilityService(),
     queryEngine: createLoopRunner(),

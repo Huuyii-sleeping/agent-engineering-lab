@@ -2,6 +2,7 @@ import type OpenAI from "openai";
 import { createClient, ensureModelConfigured, getDefaultModel, getStaticPromptSource } from "../config.js";
 import { DEFAULT_DELIVERY_SERVICE, type DeliveryServiceLike } from "../delivery-service.js";
 import { DEFAULT_HOOK_SERVICE, type HookServiceLike } from "../hook-service.js";
+import { DEFAULT_MEMORY_SERVICE, type MemoryServiceLike } from "../memory-service.js";
 import { DEFAULT_MODEL_POLICY_SERVICE, type ModelPolicyServiceLike } from "../model-policy-service.js";
 import { DEFAULT_OBSERVABILITY_SERVICE, type ObservabilityServiceLike } from "../observability-service.js";
 import type { StaticPromptSource } from "../prompt/types.js";
@@ -16,6 +17,7 @@ export type AgentAppRuntimeDeps = {
   toolService: ToolServiceLike;
   deliveryService: DeliveryServiceLike;
   hookService: HookServiceLike;
+  memoryService: MemoryServiceLike;
   modelPolicyService: ModelPolicyServiceLike;
   observabilityService: ObservabilityServiceLike;
   queryEngine: QueryEngineLike;
@@ -49,6 +51,7 @@ export function createAgentAppRuntime(overrides: AgentAppRuntimeOverrides = {}):
     toolService: overrides.toolService ?? DEFAULT_TOOL_SERVICE,
     deliveryService: overrides.deliveryService ?? DEFAULT_DELIVERY_SERVICE,
     hookService: overrides.hookService ?? DEFAULT_HOOK_SERVICE,
+    memoryService: overrides.memoryService ?? DEFAULT_MEMORY_SERVICE,
     modelPolicyService: overrides.modelPolicyService ?? DEFAULT_MODEL_POLICY_SERVICE,
     observabilityService: overrides.observabilityService ?? DEFAULT_OBSERVABILITY_SERVICE,
     queryEngine:
@@ -60,6 +63,7 @@ export function createAgentAppRuntime(overrides: AgentAppRuntimeOverrides = {}):
         toolService: overrides.toolService ?? DEFAULT_TOOL_SERVICE,
         deliveryService: overrides.deliveryService ?? DEFAULT_DELIVERY_SERVICE,
         hookService: overrides.hookService ?? DEFAULT_HOOK_SERVICE,
+        memoryService: overrides.memoryService ?? DEFAULT_MEMORY_SERVICE,
         modelPolicyService: overrides.modelPolicyService ?? DEFAULT_MODEL_POLICY_SERVICE,
         observabilityService: overrides.observabilityService ?? DEFAULT_OBSERVABILITY_SERVICE,
       }),

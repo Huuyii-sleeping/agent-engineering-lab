@@ -1,8 +1,8 @@
 import type { AgentRuntimeState } from "../agent-loop.js";
 import type { HookServiceLike } from "../hook-service.js";
+import type { MemoryServiceLike } from "../memory-service.js";
 import type { ObservabilityServiceLike } from "../observability-service.js";
 import { collectDynamicSystemMessages } from "./query-notifications.js";
-import { autoExtractMemory, buildMemoryInjectionForQuery } from "../tools/memory.js";
 import { tickScheduler } from "../tools/scheduler.js";
 import { runAutonomyTick } from "../tools/autonomy.js";
 
@@ -22,6 +22,7 @@ type PrepareQueryRoundOptions = {
   traceId: string;
   latestUserInput: string;
   hookService: HookServiceLike;
+  memoryService: MemoryServiceLike;
   observabilityService: ObservabilityServiceLike;
 };
 
@@ -45,7 +46,7 @@ export async function prepareQueryRound(
   }
 
   if (opts.latestUserInput && opts.runtimeState.lastMemoryInput !== opts.latestUserInput) {
-    await autoExtractMemory("user", opts.latestUserInput);
+    await opts.memoryService.autoExtract("user", opts.latestUserInput);
     opts.runtimeState.lastMemoryInput = opts.latestUserInput;
   }
 
@@ -73,7 +74,7 @@ export async function prepareQueryRound(
 
   let memoryContext: string | null = null;
   if (opts.latestUserInput) {
-    const injected = await buildMemoryInjectionForQuery(opts.latestUserInput);
+    const injected = await opts.memoryService.buildInjectionForQuery(opts.latestUserInput);
     if (injected.content) {
       memoryContext = injected.content;
       console.log(

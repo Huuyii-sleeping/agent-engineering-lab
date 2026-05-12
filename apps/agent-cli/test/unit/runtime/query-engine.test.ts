@@ -25,6 +25,7 @@ import { requestQueryModel } from "../../../src/runtime/query-model.js";
 import { prepareQueryRound } from "../../../src/runtime/query-preparation.js";
 import type { DeliveryServiceLike } from "../../../src/delivery-service.js";
 import type { HookServiceLike } from "../../../src/hook-service.js";
+import type { MemoryServiceLike } from "../../../src/memory-service.js";
 import type { ModelPolicyServiceLike } from "../../../src/model-policy-service.js";
 import type { ObservabilityServiceLike } from "../../../src/observability-service.js";
 import type { ToolServiceLike } from "../../../src/tools/service.js";
@@ -72,6 +73,20 @@ function createHookService(): HookServiceLike {
       executed: 0,
       errors: [],
     }),
+  };
+}
+
+function createMemoryService(): MemoryServiceLike {
+  return {
+    autoExtract: async () => undefined,
+    buildInjectionForQuery: async () => ({
+      content: null,
+      usedEntries: 0,
+      estimatedTokens: 0,
+    }),
+    runAdd: async () => "",
+    runSearch: async () => "",
+    runList: async () => "",
   };
 }
 
@@ -144,6 +159,7 @@ describe("runtime/query-engine", () => {
       toolService: createToolService(),
       deliveryService: createDeliveryService(),
       hookService,
+      memoryService: createMemoryService(),
       modelPolicyService: createModelPolicyService(),
       observabilityService: createObservabilityService(),
     });
