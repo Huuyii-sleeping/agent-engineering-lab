@@ -1,0 +1,85 @@
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { SchedulerStore } from "../../../src/tools/scheduler-store.js";
+
+let tempDir = "";
+
+afterEach(async () => {
+  if (tempDir) {
+    await rm(tempDir, { recursive: true, force: true });
+    tempDir = "";
+  }
+});
+
+async function makeStore(): Promise<{ root: string; store: SchedulerStore }> {
+  tempDir = await mkdtemp(path.join(tmpdir(), "scheduler-store-test-"));
+  const root = path.join(tempDir, ".schedule");
+  return {
+    root,
+    store: new SchedulerStore(() => root),
+  };
+}
+
+describe("tools/scheduler-store", () => {
+  it("loads legacy ISO timestamps as numeric milliseconds", async () => {
+    const { root, store } = await makeStore();
+    await store.ensureInit();
+    await writeFile(
+      path.join(root, "records.json"),
+      `${JSON.stringify([
+        {
+          id: "sch_legacy",
+          cron: "*/2 * * * * *",
+          prompt: "legacy schedule",
+          recurring: true,
+          durable: true,
+          created_at: "2026-05-10T05:58:30.805Z",
+          last_fired_at: "2026-05-10T05:58:32.000Z",
+          enabled: true,
+        },
+      ])}\n`,
+      "utf8",
+    );
+
+    const records = await store.loadRecords();
+    expect(records).toEqual([
+      {
+        id: "sch_legacy",
+        cron: "*/2 * * * * *",
+        prompt: "legacy schedule",
+        recurring: true,
+        durable: true,
+        created_at: Date.parse("2026-05-10T05:58:30.805Z"),
+        last_fired_at: Date.parse("2026-05-10T05:58:32.000Z"),
+        enabled: true,
+      },
+    ]);
+  });
+
+  it("persists notifications in stable JSON shape", async () => {
+    const { root, store } = await makeStore();
+    await store.saveNotifications([
+      {
+        id: "sched_evt_1",
+        scheduleId: "sch_1",
+        prompt: "follow up",
+        recurring: true,
+        firedAt: 123,
+      },
+    ]);
+
+    const raw = await readFile(path.join(root, "notifications.json"), "utf8");
+    expect(raw).toContain('"scheduleId": "sch_1"');
+    expect(await store.loadNotifications()).toEqual([
+      {
+        id: "sched_evt_1",
+        scheduleId: "sch_1",
+        prompt: "follow up",
+        recurring: true,
+        firedAt: 123,
+      },
+    ]);
+  });
+});
