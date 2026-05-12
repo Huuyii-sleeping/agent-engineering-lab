@@ -45,10 +45,7 @@ export async function runUserQuery(opts: RunUserQueryOptions): Promise<QueryRunt
   opts.history.push({ role: "user", content: prompt });
   const tools = await opts.app.toolsResolver();
   await withCompactRuntimeContext({ messages: opts.history }, async () =>
-    opts.app.loopRunner({
-      client: opts.app.client,
-      model: opts.app.model,
-      promptSource: opts.app.promptSource,
+    opts.app.queryEngine.run({
       tools,
       messages: opts.history,
       runtimeState: opts.runtimeState,

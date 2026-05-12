@@ -33,7 +33,7 @@ type ScheduledRoundOptions = {
   toolsResolver?: () => Promise<ChatCompletionTool[]>;
   schedulerTick?: typeof tickScheduler;
   peekScheduledCount?: typeof peekScheduledNotificationCount;
-  loopRunner?: AgentAppRuntimeDeps["loopRunner"];
+  queryEngine?: AgentAppRuntimeDeps["queryEngine"];
 };
 
 function formatError(error: unknown): string {
@@ -72,7 +72,7 @@ export async function runScheduledRound(opts: ScheduledRoundOptions): Promise<bo
   const toolsResolver = opts.toolsResolver;
   const schedulerTick = opts.schedulerTick ?? tickScheduler;
   const peekScheduledCount = opts.peekScheduledCount ?? peekScheduledNotificationCount;
-  const loopRunner = opts.loopRunner;
+  const queryEngine = opts.queryEngine;
 
   try {
     if (opts.isAgentBusy()) {
@@ -84,19 +84,16 @@ export async function runScheduledRound(opts: ScheduledRoundOptions): Promise<bo
       return false;
     }
 
-    opts.setAgentBusy(true);
-    opts.printAsyncEvent("scheduled due", `${dueCount} scheduled prompt${dueCount === 1 ? "" : "s"} due now.`);
-    try {
-      opts.history.push({ role: "user", content: "Handle any scheduled prompts that are due now." });
-      if (!toolsResolver || !loopRunner) {
-        throw new Error("scheduled round requires toolsResolver and loopRunner");
-      }
+      opts.setAgentBusy(true);
+      opts.printAsyncEvent("scheduled due", `${dueCount} scheduled prompt${dueCount === 1 ? "" : "s"} due now.`);
+      try {
+        opts.history.push({ role: "user", content: "Handle any scheduled prompts that are due now." });
+        if (!toolsResolver || !queryEngine) {
+          throw new Error("scheduled round requires toolsResolver and queryEngine");
+        }
       const tools = await toolsResolver();
       await withCompactRuntimeContext({ messages: opts.history }, async () =>
-        loopRunner({
-          client: opts.client,
-          model: opts.model,
-          promptSource: opts.promptSource,
+        queryEngine.run({
           tools,
           messages: opts.history,
           runtimeState: opts.runtimeState,
@@ -156,7 +153,7 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
       promptSource: app.promptSource,
       printAsyncEvent,
       toolsResolver: app.toolsResolver,
-      loopRunner: app.loopRunner,
+      queryEngine: app.queryEngine,
     });
   }, RUNTIME_CONFIG.schedulerPollIntervalMs);
 

@@ -78,8 +78,10 @@ describe("runScheduledRound", () => {
       toolsResolver: async () => [],
       schedulerTick: async () => ({ scannedAt: "now", fired: [] }),
       peekScheduledCount: async () => 1,
-      loopRunner: async ({ messages }) => {
-        messages.push({ role: "assistant", content: "scheduled reply" });
+      queryEngine: {
+        run: async ({ messages }) => {
+          messages.push({ role: "assistant", content: "scheduled reply" });
+        },
       },
     });
 
@@ -112,7 +114,9 @@ describe("runScheduledRound", () => {
       toolsResolver: async () => [],
       schedulerTick: async () => ({ scannedAt: "now", fired: [] }),
       peekScheduledCount: async () => 1,
-      loopRunner: async () => {},
+      queryEngine: {
+        run: async () => {},
+      },
     });
 
     expect(notices[1]).toContain("Scheduled prompt processed without a text reply.");
@@ -138,8 +142,10 @@ describe("runScheduledRound", () => {
       toolsResolver: async () => [],
       schedulerTick: async () => ({ scannedAt: "now", fired: [] }),
       peekScheduledCount: async () => 1,
-      loopRunner: async () => {
-        throw new Error("scheduler loop failed");
+      queryEngine: {
+        run: async () => {
+          throw new Error("scheduler loop failed");
+        },
       },
     });
 

@@ -33,8 +33,10 @@ describe("runtime/query-runtime", () => {
         model: "test-model",
         promptSource: PROMPT_SOURCE,
         toolsResolver: async () => [] as ChatCompletionTool[],
-        loopRunner: async ({ messages }) => {
-          messages.push({ role: "assistant", content: "shared runtime reply" });
+        queryEngine: {
+          run: async ({ messages }) => {
+            messages.push({ role: "assistant", content: "shared runtime reply" });
+          },
         },
       },
       history,

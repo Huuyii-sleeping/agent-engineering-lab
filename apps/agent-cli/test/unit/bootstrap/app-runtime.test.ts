@@ -19,19 +19,19 @@ describe("bootstrap/app-runtime", () => {
       ChatCompletionTool[];
     const toolsResolver = vi.fn(async () => tools);
     const promptSource: StaticPromptSource = { core: "core", tools: [], skills: [], rules: [] };
-    const loopRunner = vi.fn();
+    const queryEngine = { run: vi.fn() };
 
     const runtime = createAgentAppRuntime({
       client: {} as OpenAI,
       model: "test-model",
       promptSource,
       toolsResolver,
-      loopRunner: loopRunner as never,
+      queryEngine,
     });
 
     expect(runtime.model).toBe("test-model");
     expect(runtime.promptSource).toBe(promptSource);
     expect(runtime.toolsResolver).toBe(toolsResolver);
-    expect(runtime.loopRunner).toBe(loopRunner);
+    expect(runtime.queryEngine).toBe(queryEngine);
   });
 });

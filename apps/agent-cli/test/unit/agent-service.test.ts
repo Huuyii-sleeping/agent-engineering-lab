@@ -13,15 +13,17 @@ const PROMPT_SOURCE: StaticPromptSource = {
 };
 
 function createLoopRunner() {
-  return async ({ messages, runtimeState }: {
-    messages: ChatCompletionMessageParam[];
-    runtimeState: AgentRuntimeState;
-  }): Promise<void> => {
-    const latestUser = [...messages].reverse().find((item) => item.role === "user");
-    messages.push({
-      role: "assistant",
-      content: `reply:${runtimeState.sessionId}:${typeof latestUser?.content === "string" ? latestUser.content : ""}`,
-    });
+  return {
+    run: async ({ messages, runtimeState }: {
+      messages: ChatCompletionMessageParam[];
+      runtimeState: AgentRuntimeState;
+    }): Promise<void> => {
+      const latestUser = [...messages].reverse().find((item) => item.role === "user");
+      messages.push({
+        role: "assistant",
+        content: `reply:${runtimeState.sessionId}:${typeof latestUser?.content === "string" ? latestUser.content : ""}`,
+      });
+    },
   };
 }
 
@@ -36,7 +38,7 @@ describe("agent service", () => {
       model: "fake-model",
       promptSource: PROMPT_SOURCE,
       toolsResolver: async () => [],
-      loopRunner: createLoopRunner() as never,
+      queryEngine: createLoopRunner(),
     });
     const first = service.createSession();
     const second = service.createSession();
@@ -52,7 +54,7 @@ describe("agent service", () => {
       model: "fake-model",
       promptSource: PROMPT_SOURCE,
       toolsResolver: async () => [],
-      loopRunner: createLoopRunner() as never,
+      queryEngine: createLoopRunner(),
     });
     const a = service.createSession();
     const b = service.createSession();
@@ -65,5 +67,52 @@ describe("agent service", () => {
     expect(String(resultA.assistant)).toContain("alpha");
     expect(String(resultB.assistant)).toContain("beta");
     expect(String(resultA.assistant)).not.toContain("beta");
+  });
+
+  it("surfaces target-aware tool metadata from the shared tool registration layer", async () => {
+    const service = new AgentService({
+      client: {} as OpenAI,
+      model: "fake-model",
+      promptSource: PROMPT_SOURCE,
+      toolsResolver: async () => [],
+      toolRegistrationsResolver: async () => [
+        {
+          name: "read_file",
+          description: "Read a file",
+          target: "base",
+          allowDuringReplay: true,
+          parameters: { type: "object", properties: {} },
+        },
+        {
+          name: "mcp__demo__echo_upper",
+          description: "Echo upper",
+          target: "mcp",
+          allowDuringReplay: false,
+          parameters: { type: "object", properties: {} },
+          serverName: "demo",
+          remoteName: "echo_upper",
+        },
+      ],
+      queryEngine: createLoopRunner(),
+    });
+
+    const tools = await service.toolsMetadata();
+
+    expect(tools).toEqual([
+      {
+        name: "mcp__demo__echo_upper",
+        description: "Echo upper",
+        target: "mcp",
+        replaySafe: "false",
+        serverName: "demo",
+        remoteName: "echo_upper",
+      },
+      {
+        name: "read_file",
+        description: "Read a file",
+        target: "base",
+        replaySafe: "true",
+      },
+    ]);
   });
 });

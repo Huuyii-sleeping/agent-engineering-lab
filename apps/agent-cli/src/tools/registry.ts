@@ -1,6 +1,7 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { parseToolArgs } from "../runtime/tool-runtime.js";
 import { BASE_TOOLS, previewBaseToolCall, resolveBaseToolHandler } from "./base.js";
+import { isFunctionTool, toChatCompletionTool, type ToolRegistration } from "./protocol.js";
 import {
   SUBAGENT_TOOLS,
   runSubagentClose,
@@ -17,6 +18,10 @@ export type BuiltinToolHandler = {
   allowDuringReplay: boolean;
 };
 
+export type BuiltinToolRegistration = ToolRegistration & {
+  target: "base" | "subagent";
+};
+
 const SUBAGENT_HANDLERS: Record<string, ToolHandler> = {
   subagent_spawn: async (args) => runSubagentSpawn(args.name),
   subagent_send: async (args) => runSubagentSend(args.agent_id, args.prompt),
@@ -27,10 +32,54 @@ const SUBAGENT_HANDLERS: Record<string, ToolHandler> = {
 
 export const BUILTIN_SUBAGENT_TOOL_NAMES = new Set(Object.keys(SUBAGENT_HANDLERS));
 
-export const BUILTIN_TOOLS: ChatCompletionTool[] = [...BASE_TOOLS, ...SUBAGENT_TOOLS];
+function buildBaseRegistrations(): BuiltinToolRegistration[] {
+  return BASE_TOOLS.filter(isFunctionTool)
+    .map((tool) => {
+      const resolved = resolveBaseToolHandler(tool.function.name);
+      return {
+        name: tool.function.name,
+        description: tool.function.description ?? "",
+        parameters: (tool.function.parameters as Record<string, unknown> | undefined) ?? { type: "object", properties: {} },
+        target: "base",
+        allowDuringReplay: resolved?.allowDuringReplay ?? false,
+      } satisfies BuiltinToolRegistration;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function buildSubagentRegistrations(): BuiltinToolRegistration[] {
+  return SUBAGENT_TOOLS.filter(isFunctionTool)
+    .map(
+      (tool) =>
+        ({
+          name: tool.function.name,
+          description: tool.function.description ?? "",
+          parameters:
+            (tool.function.parameters as Record<string, unknown> | undefined) ?? { type: "object", properties: {} },
+          target: "subagent",
+          allowDuringReplay: false,
+        }) satisfies BuiltinToolRegistration,
+    )
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export const BUILTIN_TOOL_REGISTRATIONS: BuiltinToolRegistration[] = [
+  ...buildBaseRegistrations(),
+  ...buildSubagentRegistrations(),
+];
+
+export const BUILTIN_TOOLS: ChatCompletionTool[] = BUILTIN_TOOL_REGISTRATIONS.map(toChatCompletionTool);
+
+export function listBuiltinToolRegistrations(): BuiltinToolRegistration[] {
+  return [...BUILTIN_TOOL_REGISTRATIONS];
+}
 
 export function isBuiltinSubagentTool(name: string): boolean {
   return BUILTIN_SUBAGENT_TOOL_NAMES.has(name);
+}
+
+export function resolveBuiltinToolRegistration(name: string): BuiltinToolRegistration | null {
+  return BUILTIN_TOOL_REGISTRATIONS.find((tool) => tool.name === name) ?? null;
 }
 
 export function previewBuiltinToolCall(name: string, argumentsJson: string): string {

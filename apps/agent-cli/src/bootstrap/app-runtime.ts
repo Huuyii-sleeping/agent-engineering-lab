@@ -1,16 +1,19 @@
 import type OpenAI from "openai";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
-import { agentLoop, type AgentRuntimeState } from "../agent-loop.js";
 import { createClient, ensureModelConfigured, getDefaultModel, getStaticPromptSource } from "../config.js";
 import type { StaticPromptSource } from "../prompt/types.js";
-import { listTools } from "../tools/index.js";
+import { QueryEngine } from "../runtime/query-engine.js";
+import type { AgentRuntimeState, QueryEngineLike } from "../runtime/query-types.js";
+import { listToolRegistrations, listTools } from "../tools/index.js";
+import type { ToolRegistration } from "../tools/protocol.js";
 
 export type AgentAppRuntimeDeps = {
   client: OpenAI;
   model: string;
   promptSource: StaticPromptSource;
   toolsResolver: () => Promise<ChatCompletionTool[]>;
-  loopRunner: typeof agentLoop;
+  toolRegistrationsResolver?: () => Promise<ToolRegistration[]>;
+  queryEngine: QueryEngineLike;
 };
 
 type AgentAppRuntimeOverrides = Partial<AgentAppRuntimeDeps>;
@@ -31,11 +34,15 @@ export function createAgentAppRuntime(overrides: AgentAppRuntimeOverrides = {}):
   if (!overrides.client || !overrides.model || !overrides.promptSource) {
     ensureModelConfigured();
   }
+  const client = overrides.client ?? createClient();
+  const model = overrides.model ?? getDefaultModel();
+  const promptSource = overrides.promptSource ?? getStaticPromptSource();
   return {
-    client: overrides.client ?? createClient(),
-    model: overrides.model ?? getDefaultModel(),
-    promptSource: overrides.promptSource ?? getStaticPromptSource(),
+    client,
+    model,
+    promptSource,
     toolsResolver: overrides.toolsResolver ?? listTools,
-    loopRunner: overrides.loopRunner ?? agentLoop,
+    toolRegistrationsResolver: overrides.toolRegistrationsResolver ?? listToolRegistrations,
+    queryEngine: overrides.queryEngine ?? new QueryEngine({ client, model, promptSource }),
   };
 }

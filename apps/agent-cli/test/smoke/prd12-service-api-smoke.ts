@@ -19,15 +19,17 @@ function assert(condition: unknown, message: string): void {
 }
 
 function createLoopRunner() {
-  return async ({ messages, runtimeState }: {
-    messages: ChatCompletionMessageParam[];
-    runtimeState: AgentRuntimeState;
-  }): Promise<void> => {
-    const latestUser = [...messages].reverse().find((item) => item.role === "user");
-    messages.push({
-      role: "assistant",
-      content: `server-reply:${runtimeState.sessionId}:${typeof latestUser?.content === "string" ? latestUser.content : ""}`,
-    });
+  return {
+    run: async ({ messages, runtimeState }: {
+      messages: ChatCompletionMessageParam[];
+      runtimeState: AgentRuntimeState;
+    }): Promise<void> => {
+      const latestUser = [...messages].reverse().find((item) => item.role === "user");
+      messages.push({
+        role: "assistant",
+        content: `server-reply:${runtimeState.sessionId}:${typeof latestUser?.content === "string" ? latestUser.content : ""}`,
+      });
+    },
   };
 }
 
@@ -37,7 +39,7 @@ async function main(): Promise<void> {
     model: "fake-model",
     promptSource: PROMPT_SOURCE,
     toolsResolver: async () => [],
-    loopRunner: createLoopRunner() as never,
+    queryEngine: createLoopRunner(),
   });
   const server = createAgentHttpServer(service);
   server.listen(0, "127.0.0.1");

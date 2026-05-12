@@ -5,6 +5,7 @@ import * as process from "node:process";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { getExecutionContext, recordObservabilityEvent } from "../observability/runtime.js";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
+import { toChatCompletionTool, type ToolRegistration } from "./protocol.js";
 
 type JsonRpcError = {
   code: number;
@@ -41,12 +42,10 @@ type McpServerConfig = {
   requestTimeoutMs: number;
 };
 
-type McpToolRegistration = {
-  alias: string;
+export type McpToolRegistration = ToolRegistration & {
   serverName: string;
   remoteName: string;
-  description: string;
-  inputSchema: Record<string, unknown>;
+  target: "mcp";
 };
 
 type PendingRequest = {
@@ -466,11 +465,13 @@ class McpRegistry {
         const tools = await client.listTools();
         for (const tool of tools) {
           registrations.push({
-            alias: makeToolAlias(server.name, tool.name, usedAliases),
+            name: makeToolAlias(server.name, tool.name, usedAliases),
             serverName: server.name,
             remoteName: tool.name,
             description: tool.description,
-            inputSchema: tool.inputSchema,
+            parameters: tool.inputSchema,
+            target: "mcp",
+            allowDuringReplay: false,
           });
         }
       } catch (error) {
@@ -498,22 +499,12 @@ class McpRegistry {
 
   async listTools(): Promise<ChatCompletionTool[]> {
     const registrations = await this.listRegistrations();
-    return registrations.map(
-      (tool) =>
-        ({
-          type: "function",
-          function: {
-            name: tool.alias,
-            description: `[mcp:${tool.serverName}] ${tool.description || tool.remoteName}`,
-            parameters: tool.inputSchema,
-          },
-        }) satisfies ChatCompletionTool,
-    );
+    return registrations.map(toChatCompletionTool);
   }
 
   async run(alias: string, args: Record<string, unknown>): Promise<string | null> {
     const registrations = await this.listRegistrations();
-    const tool = registrations.find((item) => item.alias === alias);
+    const tool = registrations.find((item) => item.name === alias);
     if (!tool) {
       return null;
     }
@@ -609,6 +600,10 @@ async function getRegistry(): Promise<McpRegistry> {
 
 export async function listMcpTools(): Promise<ChatCompletionTool[]> {
   return (await getRegistry()).listTools();
+}
+
+export async function listMcpToolRegistrations(): Promise<McpToolRegistration[]> {
+  return (await getRegistry()).listRegistrations();
 }
 
 export async function runMcpToolByName(name: string, args: Record<string, unknown>): Promise<string | null> {

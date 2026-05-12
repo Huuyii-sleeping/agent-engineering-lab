@@ -56,12 +56,19 @@ describe("mcp capability bus", () => {
   it("loads configured tools and executes approved mcp calls", async () => {
     const toolsModule = await import("../../src/tools/index.js");
     const securityModule = await import("../../src/tools/security.js");
+    const mcpModule = await import("../../src/tools/mcp.js");
 
     const tools = await toolsModule.listTools();
     const names = tools
       .filter((tool): tool is Extract<(typeof tools)[number], { type: "function" }> => tool.type === "function")
       .map((tool) => tool.function.name);
     expect(names).toContain("mcp__demo__echo_upper");
+
+    const registrations = await mcpModule.listMcpToolRegistrations();
+    const echoRegistration = registrations.find((tool) => tool.name === "mcp__demo__echo_upper");
+    expect(echoRegistration?.target).toBe("mcp");
+    expect(echoRegistration?.serverName).toBe("demo");
+    expect(echoRegistration?.remoteName).toBe("echo_upper");
 
     const blocked = JSON.parse(await toolsModule.runToolByName("mcp__demo__echo_upper", '{"text":"hello"}')) as {
       ok?: boolean;

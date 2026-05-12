@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { isBuiltinSubagentTool, previewBuiltinToolCall, resolveBuiltinToolHandler } from "../../../src/tools/registry.js";
+import {
+  isBuiltinSubagentTool,
+  listBuiltinToolRegistrations,
+  previewBuiltinToolCall,
+  resolveBuiltinToolHandler,
+  resolveBuiltinToolRegistration,
+} from "../../../src/tools/registry.js";
 
 describe("tools/registry", () => {
   it("classifies subagent tools through explicit registry membership", () => {
@@ -10,6 +16,18 @@ describe("tools/registry", () => {
   it("resolves base tool replay strategy from registry metadata", () => {
     expect(resolveBuiltinToolHandler("read_file")?.allowDuringReplay).toBe(true);
     expect(resolveBuiltinToolHandler("write_file")?.allowDuringReplay).toBe(false);
+  });
+
+  it("exposes builtin registrations through a target-aware protocol layer", () => {
+    const readFile = resolveBuiltinToolRegistration("read_file");
+    const spawn = resolveBuiltinToolRegistration("subagent_spawn");
+    const registrations = listBuiltinToolRegistrations();
+
+    expect(readFile?.target).toBe("base");
+    expect(readFile?.allowDuringReplay).toBe(true);
+    expect(spawn?.target).toBe("subagent");
+    expect(spawn?.allowDuringReplay).toBe(false);
+    expect(registrations.some((tool) => tool.name === "task_create")).toBe(true);
   });
 
   it("previews subagent calls using shared registry behavior", () => {

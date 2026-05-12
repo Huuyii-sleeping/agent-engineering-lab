@@ -4,6 +4,8 @@ import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/reso
 import type { AgentRuntimeState } from "./agent-loop.js";
 import { createAgentRuntimeState, type AgentAppRuntimeDeps } from "./bootstrap/app-runtime.js";
 import { runUserQuery } from "./runtime/query-runtime.js";
+import { listToolMetadata } from "./tools/index.js";
+import type { ToolRegistration } from "./tools/protocol.js";
 
 type AgentSessionRecord = {
   id: string;
@@ -63,30 +65,22 @@ function summarizeSession(session: AgentSessionRecord): Record<string, unknown> 
   };
 }
 
-function listToolMetadata(tools: ChatCompletionTool[]): Array<Record<string, string>> {
-  return tools
-    .filter((tool): tool is Extract<ChatCompletionTool, { type: "function" }> => tool.type === "function")
-    .map((tool) => ({
-      name: tool.function.name,
-      description: tool.function.description ?? "",
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-}
-
 export class AgentService {
   private readonly sessions = new Map<string, AgentSessionRecord>();
   private readonly client: AgentServiceDeps["client"];
   private readonly model: AgentServiceDeps["model"];
   private readonly promptSource: AgentServiceDeps["promptSource"];
   private readonly toolsResolver: () => Promise<ChatCompletionTool[]>;
-  private readonly loopRunner: AgentServiceDeps["loopRunner"];
+  private readonly toolRegistrationsResolver: (() => Promise<ToolRegistration[]>) | null;
+  private readonly queryEngine: AgentServiceDeps["queryEngine"];
 
   constructor(deps: AgentServiceDeps) {
     this.client = deps.client;
     this.model = deps.model;
     this.promptSource = deps.promptSource;
     this.toolsResolver = deps.toolsResolver;
-    this.loopRunner = deps.loopRunner;
+    this.toolRegistrationsResolver = deps.toolRegistrationsResolver ?? null;
+    this.queryEngine = deps.queryEngine;
   }
 
   createSession(): AgentSessionRecord {
@@ -113,7 +107,20 @@ export class AgentService {
   }
 
   async toolsMetadata(): Promise<Array<Record<string, string>>> {
-    return listToolMetadata(await this.toolsResolver());
+    if (!this.toolRegistrationsResolver) {
+      return listToolMetadata();
+    }
+    const registrations = await this.toolRegistrationsResolver();
+    return registrations
+      .map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        target: tool.target,
+        replaySafe: tool.allowDuringReplay ? "true" : "false",
+        ...(tool.serverName ? { serverName: tool.serverName } : {}),
+        ...(tool.remoteName ? { remoteName: tool.remoteName } : {}),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   async chat(input: ChatRequest): Promise<Record<string, unknown>> {
@@ -157,7 +164,7 @@ export class AgentService {
           model: this.model,
           promptSource: this.promptSource,
           toolsResolver: this.toolsResolver,
-          loopRunner: this.loopRunner,
+          queryEngine: this.queryEngine,
         },
         history: session.history,
         runtimeState: session.runtimeState,
