@@ -1,6 +1,5 @@
 ## Purpose
 定义 Agent 的统一模型路由、预算守卫、主模型故障降级与成本性能记录能力，支持按角色选择模型并控制 token 消耗。
-
 ## Requirements
 ### Requirement: Model policy SHALL route requests by role
 系统 SHALL 按 `planning`、`coding`、`review`、`ops` 四类角色路由模型，而不是所有请求都固定使用同一个模型。
@@ -29,3 +28,18 @@
 #### Scenario: 请求完成后写入模型指标
 - **WHEN** 一次模型请求完成
 - **THEN** observability 中包含所选模型、角色、延迟和 estimated cost
+
+### Requirement: QueryModel boundary corrections MUST preserve model policy budget and fallback semantics
+QueryModel 边界校正 MUST 保持 model selection、budget deny、fallback once 与 usage finalize 的现有语义不变。
+
+#### Scenario: 模型预算拒绝
+- **WHEN** model policy 返回 `budgetAction: "deny"`
+- **THEN** 系统继续追加相同的预算拒绝 assistant message，并返回 `model_budget_denied`
+
+#### Scenario: 主模型瞬时失败后 fallback
+- **WHEN** 主模型请求失败且错误可 fallback，并且 policy 提供 fallback model
+- **THEN** 系统继续执行一次 fallback request，并按既有语义记录 fallback selection 与 usage finalize
+
+#### Scenario: fallback 无可用响应
+- **WHEN** fallback request 失败或返回空响应
+- **THEN** 系统继续进入既有 recovery selector，而不是把 fallback 空响应当成成功结果
