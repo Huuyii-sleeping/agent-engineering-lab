@@ -136,6 +136,44 @@ describe("runtime/query-tool-executor", () => {
     );
   });
 
+  it("tracks approval candidates and links created approval requests to the blocked tool call", async () => {
+    const runtimeState = createRuntimeState();
+
+    await executeQueryFunctionToolCall({
+      toolCall: createToolCall("write_file", '{"path":"tmp/demo.txt","content":"hello"}'),
+      messages: [],
+      runtimeState,
+      traceId: "trace-candidate",
+      toolService: createToolService('{"ok":false,"error":{"code":"SECURITY_APPROVAL_REQUIRED"}}'),
+      hookService: createHookService(),
+      observabilityService: createObservabilityService(),
+    });
+
+    expect(runtimeState.pendingApprovalCandidate).toMatchObject({
+      toolName: "write_file",
+      argumentsJson: '{"path":"tmp/demo.txt","content":"hello"}',
+    });
+
+    await executeQueryFunctionToolCall({
+      toolCall: createToolCall(
+        "security_request_approval",
+        '{"tool":"write_file","args_json":"{\\"path\\":\\"tmp/demo.txt\\",\\"content\\":\\"hello\\"}"}',
+      ),
+      messages: [],
+      runtimeState,
+      traceId: "trace-link",
+      toolService: createToolService('{"ok":true,"request":{"request_id":"apr_1"}}'),
+      hookService: createHookService(),
+      observabilityService: createObservabilityService(),
+    });
+
+    expect(runtimeState.pendingApprovalCandidate).toBeNull();
+    expect(runtimeState.pendingApprovalReplays?.get("apr_1")).toMatchObject({
+      requestId: "apr_1",
+      toolName: "write_file",
+    });
+  });
+
   it("returns hook-blocked output without executing the tool", async () => {
     const messages: ChatCompletionMessageParam[] = [];
     const toolService = createToolService('{"ok":true}');

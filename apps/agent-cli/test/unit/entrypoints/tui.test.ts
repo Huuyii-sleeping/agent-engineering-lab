@@ -21,8 +21,33 @@ function createService(): TerminalTuiServiceLike {
       assistant: `reply:${input.message}`,
       session: { id: input.session_id ?? "s01" },
     })),
-    runToolByName: vi.fn(async (_name: string, argsJson: string) => {
-      const parsed = JSON.parse(argsJson) as { command?: string };
+    runToolByName: vi.fn(async (name: string, argsJson: string) => {
+      const parsed = JSON.parse(argsJson) as { command?: string; request_id?: string; status?: string };
+      if (name === "security_list_approvals") {
+        return JSON.stringify({
+          ok: true,
+          approvals: [
+            {
+              request_id: "apr_1",
+              action: "write_file",
+              risk: "medium",
+              status: parsed.status ?? "pending",
+              reason: "write operation requires approval",
+            },
+          ],
+        });
+      }
+      if (name === "security_approve") {
+        return JSON.stringify({
+          ok: true,
+          request: {
+            request_id: parsed.request_id,
+            action: "write_file",
+            risk: "medium",
+            status: "approved",
+          },
+        });
+      }
       return `ran:${parsed.command ?? ""}`;
     }),
   };
@@ -71,6 +96,27 @@ describe("entrypoints/tui", () => {
     expect(sessions.output).toContain("* s02");
     expect(tools.output).toContain("Tools");
     expect(tools.output).toContain("read_file [base] Read");
+  });
+
+  it("supports approval commands in the TUI", async () => {
+    const service = createService();
+    const approvals = await handleTerminalTuiCommand({
+      line: "/approvals",
+      service,
+      activeSessionId: "s01",
+      model: "gpt-test",
+      setModel: vi.fn(async () => true),
+    });
+    const approve = await handleTerminalTuiCommand({
+      line: "/approve apr_1",
+      service,
+      activeSessionId: "s01",
+      model: "gpt-test",
+      setModel: vi.fn(async () => true),
+    });
+
+    expect(approvals.output).toContain("Approvals");
+    expect(approve.output).toContain("approved apr_1");
   });
 
   it("routes plain input through chat using the active session", async () => {

@@ -20,7 +20,11 @@ import {
 } from "../services/runtime-services.js";
 import type { StaticPromptSource } from "../prompt/types.js";
 import { QueryEngine } from "../runtime/query-engine.js";
-import type { AgentRuntimeState, QueryEngineLike } from "../runtime/query-types.js";
+import type {
+  AgentRuntimeState,
+  PendingApprovalReplay,
+  QueryEngineLike,
+} from "../runtime/query-types.js";
 import type { ToolServiceLike } from "../tools/service.js";
 
 export type AgentAppRuntimeDeps = {
@@ -50,6 +54,8 @@ export function createAgentRuntimeState(sessionId: string): AgentRuntimeState {
     roundCounter: 0,
     touchedPaths: new Set<string>(),
     wroteWorkspaceFiles: false,
+    pendingApprovalCandidate: null,
+    pendingApprovalReplays: new Map<string, PendingApprovalReplay>(),
   };
 }
 

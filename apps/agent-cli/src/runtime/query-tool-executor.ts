@@ -2,6 +2,10 @@ import type { ChatCompletionMessageParam } from "openai/resources/chat/completio
 import type { HookServiceLike, ObservabilityServiceLike } from "../services/index.js";
 import type { ToolServiceLike } from "../tools/service.js";
 import { renderCliEvent } from "../cli-ui.js";
+import {
+  linkApprovalRequestToCandidate,
+  trackPendingApprovalCandidate,
+} from "./query-tool-approvals.js";
 import { appendSystemMessages } from "./query-messages.js";
 import { analyzeToolOutput } from "./query-tool-results.js";
 import { makeHookBlockedOutput, runPreToolUseHooks } from "./query-tool-hooks.js";
@@ -93,6 +97,11 @@ export async function executeQueryFunctionToolCall(input: {
       { traceId: input.traceId, spanId },
     );
   }
+  if (analyzed.errorCode === "SECURITY_APPROVAL_REQUIRED") {
+    trackPendingApprovalCandidate(input.runtimeState, toolName, input.toolCall.function.arguments, preview);
+  } else if (toolName === "security_request_approval" && analyzed.ok) {
+    linkApprovalRequestToCandidate(input.runtimeState, toolArgs, toolOutput);
+  }
 
   input.messages.push({
     role: "tool",
@@ -103,6 +112,8 @@ export async function executeQueryFunctionToolCall(input: {
   return {
     toolName,
     toolArgs,
+    argumentsJson: input.toolCall.function.arguments,
+    preview,
     toolOutput,
     analyzed,
     blocked: preToolHooks.blocked,

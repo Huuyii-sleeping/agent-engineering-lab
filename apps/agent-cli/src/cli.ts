@@ -28,6 +28,9 @@ import {
 } from "./cli-ui.js";
 import { createClient, getStaticPromptSource } from "./config.js";
 import { summarizeDeliveryReport } from "./delivery-types.js";
+import { dropPendingApprovalReplay, popPendingApprovalReplay } from "./runtime/query-tool-approvals.js";
+import { analyzeToolOutput, markWriteSideEffect } from "./runtime/query-tool-results.js";
+import { parseToolArgs } from "./runtime/tool-runtime.js";
 import type { AgentRuntimeState } from "./runtime/query-types.js";
 import { runUserQuery } from "./runtime/query-runtime.js";
 import { RUNTIME_CONFIG } from "./runtime-config.js";
@@ -95,6 +98,19 @@ function formatError(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+function parseToolJson(raw: string): { ok: boolean; data: Record<string, unknown>; message: string } {
+  try {
+    const parsed = JSON.parse(raw) as { ok?: boolean; error?: { message?: unknown } };
+    return {
+      ok: parsed.ok !== false,
+      data: parsed as Record<string, unknown>,
+      message: String(parsed.error?.message ?? ""),
+    };
+  } catch {
+    return { ok: false, data: {}, message: raw.trim() || "invalid tool response" };
+  }
 }
 
 export function renderAsyncCliEvent(opts: {
@@ -335,6 +351,58 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
         setPermissionMode: (mode) => {
           setCliPermissionMode(mode);
           return true;
+        },
+        listApprovals: async (status) =>
+          app.toolService.runToolByName(
+            "security_list_approvals",
+            JSON.stringify(status ? { status } : {}),
+          ),
+        approveRequest: async (requestId) => {
+          const approvalRaw = await app.toolService.runToolByName(
+            "security_approve",
+            JSON.stringify({ request_id: requestId }),
+          );
+          const approval = parseToolJson(approvalRaw);
+          if (!approval.ok) {
+            return approvalRaw;
+          }
+          getActiveSession().runtimeState.pendingApprovalCandidate = null;
+          const replay = popPendingApprovalReplay(getActiveSession().runtimeState, requestId);
+          if (!replay) {
+            return approvalRaw;
+          }
+          const replayRaw = await app.toolService.runToolByName(replay.toolName, replay.argumentsJson);
+          const replayAnalysis = analyzeToolOutput(replayRaw);
+          if (replayAnalysis.ok) {
+            const replayArgs = parseToolArgs(replay.argumentsJson);
+            markWriteSideEffect(getActiveSession().runtimeState, replay.toolName, replayArgs);
+            if (replay.toolName === "write_file" || replay.toolName === "edit_file") {
+              const changedPath = typeof replayArgs.path === "string" ? replayArgs.path.trim() : "";
+              if (changedPath) {
+                getActiveSession().changedPaths.add(changedPath);
+              }
+            }
+          }
+          return JSON.stringify(
+            {
+              ...approval.data,
+              replay: {
+                ok: replayAnalysis.ok,
+                preview: replay.preview,
+                summary: replayAnalysis.summary,
+              },
+            },
+            null,
+            2,
+          );
+        },
+        rejectRequest: async (requestId) => {
+          dropPendingApprovalReplay(getActiveSession().runtimeState, requestId);
+          getActiveSession().runtimeState.pendingApprovalCandidate = null;
+          return app.toolService.runToolByName(
+            "security_reject",
+            JSON.stringify({ request_id: requestId }),
+          );
         },
         getUsage: () => collectCliUsageSnapshot(app.model),
         compactSession: async (keepRecent) =>

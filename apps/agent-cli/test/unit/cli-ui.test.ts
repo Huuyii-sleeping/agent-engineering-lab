@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  renderCliApprovals,
   renderCliBanner,
   renderCliCloseout,
   renderCliCompactSummary,
@@ -88,6 +89,17 @@ describe("cli-ui", () => {
       }),
     ).toContain("approved  2");
     expect(
+      renderCliApprovals([
+        {
+          requestId: "apr_1",
+          action: "write_file",
+          risk: "medium",
+          status: "pending",
+          reason: "write operation requires approval",
+        },
+      ]),
+    ).toContain("pending apr_1 write_file (medium)");
+    expect(
       renderCliUsage({
         model: "gpt-test",
         sessionPromptTokens: 400,
@@ -118,6 +130,7 @@ describe("cli-ui", () => {
   it("renders help and structured errors", () => {
     setCliUiColorEnabled(false);
     expect(renderCliHelp()).toContain("/permissions");
+    expect(renderCliHelp()).toContain("/approve");
     expect(renderCliHelp()).toContain("!<cmd>");
     expect(renderCliError("startup", "MODEL_ID missing", "run /doctor")).toContain("next  run /doctor");
   });

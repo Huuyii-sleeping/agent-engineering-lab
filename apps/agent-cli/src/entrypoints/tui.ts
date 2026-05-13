@@ -41,6 +41,26 @@ export type TerminalTuiServiceLike = {
   runToolByName?(name: string, argumentsJson: string): Promise<string>;
 };
 
+function getToolRunner(service: TerminalTuiServiceLike):
+  | ((name: string, argumentsJson: string) => Promise<string>)
+  | null {
+  return (
+    service.runToolByName ??
+    (
+      service as {
+        toolService?: { runToolByName(name: string, argumentsJson: string): Promise<string> };
+      }
+    ).toolService?.runToolByName?.bind(
+      (
+        service as {
+          toolService?: { runToolByName(name: string, argumentsJson: string): Promise<string> };
+        }
+      ).toolService,
+    ) ??
+    null
+  );
+}
+
 export type TerminalTuiState = {
   model: string;
   activeSessionId: string | null;
@@ -125,6 +145,8 @@ export function renderTerminalTuiDashboard(state: TerminalTuiState): string {
         "/use <id> switch session",
         "/status   runtime snapshot",
         "/permissions mode + approvals",
+        "/approvals list requests",
+        "/approve  approve request",
         "/cost     token + cost summary",
         "/model    switch active model",
         "/add-dir  add workspace root",
@@ -215,6 +237,7 @@ export async function handleTerminalTuiCommand(input: {
   startupIssue?: Error | null;
   setModel(model: string): Promise<boolean>;
 }): Promise<{ activeSessionId: string | null; output: string; exit: boolean; clearScreen?: boolean; showBanner?: boolean }> {
+  const toolRunner = getToolRunner(input.service);
   const command = await dispatchCliCommand(input.line, {
     activeSessionId: input.activeSessionId,
     createSession: () => input.service.createSession(),
@@ -243,6 +266,24 @@ export async function handleTerminalTuiCommand(input: {
     setPermissionMode: (mode) => {
       setCliPermissionMode(mode);
       return true;
+    },
+    listApprovals: async (status) => {
+      if (!toolRunner) {
+        return JSON.stringify({ ok: false, error: { message: "security tools are not available for this TUI service" } });
+      }
+      return toolRunner("security_list_approvals", JSON.stringify(status ? { status } : {}));
+    },
+    approveRequest: async (requestId) => {
+      if (!toolRunner) {
+        return JSON.stringify({ ok: false, error: { message: "security tools are not available for this TUI service" } });
+      }
+      return toolRunner("security_approve", JSON.stringify({ request_id: requestId }));
+    },
+    rejectRequest: async (requestId) => {
+      if (!toolRunner) {
+        return JSON.stringify({ ok: false, error: { message: "security tools are not available for this TUI service" } });
+      }
+      return toolRunner("security_reject", JSON.stringify({ request_id: requestId }));
     },
     getUsage: () => collectCliUsageSnapshot(input.model),
     compactSession: async (keepRecent) => {
@@ -277,13 +318,6 @@ export async function handleTerminalTuiCommand(input: {
   }
 
   if (line.startsWith("!")) {
-    const toolRunner =
-      input.service.runToolByName ??
-      (input.service as { toolService?: { runToolByName(name: string, argumentsJson: string): Promise<string> } }).toolService
-        ?.runToolByName?.bind(
-          (input.service as { toolService?: { runToolByName(name: string, argumentsJson: string): Promise<string> } })
-            .toolService,
-        );
     if (!toolRunner) {
       return {
         activeSessionId: input.activeSessionId,

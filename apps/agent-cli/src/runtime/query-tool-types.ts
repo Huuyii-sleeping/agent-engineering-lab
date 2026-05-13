@@ -26,6 +26,8 @@ export type QueryFunctionToolCall = NonNullable<OpenAI.Chat.Completions.ChatComp
 export type QueryToolExecutionResult = {
   toolName: string;
   toolArgs: Record<string, unknown>;
+  argumentsJson: string;
+  preview: string;
   toolOutput: string;
   analyzed: ToolOutputAnalysis;
   blocked: boolean;

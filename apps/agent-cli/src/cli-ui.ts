@@ -106,6 +106,14 @@ export type CliCompactSummary = {
   transcriptAfterPath: string;
 };
 
+export type CliApprovalListItem = {
+  requestId: string;
+  action: string;
+  risk: string;
+  status: string;
+  reason: string;
+};
+
 export type CliCloseoutInput = {
   sessionId: string | null;
   changedPaths: string[];
@@ -316,6 +324,9 @@ export function renderCliHelp(): string {
     "/config     show config paths and current theme",
     "/model      show or set model: /model gpt-5-mini",
     "/permissions show or set permission mode",
+    "/approvals  list approval requests",
+    "/approve    approve a request: /approve <id>",
+    "/reject     reject a request: /reject <id>",
     "/cost       show token and cost summary",
     "/compact    compact current session history",
     "/add-dir    allow another workspace root",
@@ -392,6 +403,19 @@ export function renderCliPermissions(snapshot: CliPermissionSnapshot): string {
       { label: "expired", value: String(snapshot.expiredApprovals) },
       { label: "consumed", value: String(snapshot.consumedApprovals) },
     ]),
+  ].join("\n");
+}
+
+export function renderCliApprovals(items: CliApprovalListItem[]): string {
+  if (items.length === 0) {
+    return `${strong("Approvals")}\n${muted("No approval requests found.")}`;
+  }
+  return [
+    strong("Approvals"),
+    ...items.map((item) => {
+      const summary = `${item.status} ${item.requestId} ${item.action} (${item.risk})`.trim();
+      return item.reason ? `${summary}\n${muted("reason")}  ${truncate(item.reason, 96)}` : summary;
+    }),
   ].join("\n");
 }
 

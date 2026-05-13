@@ -59,6 +59,42 @@ function createContext(): CliCommandContext {
       consumedApprovals: 0,
     })),
     setPermissionMode: vi.fn(() => true),
+    listApprovals: vi.fn(async () =>
+      JSON.stringify({
+        ok: true,
+        approvals: [
+          {
+            request_id: "apr_1",
+            action: "write_file",
+            risk: "medium",
+            status: "pending",
+            reason: "write operation requires approval",
+          },
+        ],
+      }),
+    ),
+    approveRequest: vi.fn(async (requestId: string) =>
+      JSON.stringify({
+        ok: true,
+        request: {
+          request_id: requestId,
+          action: "write_file",
+          risk: "medium",
+          status: "approved",
+        },
+      }),
+    ),
+    rejectRequest: vi.fn(async (requestId: string) =>
+      JSON.stringify({
+        ok: true,
+        request: {
+          request_id: requestId,
+          action: "write_file",
+          risk: "medium",
+          status: "rejected",
+        },
+      }),
+    ),
     getUsage: vi.fn(async () => ({
       model,
       sessionPromptTokens: 120,
@@ -141,9 +177,13 @@ describe("cli-commands", () => {
     expect((await dispatchCliCommand("/model gpt-5-mini", context)).output).toContain("model set to gpt-5-mini");
     expect((await dispatchCliCommand("/permissions", context)).output).toContain("Permissions");
     expect((await dispatchCliCommand("/permissions plan", context)).output).toContain("mode");
+    expect((await dispatchCliCommand("/approvals", context)).output).toContain("Approvals");
+    expect((await dispatchCliCommand("/approve apr_1", context)).output).toContain("approved apr_1");
+    expect((await dispatchCliCommand("/reject apr_1", context)).output).toContain("rejected apr_1");
     expect((await dispatchCliCommand("/cost", context)).output).toContain("Usage");
     expect((await dispatchCliCommand("/compact 5", context)).output).toContain("Compact");
     expect((await dispatchCliCommand("/add-dir /tmp/demo", context)).output).toContain("added workspace root /tmp/demo");
+    expect((await dispatchCliCommand("批准", context)).output).toContain("approved apr_1");
   });
 
   it("rejects unknown commands with stable help", async () => {

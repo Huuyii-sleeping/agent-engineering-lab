@@ -3,6 +3,14 @@ import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/reso
 import type { StaticPromptSource } from "../prompt/types.js";
 import type { ToolServiceLike } from "../tools/service.js";
 
+export type PendingApprovalReplay = {
+  requestId?: string;
+  toolName: string;
+  argumentsJson: string;
+  preview: string;
+  createdAt: number;
+};
+
 export type AgentRuntimeState = {
   sessionId: string;
   roundsWithoutTodo: number;
@@ -11,6 +19,8 @@ export type AgentRuntimeState = {
   roundCounter: number;
   touchedPaths: Set<string>;
   wroteWorkspaceFiles: boolean;
+  pendingApprovalCandidate?: PendingApprovalReplay | null;
+  pendingApprovalReplays?: Map<string, PendingApprovalReplay>;
 };
 
 export type QueryLoopOptions = {
