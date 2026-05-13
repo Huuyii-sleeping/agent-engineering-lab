@@ -7,6 +7,20 @@ import { truncateDeliveryOutput } from "./delivery-types.js";
 
 const execFileAsync = promisify(execFile);
 
+export function resolveDeliveryCommand(
+  command: string[],
+  platform = process.platform,
+): { file: string; args: string[] } {
+  const [file, ...args] = command;
+  if (platform === "win32" && file === "pnpm") {
+    return {
+      file: process.env.ComSpec?.trim() || "cmd.exe",
+      args: ["/d", "/s", "/c", "pnpm.cmd", ...args],
+    };
+  }
+  return { file, args };
+}
+
 export function classifyDeliveryFailure(
   stage: DeliveryStageName,
   error: ExecFileException | Error | null,
@@ -76,12 +90,13 @@ export async function runDeliveryStage(plan: DeliveryStagePlan, traceId?: string
   let lastFailure: DeliveryFailure | null = null;
   let lastStdout = "";
   let lastStderr = "";
+  const resolvedCommand = resolveDeliveryCommand(plan.command);
 
   while (attempts < maxAttempts) {
     attempts += 1;
     const startedAt = Date.now();
     try {
-      const result = await execFileAsync(plan.command[0], plan.command.slice(1), {
+      const result = await execFileAsync(resolvedCommand.file, resolvedCommand.args, {
         cwd: process.cwd(),
         timeout: RUNTIME_CONFIG.deliveryStageTimeoutMs,
         maxBuffer: 1024 * 1024 * 10,

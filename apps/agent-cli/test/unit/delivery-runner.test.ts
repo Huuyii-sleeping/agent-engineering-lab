@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { classifyDeliveryFailure, isRetryableDeliveryFailure } from "../../src/delivery-runner.js";
+import {
+  classifyDeliveryFailure,
+  isRetryableDeliveryFailure,
+  resolveDeliveryCommand,
+} from "../../src/delivery-runner.js";
 import type { DeliveryFailure } from "../../src/delivery-types.js";
 
 describe("delivery runner", () => {
@@ -45,5 +49,16 @@ describe("delivery runner", () => {
     expect(isRetryableDeliveryFailure(failure("TRANSIENT_EXEC_FAILURE"))).toBe(true);
     expect(isRetryableDeliveryFailure(failure("TEST_FAILED"))).toBe(false);
     expect(isRetryableDeliveryFailure(failure("BUILD_FAILED"))).toBe(false);
+  });
+
+  it("resolves pnpm to pnpm.cmd on Windows only", () => {
+    expect(resolveDeliveryCommand(["pnpm", "lint"], "win32")).toEqual({
+      file: expect.any(String),
+      args: ["/d", "/s", "/c", "pnpm.cmd", "lint"],
+    });
+    expect(resolveDeliveryCommand(["pnpm", "lint"], "linux")).toEqual({
+      file: "pnpm",
+      args: ["lint"],
+    });
   });
 });
