@@ -127,3 +127,18 @@ QueryToolStage 边界校正 MUST 保持工具调用顺序、tool result 回填�
 #### Scenario: todo 完成触发 active task 自动完成
 - **WHEN** 当前存在 active task 且 todo 工具将所有 items 标记为 completed
 - **THEN** 系统继续自动调用 `task_update` 将 active task 标记为 completed，并清空 active task
+
+### Requirement: QueryFinalization boundary corrections MUST preserve stop reason and round counter semantics
+QueryFinalization 边界校正 MUST 保持 assistant-only / tool-driven stopReason 与 `roundsWithoutTodo` 更新语义不变。
+
+#### Scenario: assistant-only 收尾
+- **WHEN** 模型返回无工具调用的 assistant response
+- **THEN** 系统继续返回 `assistant_response` 并递增 `roundsWithoutTodo`
+
+#### Scenario: tool-driven 收尾使用 todo
+- **WHEN** 工具轮次使用 todo
+- **THEN** 系统继续将 `roundsWithoutTodo` 重置为 0
+
+#### Scenario: tool-driven 收尾未使用 todo
+- **WHEN** 工具轮次未使用 todo
+- **THEN** 系统继续递增 `roundsWithoutTodo`
