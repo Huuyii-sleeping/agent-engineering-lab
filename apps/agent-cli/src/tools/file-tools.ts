@@ -3,6 +3,7 @@ import path from "node:path";
 import * as process from "node:process";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
+import { isWorkspacePathAllowed } from "../workspace-roots.js";
 
 type FileToolErrorCode =
   | "PATH_OUT_OF_BOUNDS"
@@ -34,10 +35,8 @@ function truncateContent(content: string, limit: number): string {
 }
 
 export function safePath(inputPath: string): string {
-  const cwd = process.cwd();
-  const resolved = path.resolve(cwd, inputPath);
-  const relative = path.relative(cwd, resolved);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+  const resolved = path.resolve(process.cwd(), inputPath);
+  if (!isWorkspacePathAllowed(resolved)) {
     throw new Error("PATH_OUT_OF_BOUNDS");
   }
   return resolved;

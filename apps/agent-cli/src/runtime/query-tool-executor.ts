@@ -1,6 +1,7 @@
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import type { HookServiceLike, ObservabilityServiceLike } from "../services/index.js";
 import type { ToolServiceLike } from "../tools/service.js";
+import { renderCliEvent } from "../cli-ui.js";
 import { appendSystemMessages } from "./query-messages.js";
 import { analyzeToolOutput } from "./query-tool-results.js";
 import { makeHookBlockedOutput, runPreToolUseHooks } from "./query-tool-hooks.js";
@@ -30,7 +31,14 @@ export async function executeQueryFunctionToolCall(input: {
     },
     { traceId: input.traceId, spanId },
   );
-  console.log(`\u001b[33m$ ${preview}\u001b[0m`);
+  console.log(
+    renderCliEvent({
+      kind: "tool",
+      status: "running",
+      title: toolName,
+      detail: preview,
+    }),
+  );
 
   const preToolHooks = await runPreToolUseHooks({
     hookService: input.hookService,
@@ -54,8 +62,16 @@ export async function executeQueryFunctionToolCall(input: {
     durationMs = Date.now() - startedAt;
   }
 
-  console.log(toolOutput);
   const analyzed = analyzeToolOutput(toolOutput);
+  console.log(
+    renderCliEvent({
+      kind: analyzed.errorCode?.startsWith("SECURITY_") ? "approval" : "tool",
+      status: preToolHooks.blocked ? "blocked" : analyzed.ok ? "done" : "failed",
+      title: toolName,
+      detail: analyzed.summary,
+      durationMs,
+    }),
+  );
   await input.observabilityService.recordEvent(
     "tool_result",
     {

@@ -84,4 +84,25 @@ describe("model policy", () => {
       expect(selection.budgetReason).toBe("session_budget_exceeded");
     });
   });
+
+  it("reads persisted usage snapshots for CLI status surfaces", async () => {
+    await withWorkspace("model-policy-usage", async () => {
+      const { ModelPolicyManager, readModelUsageSnapshot } = await import("../../src/model-policy.js");
+      const manager = new ModelPolicyManager();
+      await manager.finalizeUsage({
+        role: "coding",
+        model: "gpt-4o-mini",
+        promptTokens: 300,
+        completionTokens: 120,
+        latencyMs: 1,
+        fallbackUsed: false,
+      });
+
+      expect(await readModelUsageSnapshot("gpt-4o-mini")).toMatchObject({
+        model: "gpt-4o-mini",
+        sessionPromptTokens: 300,
+        sessionCompletionTokens: 120,
+      });
+    });
+  });
 });

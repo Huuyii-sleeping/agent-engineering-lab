@@ -2,6 +2,7 @@ import type OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { describe, expect, it, vi } from "vitest";
 import { renderAsyncCliEvent, runScheduledRound } from "../../src/cli.js";
+import { resetCliUiForTest, setCliUiColorEnabled } from "../../src/cli-ui.js";
 import type { AgentRuntimeState } from "../../src/agent-loop.js";
 import type { StaticPromptSource } from "../../src/prompt/types.js";
 
@@ -25,7 +26,24 @@ function createRuntimeState(): AgentRuntimeState {
 }
 
 describe("renderAsyncCliEvent", () => {
+  it("can render without terminal colors for deterministic logs", () => {
+    setCliUiColorEnabled(false);
+    const writes: string[] = [];
+
+    renderAsyncCliEvent({
+      output: { write: (chunk: string) => writes.push(chunk) },
+      prompt: "agent:test >> ",
+      label: "scheduled due",
+      content: "one prompt due",
+      waitingForInput: false,
+    });
+
+    expect(writes[0]).toContain("due scheduled scheduled due");
+    resetCliUiForTest();
+  });
+
   it("redraws the prompt when an async event arrives during idle input", () => {
+    setCliUiColorEnabled(true);
     const writes: string[] = [];
     const lineEditor = {
       line: "partial input",
@@ -49,10 +67,11 @@ describe("renderAsyncCliEvent", () => {
 
     expect(writes).toEqual([
       "\r\u001b[2K",
-      "\n\u001b[36m[scheduled]\u001b[0m follow up now\n",
+      "\n\u001b[32mdone\u001b[0m scheduled \u001b[36mscheduled\u001b[0m\n\u001b[90mdetail\u001b[0m  follow up now\n",
       "s01 >> ",
       "restore:partial input",
     ]);
+    resetCliUiForTest();
   });
 });
 

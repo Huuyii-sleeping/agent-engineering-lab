@@ -1,4 +1,5 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
+import { applyCliPermissionMode, getCliPermissionMode } from "../cli-permissions.js";
 import { SecurityManager } from "./security-manager.js";
 import type { SecurityGateResult } from "./security-types.js";
 import { fail, parseArgsJson } from "./security-types.js";
@@ -123,6 +124,18 @@ export async function enforceSecurityGate(toolName: string, args: Record<string,
   const bypass = toolName.startsWith("security_");
   if (bypass) {
     return { ok: true };
+  }
+  const permissionModeResult = applyCliPermissionMode(toolName);
+  if (permissionModeResult?.ok) {
+    return { ok: true };
+  }
+  if (permissionModeResult && !permissionModeResult.ok) {
+    return {
+      ok: false,
+      blocked: fail("SECURITY_PERMISSION_MODE", permissionModeResult.blocked, {
+        mode: getCliPermissionMode(),
+      }),
+    };
   }
   return SECURITY.gate(toolName, args);
 }

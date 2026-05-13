@@ -32,6 +32,19 @@ export type ModelSelection = {
   budgetReason: string | null;
 };
 
+export type ModelUsageSnapshot = {
+  model: string;
+  sessionPromptTokens: number;
+  sessionCompletionTokens: number;
+  dailyPromptTokens: number;
+  dailyCompletionTokens: number;
+  sessionEstimatedCostUsd: number;
+  dailyEstimatedCostUsd: number;
+  sessionTokenBudget: number;
+  dailyTokenBudget: number;
+  dayKey: string;
+};
+
 type FinalizeUsage = {
   promptTokens: number;
   completionTokens: number;
@@ -62,14 +75,18 @@ function costEntry(model: string): { promptUsdPer1k: number; completionUsdPer1k:
   return matched?.[1] ?? COST_TABLE.unknown;
 }
 
-function estimatePromptCostUsd(model: string, promptTokens: number): number {
+export function estimatePromptCostUsd(model: string, promptTokens: number): number {
   const pricing = costEntry(model);
   return Number(((promptTokens / 1000) * pricing.promptUsdPer1k).toFixed(6));
 }
 
-function estimateCompletionCostUsd(model: string, completionTokens: number): number {
+export function estimateCompletionCostUsd(model: string, completionTokens: number): number {
   const pricing = costEntry(model);
   return Number(((completionTokens / 1000) * pricing.completionUsdPer1k).toFixed(6));
+}
+
+export function estimateTotalCostUsd(model: string, promptTokens: number, completionTokens: number): number {
+  return Number((estimatePromptCostUsd(model, promptTokens) + estimateCompletionCostUsd(model, completionTokens)).toFixed(6));
 }
 
 function readRolePolicy(role: ModelRole, defaultModel: string): RolePolicy {
@@ -220,6 +237,40 @@ export class ModelPolicyManager {
       traceId ? { traceId } : undefined,
     );
   }
+}
+
+export async function readModelUsageSnapshot(model = process.env.MODEL_ID?.trim() || "unknown"): Promise<ModelUsageSnapshot> {
+  const runtimeRoot = path.join(process.cwd(), ".runtime");
+  const budgetPath = path.join(runtimeRoot, "model_budget.json");
+  let state = defaultBudgetState();
+  try {
+    const raw = await readFile(budgetPath, "utf8");
+    const parsed = JSON.parse(raw) as Partial<BudgetState>;
+    state = {
+      ...defaultBudgetState(),
+      ...parsed,
+      dayKey: parsed.dayKey === dayKeyFromNow() ? parsed.dayKey : dayKeyFromNow(),
+    };
+    if (parsed.dayKey !== dayKeyFromNow()) {
+      state.dailyPromptTokens = 0;
+      state.dailyCompletionTokens = 0;
+    }
+  } catch {
+    state = defaultBudgetState();
+  }
+
+  return {
+    model,
+    sessionPromptTokens: state.sessionPromptTokens,
+    sessionCompletionTokens: state.sessionCompletionTokens,
+    dailyPromptTokens: state.dailyPromptTokens,
+    dailyCompletionTokens: state.dailyCompletionTokens,
+    sessionEstimatedCostUsd: estimateTotalCostUsd(model, state.sessionPromptTokens, state.sessionCompletionTokens),
+    dailyEstimatedCostUsd: estimateTotalCostUsd(model, state.dailyPromptTokens, state.dailyCompletionTokens),
+    sessionTokenBudget: RUNTIME_CONFIG.modelSessionTokenBudget,
+    dailyTokenBudget: RUNTIME_CONFIG.modelDailyTokenBudget,
+    dayKey: state.dayKey,
+  };
 }
 
 export function classifyFallbackableError(error: unknown): boolean {

@@ -1,20 +1,40 @@
-import { randomUUID } from "node:crypto";
+import path from "node:path";
+import * as process from "node:process";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import type OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import { createAgentSessionRecord, type AgentSessionRecord } from "./agent-service-sessions.js";
+import { createAgentAppRuntime, type AgentAppRuntimeDeps } from "./bootstrap/app-runtime.js";
+import { dispatchCliCommand } from "./cli-commands.js";
 import {
-  createAgentAppRuntime,
-  createAgentRuntimeState,
-  type AgentAppRuntimeDeps,
-} from "./bootstrap/app-runtime.js";
-import { RUNTIME_CONFIG } from "./runtime-config.js";
-import { runUserQuery } from "./runtime/query-runtime.js";
-import type { RuntimeCoordinationServiceLike } from "./services/index.js";
+  collectCliConfigSnapshot,
+  collectCliPermissionSnapshot,
+  collectCliStatusSnapshot,
+  collectCliUsageSnapshot,
+  runCliDoctor,
+} from "./cli-doctor.js";
+import { setCliPermissionMode } from "./cli-permissions.js";
+import {
+  getCliUiTheme,
+  renderClearScreen,
+  renderCliBanner,
+  renderCliCloseout,
+  renderCliError,
+  renderCliEvent,
+  renderCliPrompt,
+  renderCliSection,
+  setCliUiTheme,
+} from "./cli-ui.js";
+import { createClient, getStaticPromptSource } from "./config.js";
+import { summarizeDeliveryReport } from "./delivery-types.js";
 import type { AgentRuntimeState } from "./runtime/query-types.js";
-import { withCompactRuntimeContext } from "./tools/context-compact.js";
-
-const PROMPT = "\u001b[36ms01 >> \u001b[0m";
+import { runUserQuery } from "./runtime/query-runtime.js";
+import { RUNTIME_CONFIG } from "./runtime-config.js";
+import type { RuntimeCoordinationServiceLike } from "./services/index.js";
+import { runCliShellShortcut } from "./cli-shell.js";
+import { compactMessages, withCompactRuntimeContext } from "./tools/context-compact.js";
+import { addWorkspaceRoot } from "./workspace-roots.js";
 
 type LineEditor = {
   line: string;
@@ -38,6 +58,38 @@ type ScheduledRoundOptions = {
   queryEngine?: AgentAppRuntimeDeps["queryEngine"];
 };
 
+type RunCliOverrides = Partial<AgentAppRuntimeDeps>;
+
+type CliSessionRecord = AgentSessionRecord & {
+  changedPaths: Set<string>;
+};
+
+function createCliSession(): CliSessionRecord {
+  const record = createAgentSessionRecord();
+  return { ...record, changedPaths: new Set<string>() };
+}
+
+function createShellAppRuntime(
+  overrides: RunCliOverrides,
+): { app: AgentAppRuntimeDeps; startupIssue: Error | null } {
+  try {
+    return { app: createAgentAppRuntime(overrides), startupIssue: null };
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Missing environment variable: MODEL_ID")) {
+      return {
+        app: createAgentAppRuntime({
+          ...overrides,
+          client: overrides.client ?? ({} as OpenAI),
+          model: overrides.model ?? "unset-model",
+          promptSource: overrides.promptSource ?? getStaticPromptSource(),
+        }),
+        startupIssue: error,
+      };
+    }
+    throw error;
+  }
+}
+
 function formatError(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -53,9 +105,13 @@ export function renderAsyncCliEvent(opts: {
   waitingForInput: boolean;
   lineEditor?: LineEditor;
 }): void {
-  const body = opts.content.trim()
-    ? `\u001b[36m[${opts.label}]\u001b[0m ${opts.content.trim()}`
-    : `\u001b[36m[${opts.label}]\u001b[0m`;
+  const body = renderCliEvent({
+    kind: "scheduled",
+    status:
+      opts.label.includes("error") ? "failed" : opts.label.includes("due") ? "due" : "done",
+    title: opts.label,
+    detail: opts.content.trim() || undefined,
+  });
   if (!opts.waitingForInput) {
     opts.output.write(`\n${body}\n`);
     return;
@@ -132,33 +188,78 @@ export async function runScheduledRound(opts: ScheduledRoundOptions): Promise<bo
   }
 }
 
-type RunCliOverrides = Partial<AgentAppRuntimeDeps>;
-
 export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
-  const app = createAgentAppRuntime(overrides);
+  let { app, startupIssue } = createShellAppRuntime(overrides);
   const rl = createInterface({ input, output });
-  const history: ChatCompletionMessageParam[] = [];
-  const runtimeState = createAgentRuntimeState(randomUUID());
+  const sessions = new Map<string, CliSessionRecord>();
+  const initialSession = createCliSession();
+  sessions.set(initialSession.id, initialSession);
+  let activeSessionId = initialSession.id;
   let agentBusy = false;
   let waitingForInput = false;
+
+  const rebuildApp = (model: string): boolean => {
+    try {
+      process.env.MODEL_ID = model;
+      app = createAgentAppRuntime({
+        ...overrides,
+        client: overrides.client ?? createClient(),
+        model,
+        promptSource: overrides.promptSource ?? getStaticPromptSource(),
+      });
+      startupIssue = null;
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const getActiveSession = (): CliSessionRecord => {
+    const session = sessions.get(activeSessionId);
+    if (!session) {
+      throw new Error(`active session missing: ${activeSessionId}`);
+    }
+    return session;
+  };
+  const renderBanner = () =>
+    renderCliBanner({
+      title: "Agent CLI",
+      workspace: path.basename(process.cwd()),
+      mode: "interactive",
+      model: app.model,
+      sessionId: activeSessionId,
+      commands: ["/help", "/status", "/permissions", "/cost", "/model", "/doctor"],
+    });
   const printAsyncEvent = (label: string, content: string) => {
     renderAsyncCliEvent({
       output,
-      prompt: PROMPT,
+      prompt: renderCliPrompt(activeSessionId),
       label,
       content,
       waitingForInput,
       lineEditor: rl,
     });
   };
+
+  output.write(`${renderBanner()}\n`);
+  if (startupIssue) {
+    output.write(
+      `${renderCliError("startup", startupIssue.message, "run /doctor before sending model queries")}\n\n`,
+    );
+  }
+
   const schedulerInterval = setInterval(() => {
+    if (startupIssue) {
+      return;
+    }
+    const activeSession = getActiveSession();
     void runScheduledRound({
       isAgentBusy: () => agentBusy,
       setAgentBusy: (busy) => {
         agentBusy = busy;
       },
-      history,
-      runtimeState,
+      history: activeSession.history,
+      runtimeState: activeSession.runtimeState,
       client: app.client,
       model: app.model,
       promptSource: app.promptSource,
@@ -173,7 +274,7 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
       let query = "";
       try {
         waitingForInput = true;
-        query = await rl.question(PROMPT);
+        query = await rl.question(renderCliPrompt(activeSessionId));
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ERR_USE_AFTER_CLOSE") {
           break;
@@ -184,29 +285,144 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
       }
 
       const normalized = query.trim().toLowerCase();
-      if (!query.trim() || normalized === "q" || normalized === "exit") {
+      if (!query.trim()) {
+        continue;
+      }
+      if (normalized === "q" || normalized === "exit") {
+        output.write(
+          `${renderCliCloseout({
+            sessionId: activeSessionId,
+            changedPaths: [...getActiveSession().changedPaths],
+          })}\n`,
+        );
         break;
       }
 
+      const command = await dispatchCliCommand(query, {
+        activeSessionId,
+        createSession: () => {
+          const session = createCliSession();
+          sessions.set(session.id, session);
+          activeSessionId = session.id;
+          return { id: session.id };
+        },
+        listSessions: () =>
+          [...sessions.values()].map((session) => ({
+            id: session.id,
+            messageCount: session.history.length,
+            busy: session.busy,
+            active: session.id === activeSessionId,
+          })),
+        useSession: (sessionId) => {
+          if (!sessions.has(sessionId)) {
+            return false;
+          }
+          activeSessionId = sessionId;
+          return true;
+        },
+        listTools: async () => app.toolService.listToolMetadata(),
+        getStatus: async () =>
+          collectCliStatusSnapshot({
+            mode: "interactive",
+            activeSessionId,
+            sessionCount: sessions.size,
+            bridgeEndpoint: "/events",
+            app,
+            model: app.model,
+          }),
+        getConfig: () => collectCliConfigSnapshot({ model: app.model }),
+        getPermissions: collectCliPermissionSnapshot,
+        setPermissionMode: (mode) => {
+          setCliPermissionMode(mode);
+          return true;
+        },
+        getUsage: () => collectCliUsageSnapshot(app.model),
+        compactSession: async (keepRecent) =>
+          compactMessages({ messages: getActiveSession().history }, "manual", keepRecent),
+        getModel: () => app.model,
+        setModel: async (model) => rebuildApp(model),
+        addWorkspaceRoot,
+        runDoctor: runCliDoctor,
+        getTheme: () => getCliUiTheme(),
+        setTheme: (theme) => {
+          setCliUiTheme(theme);
+          return true;
+        },
+      });
+      if (command.handled) {
+        if (command.nextSessionId) {
+          activeSessionId = command.nextSessionId;
+        }
+        if (command.clearScreen) {
+          output.write(renderClearScreen());
+        }
+        if (command.showBanner) {
+          output.write(`${renderBanner()}\n`);
+        }
+        if (command.output) {
+          output.write(`${command.output}\n\n`);
+        }
+        if (command.exit) {
+          output.write(
+            `${renderCliCloseout({
+              sessionId: activeSessionId,
+              changedPaths: [...getActiveSession().changedPaths],
+            })}\n`,
+          );
+          break;
+        }
+        continue;
+      }
+
+      if (query.trim().startsWith("!")) {
+        output.write(`${await runCliShellShortcut(query.trim().slice(1), app.toolService.runToolByName.bind(app.toolService))}\n\n`);
+        continue;
+      }
+
+      if (startupIssue) {
+        output.write(
+          `${renderCliError("model not ready", startupIssue.message, "set MODEL_ID and rerun /doctor")}\n\n`,
+        );
+        continue;
+      }
+
+      const activeSession = getActiveSession();
       agentBusy = true;
+      activeSession.busy = true;
       try {
         const result = await runUserQuery({
           app,
-          history,
-          runtimeState,
+          history: activeSession.history,
+          runtimeState: activeSession.runtimeState,
           prompt: query,
         });
         if (!result.ok) {
-          console.log(`\u001b[31m[hook blocked]\u001b[0m ${result.error.message}`);
-          console.log();
+          output.write(
+            `${renderCliError("hook blocked", result.error.message, "adjust your prompt or local hook policy")}\n\n`,
+          );
           continue;
         }
         if (result.assistant) {
-          console.log(result.assistant);
+          output.write(`${renderCliSection("Assistant", result.assistant)}\n\n`);
         }
-        console.log();
+        if (activeSession.runtimeState.wroteWorkspaceFiles) {
+          for (const changedPath of activeSession.runtimeState.touchedPaths) {
+            activeSession.changedPaths.add(changedPath);
+          }
+          const report = await app.deliveryService.loadLatestReport().catch(() => null);
+          output.write(
+            `${renderCliCloseout({
+              sessionId: activeSessionId,
+              changedPaths: [...activeSession.runtimeState.touchedPaths],
+              validationSummary: report ? summarizeDeliveryReport(report) : null,
+              risks: report?.risks ?? [],
+              suggestions: report?.suggestions ?? [],
+            })}\n\n`,
+          );
+        }
       } finally {
         agentBusy = false;
+        activeSession.busy = false;
       }
     }
   } finally {
