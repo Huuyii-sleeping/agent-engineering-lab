@@ -33,3 +33,15 @@ pnpm-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
+
+# Agent CLI runtime state
+apps/agent-cli/.audit/
+apps/agent-cli/.memory/
+apps/agent-cli/.observability/
+apps/agent-cli/.runtime/
+apps/agent-cli/.schedule/
+apps/agent-cli/.security/
+apps/agent-cli/.tasks/
+apps/agent-cli/.team/
+apps/agent-cli/.transcripts/
+apps/agent-cli/.worktrees/
