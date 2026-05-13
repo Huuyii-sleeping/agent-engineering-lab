@@ -1,4 +1,5 @@
 import * as process from "node:process";
+import { pathToFileURL } from "node:url";
 import { AgentService, createAgentHttpServer } from "./agent-service.js";
 import { createAgentAppRuntime } from "./bootstrap/app-runtime.js";
 
@@ -14,7 +15,14 @@ export async function runServer(): Promise<void> {
   console.log(`agent service listening on http://0.0.0.0:${port}`);
 }
 
-runServer().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+function isDirectRun(): boolean {
+  const entry = process.argv[1];
+  return Boolean(entry && import.meta.url === pathToFileURL(entry).href);
+}
+
+if (isDirectRun()) {
+  runServer().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

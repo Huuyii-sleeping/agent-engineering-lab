@@ -5,6 +5,7 @@ import {
   nowMs,
   sortSessionsByCreatedAt,
   summarizeSession,
+  summarizeSessionTranscript,
   type AgentSessionRecord,
 } from "./agent-service-sessions.js";
 import { runUserQuery } from "./runtime/query-runtime.js";
@@ -16,6 +17,15 @@ type ChatRequest = {
   session_id?: string;
   message?: string;
 };
+
+export type AgentServiceEvent = {
+  id: number;
+  at: number;
+  type: "session.created" | "chat.started" | "chat.completed" | "chat.failed";
+  payload: Record<string, unknown>;
+};
+
+export type AgentServiceEventSubscriber = (event: AgentServiceEvent) => void;
 
 function json(res: ServerResponse, statusCode: number, payload: unknown): void {
   res.statusCode = statusCode;
@@ -48,6 +58,8 @@ function parseBody<T>(req: IncomingMessage): Promise<T> {
 
 export class AgentService {
   private readonly sessions = new Map<string, AgentSessionRecord>();
+  private readonly eventSubscribers = new Set<AgentServiceEventSubscriber>();
+  private eventCounter = 0;
   private readonly client: AgentServiceDeps["client"];
   private readonly model: AgentServiceDeps["model"];
   private readonly promptSource: AgentServiceDeps["promptSource"];
@@ -81,6 +93,7 @@ export class AgentService {
   createSession(): AgentSessionRecord {
     const record = createAgentSessionRecord();
     this.sessions.set(record.id, record);
+    this.emitEvent("session.created", { session: summarizeSession(record) });
     return record;
   }
 
@@ -94,6 +107,53 @@ export class AgentService {
 
   async toolsMetadata(): Promise<Array<Record<string, string>>> {
     return this.toolService.listToolMetadata();
+  }
+
+  getSessionDetail(sessionId: string): Record<string, unknown> | null {
+    const session = this.getSession(sessionId);
+    return session ? summarizeSessionTranscript(session) : null;
+  }
+
+  bridgeManifest(): Record<string, unknown> {
+    return {
+      ok: true,
+      name: "agent-cli-bridge",
+      version: "0.1.0",
+      capabilities: {
+        chat: true,
+        sessions: true,
+        tools: true,
+        events: true,
+      },
+      endpoints: {
+        health: "/health",
+        chat: "/chat",
+        tools: "/tools",
+        sessions: "/sessions",
+        sessionDetail: "/sessions/:id",
+        events: "/events",
+      },
+    };
+  }
+
+  subscribeEvents(subscriber: AgentServiceEventSubscriber): () => void {
+    this.eventSubscribers.add(subscriber);
+    return () => {
+      this.eventSubscribers.delete(subscriber);
+    };
+  }
+
+  private emitEvent(type: AgentServiceEvent["type"], payload: Record<string, unknown>): void {
+    const event: AgentServiceEvent = {
+      id: this.eventCounter,
+      at: nowMs(),
+      type,
+      payload,
+    };
+    this.eventCounter += 1;
+    for (const subscriber of this.eventSubscribers) {
+      subscriber(event);
+    }
   }
 
   async chat(input: ChatRequest): Promise<Record<string, unknown>> {
@@ -132,6 +192,10 @@ export class AgentService {
 
     session.busy = true;
     session.updatedAt = nowMs();
+    this.emitEvent("chat.started", {
+      session: summarizeSession(session),
+      message: prompt,
+    });
     try {
       const result = await runUserQuery({
         app: {
@@ -154,6 +218,10 @@ export class AgentService {
         prompt,
       });
       if (!result.ok) {
+        this.emitEvent("chat.failed", {
+          session: summarizeSession(session),
+          error: result.error,
+        });
         return {
           ok: false,
           error: result.error,
@@ -161,6 +229,10 @@ export class AgentService {
         };
       }
       session.updatedAt = nowMs();
+      this.emitEvent("chat.completed", {
+        session: summarizeSession(session),
+        assistant: result.assistant,
+      });
       return {
         ok: true,
         session: summarizeSession(session),
@@ -184,8 +256,27 @@ export function createAgentHttpServer(service: AgentService): Server {
         json(res, 200, { ok: true, status: "ok" });
         return;
       }
+      if (method === "GET" && pathname === "/bridge") {
+        json(res, 200, service.bridgeManifest());
+        return;
+      }
       if (method === "GET" && pathname === "/tools") {
         json(res, 200, { ok: true, tools: await service.toolsMetadata() });
+        return;
+      }
+      if (method === "GET" && pathname === "/events") {
+        res.statusCode = 200;
+        res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+        res.setHeader("Cache-Control", "no-store");
+        res.setHeader("Connection", "keep-alive");
+        res.write("event: bridge.ready\n");
+        res.write(`data: ${JSON.stringify({ ok: true })}\n\n`);
+        const unsubscribe = service.subscribeEvents((event) => {
+          res.write(`id: ${event.id}\n`);
+          res.write(`event: ${event.type}\n`);
+          res.write(`data: ${JSON.stringify(event)}\n\n`);
+        });
+        req.on("close", unsubscribe);
         return;
       }
       if (method === "GET" && pathname === "/sessions") {
@@ -198,6 +289,22 @@ export function createAgentHttpServer(service: AgentService): Server {
       if (method === "POST" && pathname === "/sessions") {
         const session = service.createSession();
         json(res, 201, { ok: true, session: summarizeSession(session) });
+        return;
+      }
+      if (method === "GET" && pathname.startsWith("/sessions/")) {
+        const sessionId = decodeURIComponent(pathname.slice("/sessions/".length));
+        const session = service.getSessionDetail(sessionId);
+        if (!session) {
+          json(res, 404, {
+            ok: false,
+            error: {
+              code: "SESSION_NOT_FOUND",
+              message: `session not found: ${sessionId}`,
+            },
+          });
+          return;
+        }
+        json(res, 200, { ok: true, session });
         return;
       }
       if (method === "POST" && pathname === "/chat") {

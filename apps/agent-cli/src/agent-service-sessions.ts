@@ -43,3 +43,10 @@ export function summarizeSession(session: AgentSessionRecord): Record<string, un
     rounds: session.runtimeState.roundCounter,
   };
 }
+
+export function summarizeSessionTranscript(session: AgentSessionRecord): Record<string, unknown> {
+  return {
+    ...summarizeSession(session),
+    messages: session.history,
+  };
+}

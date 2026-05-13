@@ -1,6 +1,7 @@
 import type OpenAI from "openai";
+import { Readable, Writable } from "node:stream";
 import { afterEach, describe, expect, it } from "vitest";
-import { AgentService } from "../../src/agent-service.js";
+import { AgentService, createAgentHttpServer } from "../../src/agent-service.js";
 import type { DeliveryServiceLike } from "../../src/delivery-service.js";
 import type { HookServiceLike } from "../../src/hook-service.js";
 import type { AgentRuntimeState } from "../../src/agent-loop.js";
@@ -115,6 +116,42 @@ function createObservabilityService(): ObservabilityServiceLike {
   };
 }
 
+async function requestServer(server: ReturnType<typeof createAgentHttpServer>, method: string, url: string): Promise<{
+  statusCode: number;
+  body: Record<string, unknown>;
+}> {
+  const req = new Readable({
+    read() {
+      this.push(null);
+    },
+  }) as Readable & { method?: string; url?: string };
+  req.method = method;
+  req.url = url;
+  const chunks: Buffer[] = [];
+  const res = new Writable({
+    write(chunk, _encoding, callback) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+      callback();
+    },
+  }) as Writable & {
+    statusCode: number;
+    setHeader(name: string, value: string): void;
+  };
+  res.statusCode = 200;
+  res.setHeader = () => {};
+
+  const finished = new Promise<void>((resolve, reject) => {
+    res.on("finish", resolve);
+    res.on("error", reject);
+  });
+  server.emit("request", req, res);
+  await finished;
+  return {
+    statusCode: res.statusCode,
+    body: JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>,
+  };
+}
+
 afterEach(() => {
   delete process.env.MODEL_ID;
 });
@@ -216,5 +253,72 @@ describe("agent service", () => {
         replaySafe: "true",
       },
     ]);
+  });
+
+  it("exposes bridge manifest, session transcript, and service events", async () => {
+    const events: string[] = [];
+    const service = new AgentService({
+      client: {} as OpenAI,
+      model: "fake-model",
+      promptSource: PROMPT_SOURCE,
+      toolService: createToolService(),
+      deliveryService: createDeliveryService(),
+      hookService: createHookService(),
+      memoryService: createMemoryService(),
+      modelPolicyService: createModelPolicyService(),
+      observabilityService: createObservabilityService(),
+      queryEngine: createLoopRunner(),
+    });
+    const unsubscribe = service.subscribeEvents((event) => {
+      events.push(event.type);
+    });
+
+    const session = service.createSession();
+    await service.chat({ session_id: session.id, message: "bridge" });
+    unsubscribe();
+    const transcript = service.getSessionDetail(session.id);
+
+    expect(service.bridgeManifest()).toMatchObject({
+      ok: true,
+      capabilities: { events: true, sessions: true },
+      endpoints: { events: "/events", sessionDetail: "/sessions/:id" },
+    });
+    expect(transcript).toMatchObject({
+      id: session.id,
+      messages: [
+        { role: "user", content: "bridge" },
+        { role: "assistant" },
+      ],
+    });
+    expect(events).toEqual(["session.created", "chat.started", "chat.completed"]);
+  });
+
+  it("serves bridge and session detail endpoints", async () => {
+    const service = new AgentService({
+      client: {} as OpenAI,
+      model: "fake-model",
+      promptSource: PROMPT_SOURCE,
+      toolService: createToolService(),
+      deliveryService: createDeliveryService(),
+      hookService: createHookService(),
+      memoryService: createMemoryService(),
+      modelPolicyService: createModelPolicyService(),
+      observabilityService: createObservabilityService(),
+      queryEngine: createLoopRunner(),
+    });
+    const session = service.createSession();
+    const server = createAgentHttpServer(service);
+
+    const bridge = await requestServer(server, "GET", "/bridge");
+    const detail = await requestServer(server, "GET", `/sessions/${session.id}`);
+    const missing = await requestServer(server, "GET", "/sessions/missing");
+
+    expect(bridge.body).toMatchObject({ ok: true, name: "agent-cli-bridge" });
+    expect(detail.body).toMatchObject({ ok: true, session: { id: session.id, messages: [] } });
+    expect(missing.statusCode).toBe(404);
+    expect(missing.body).toMatchObject({
+      ok: false,
+      error: { code: "SESSION_NOT_FOUND" },
+    });
   });
 });
