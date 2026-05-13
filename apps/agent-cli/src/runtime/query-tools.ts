@@ -1,97 +1,14 @@
-import OpenAI from "openai";
-import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import type { HookServiceLike, ObservabilityServiceLike } from "../services/index.js";
-import type { ToolServiceLike } from "../tools/service.js";
 import { appendSystemMessages } from "./query-messages.js";
-import {
-  analyzeToolOutput,
-  isTodoCompletionRequest,
-  markWriteSideEffect,
-  parseTaskIdFromToolOutput,
-} from "./query-tool-results.js";
-import { parseToolArgs } from "./tool-runtime.js";
-import type { AgentRuntimeState } from "./query-types.js";
+import { markWriteSideEffect } from "./query-tool-results.js";
+import { executeQueryFunctionToolCall } from "./query-tool-executor.js";
+import { runPostToolUseHooks } from "./query-tool-hooks.js";
+import { maybeAutoCompleteTaskFromTodo, syncActiveTaskState } from "./query-tool-task-sync.js";
+import type { QueryFunctionToolCall, QueryToolStageResult, RunQueryToolStageOptions } from "./query-tool-types.js";
 
-export type QueryToolStageResult = {
-  usedTodo: boolean;
-};
+export type { QueryToolStageResult } from "./query-tool-types.js";
 
-type RunQueryToolStageOptions = {
-  message: OpenAI.Chat.Completions.ChatCompletionMessage;
-  messages: ChatCompletionMessageParam[];
-  runtimeState: AgentRuntimeState;
-  traceId: string;
-  toolService: ToolServiceLike;
-  hookService: HookServiceLike;
-  observabilityService: ObservabilityServiceLike;
-};
-
-function makeHookBlockedOutput(reason: string | null): string {
-  return JSON.stringify(
-    {
-      ok: false,
-      error: {
-        code: "HOOK_BLOCKED",
-        message: reason ?? "blocked by hook",
-      },
-    },
-    null,
-    2,
-  );
-}
-
-async function maybeAutoCompleteTaskFromTodo(
-  runtimeState: AgentRuntimeState,
-  toolName: string,
-  toolArgs: Record<string, unknown>,
-  traceId: string,
-  toolService: ToolServiceLike,
-  observabilityService: ObservabilityServiceLike,
-): Promise<boolean> {
-  if (toolName !== "todo") {
-    return false;
-  }
-  if (!runtimeState.activeTaskId || !isTodoCompletionRequest(toolArgs)) {
-    return true;
-  }
-
-  const autoUpdateArgs = JSON.stringify({
-    task_id: runtimeState.activeTaskId,
-    status: "completed",
-  });
-  console.log(`\u001b[33m$ task_update ${runtimeState.activeTaskId} (auto)\u001b[0m`);
-  const autoOutput = await observabilityService.withExecutionContext(
-    { traceId, spanId: observabilityService.createSpanId() },
-    async () => toolService.runToolByName("task_update", autoUpdateArgs),
-  );
-  console.log(autoOutput);
-  runtimeState.activeTaskId = null;
-  return true;
-}
-
-function syncActiveTaskState(
-  runtimeState: AgentRuntimeState,
-  toolName: string,
-  toolArgs: Record<string, unknown>,
-  toolOutput: string,
-): void {
-  if (toolName === "task_create") {
-    const createdId = parseTaskIdFromToolOutput(toolOutput);
-    if (createdId) {
-      runtimeState.activeTaskId = createdId;
-    }
-    return;
-  }
-
-  if (toolName !== "task_update") {
-    return;
-  }
-
-  const taskId = Number(toolArgs.task_id);
-  const status = String(toolArgs.status ?? "");
-  if (runtimeState.activeTaskId && taskId === runtimeState.activeTaskId && status === "completed") {
-    runtimeState.activeTaskId = null;
-  }
+function isFunctionToolCall(toolCall: NonNullable<RunQueryToolStageOptions["message"]["tool_calls"]>[number]): toolCall is QueryFunctionToolCall {
+  return toolCall.type === "function";
 }
 
 export async function runQueryToolStage(opts: RunQueryToolStageOptions): Promise<QueryToolStageResult> {
@@ -99,112 +16,56 @@ export async function runQueryToolStage(opts: RunQueryToolStageOptions): Promise
   let usedTodo = false;
 
   for (const toolCall of toolCalls) {
-    if (toolCall.type !== "function") {
+    if (!isFunctionToolCall(toolCall)) {
       continue;
     }
 
-    const toolName = toolCall.function.name;
-    const toolArgs = parseToolArgs(toolCall.function.arguments);
-    const preview = opts.toolService.previewToolCall(toolName, toolCall.function.arguments);
-    const spanId = opts.observabilityService.createSpanId();
-    await opts.observabilityService.recordEvent(
-      "tool_call",
-      {
-        toolName,
-        preview,
-        argumentsJson: toolCall.function.arguments,
-      },
-      { traceId: opts.traceId, spanId },
-    );
-    console.log(`\u001b[33m$ ${preview}\u001b[0m`);
-
-    const preToolHooks = await opts.hookService.run("PreToolUse", {
-      session_id: opts.runtimeState.sessionId,
-      trace_id: opts.traceId,
-      span_id: spanId,
-      payload: {
-        tool_name: toolName,
-        tool_arguments: toolArgs,
-      },
-    });
-    appendSystemMessages(opts.messages, preToolHooks.messages);
-
-    let toolOutput = "";
-    let durationMs = 0;
-    if (preToolHooks.blocked) {
-      toolOutput = makeHookBlockedOutput(preToolHooks.blockReason);
-    } else {
-      const startedAt = Date.now();
-      toolOutput = await opts.observabilityService.withExecutionContext({ traceId: opts.traceId, spanId }, async () =>
-        opts.toolService.runToolByName(toolName, toolCall.function.arguments),
-      );
-      durationMs = Date.now() - startedAt;
-    }
-
-    console.log(toolOutput);
-    const analyzed = analyzeToolOutput(toolOutput);
-    await opts.observabilityService.recordEvent(
-      "tool_result",
-      {
-        toolName,
-        durationMs,
-        ok: analyzed.ok,
-        errorCode: analyzed.errorCode,
-        outputSummary: analyzed.summary,
-      },
-      { traceId: opts.traceId, spanId },
-    );
-    if (analyzed.errorCode?.startsWith("SECURITY_")) {
-      await opts.observabilityService.recordEvent(
-        "security_blocked",
-        {
-          toolName,
-          errorCode: analyzed.errorCode,
-        },
-        { traceId: opts.traceId, spanId },
-      );
-    }
-
-    opts.messages.push({
-      role: "tool",
-      tool_call_id: toolCall.id,
-      content: toolOutput,
+    const result = await executeQueryFunctionToolCall({
+      toolCall,
+      messages: opts.messages,
+      runtimeState: opts.runtimeState,
+      traceId: opts.traceId,
+      toolService: opts.toolService,
+      hookService: opts.hookService,
+      observabilityService: opts.observabilityService,
     });
 
-    if (preToolHooks.blocked) {
+    if (result.blocked) {
       continue;
     }
 
-    if (analyzed.ok) {
-      markWriteSideEffect(opts.runtimeState, toolName, toolArgs);
+    if (result.analyzed.ok) {
+      markWriteSideEffect(opts.runtimeState, result.toolName, result.toolArgs);
     }
-    const postToolHooks = await opts.hookService.run("PostToolUse", {
-      session_id: opts.runtimeState.sessionId,
-      trace_id: opts.traceId,
-      span_id: spanId,
-      payload: {
-        tool_name: toolName,
-        tool_arguments: toolArgs,
-        tool_output: toolOutput,
-        tool_ok: analyzed.ok,
-        error_code: analyzed.errorCode,
-      },
+    const postToolHooks = await runPostToolUseHooks({
+      hookService: opts.hookService,
+      runtimeState: opts.runtimeState,
+      traceId: opts.traceId,
+      spanId: result.spanId,
+      toolName: result.toolName,
+      toolArgs: result.toolArgs,
+      toolOutput: result.toolOutput,
+      toolOk: result.analyzed.ok,
+      errorCode: result.analyzed.errorCode,
     });
     appendSystemMessages(opts.messages, postToolHooks.messages);
 
-    if (toolName === "todo") {
-      usedTodo = true;
-      await maybeAutoCompleteTaskFromTodo(
-        opts.runtimeState,
-        toolName,
-        toolArgs,
-        opts.traceId,
-        opts.toolService,
-        opts.observabilityService,
-      );
-    }
+    const todoUsed = await maybeAutoCompleteTaskFromTodo({
+      runtimeState: opts.runtimeState,
+      toolName: result.toolName,
+      toolArgs: result.toolArgs,
+      traceId: opts.traceId,
+      toolService: opts.toolService,
+      observabilityService: opts.observabilityService,
+    });
+    usedTodo = usedTodo || todoUsed;
 
-    syncActiveTaskState(opts.runtimeState, toolName, toolArgs, toolOutput);
+    syncActiveTaskState({
+      runtimeState: opts.runtimeState,
+      toolName: result.toolName,
+      toolArgs: result.toolArgs,
+      toolOutput: result.toolOutput,
+    });
   }
 
   return { usedTodo };

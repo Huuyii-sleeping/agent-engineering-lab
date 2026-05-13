@@ -2,9 +2,7 @@
 
 ## Purpose
 定义 Agent 的项目级 Hook 扩展点、命令型 hook 执行契约和结构化决策返回格式，使工具、会话与停止事件能够被可配置逻辑安全拦截或补充。
-
 ## Requirements
-
 ### Requirement: Agent SHALL provide a unified hook runner
 系统 SHALL 提供统一 Hook 运行时，用于读取项目级 `.codex/hooks.json`、执行匹配到的命令型 hook，并归并固定事件面的处理结果。
 
@@ -44,3 +42,18 @@ Hook 返回值 MUST 使用统一结构表达继续、阻止和注入补充消息
 #### Scenario: Hook 注入补充消息
 - **WHEN** `PostToolUse` Hook 返回补充消息
 - **THEN** 系统将该消息作为后续上下文的一部分注入主流程
+
+### Requirement: QueryToolStage boundary corrections MUST preserve tool hook blocking and message injection semantics
+QueryToolStage 边界校正 MUST 保持 PreToolUse / PostToolUse hook 阻断、补充消息注入和结构化工具输出语义不变。
+
+#### Scenario: PreToolUse hook 阻断工具
+- **WHEN** PreToolUse hook 返回 blocked
+- **THEN** 系统继续不执行底层工具，并回填包含 `HOOK_BLOCKED` 的结构化 tool output
+
+#### Scenario: hook 注入补充消息
+- **WHEN** PreToolUse 或 PostToolUse hook 返回补充 messages
+- **THEN** 系统继续将这些消息按原有位置追加为 system messages
+
+#### Scenario: PostToolUse hook 接收工具结果
+- **WHEN** 工具未被 PreToolUse 阻断并完成执行
+- **THEN** PostToolUse hook 继续接收 tool name、arguments、output、ok 和 error code
