@@ -39,6 +39,32 @@
 - PRD-18：Worktree 执行车道与收尾模型增强
 - PRD-19：MCP 与外部能力总线
 
+## 生产级架构与收口阶段
+
+- PRD-20：发布硬化与收口
+- PRD-21：生产级架构重构与知识沉淀
+- PRD-22：运行时服务目录与边界校正
+- PRD-23：Query 运行时 Services 依赖包
+- PRD-24：ToolService 协议边界二次收口
+- PRD-25：ToolExecutor 执行分发边界收口
+- PRD-26：MCP 模块边界拆分
+- PRD-27：MCP 客户端与 Registry 边界拆分
+- PRD-28：Security 工具模块边界收口
+- PRD-29：Team 工具模块边界收口
+- PRD-30：Worktree 工具模块边界收口
+- PRD-31：TaskBoard 任务模块边界收口
+- PRD-32：Scheduler 调度模块边界收口
+- PRD-33：BackgroundTask 后台任务模块边界收口
+- PRD-34：Subagent 子代理模块边界收口
+- PRD-35：Delivery 交付验证模块边界收口
+- PRD-36：QueryModel 模型请求模块边界收口
+- PRD-37：QueryToolStage 工具执行阶段边界收口
+- PRD-38：QueryFinalization 收尾阶段边界收口
+- PRD-39：Runtime 剩余编排边界总收口
+- PRD-40：最终发布收口与文档一致性
+
+PRD-39 之后，不再为了拆分而继续开边界收口 PRD。后续新 PRD 应围绕明确的新能力、行为变化、发布门禁调整或产品化需求展开。
+
 ## 建议执行顺序
 
 1. PRD-13（P0）
@@ -60,3 +86,5 @@
 - 当前阶段 AC 全部通过
 - 关键风险已记录
 - CLI 主流程保持稳定可运行
+- OpenSpec active changes 清空
+- 必要时更新 `docs/learning/claude-code/operations/` 中对应操作类型文档

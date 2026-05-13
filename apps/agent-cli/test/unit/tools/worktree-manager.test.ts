@@ -27,7 +27,7 @@ class FakeWorktreeRunner {
     return false;
   }
 
-  async getDirtyFiles(_record: WorktreeRecord): Promise<string[] | null> {
+  async getDirtyFiles(): Promise<string[] | null> {
     return this.dirtyFiles;
   }
 }

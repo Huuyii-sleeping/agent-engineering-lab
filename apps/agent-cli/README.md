@@ -78,14 +78,14 @@ pnpm --filter agent-web-console dev
 
 ### 1. CLI 主循环
 
-- 入口在 [src/main.ts](/D:/项目/agent/apps/agent-cli/src/main.ts:1) 和 [src/cli.ts](/D:/项目/agent/apps/agent-cli/src/cli.ts:1)
+- 入口在 [src/main.ts](/Users/bytedance/Personal/agent-engineering-lab-web/apps/agent-cli/src/main.ts:1) 和 [src/cli.ts](/Users/bytedance/Personal/agent-engineering-lab-web/apps/agent-cli/src/cli.ts:1)
 - 支持交互式对话
 - 支持调度器后台轮询
 - 调度到点后会主动把结果推回 CLI，而不是只在下次用户发问时处理
 
 ### 2. Prompt 构建与恢复
 
-- 入口在 [src/agent-loop.ts](/D:/项目/agent/apps/agent-cli/src/agent-loop.ts:1)
+- 入口在 [src/agent-loop.ts](/Users/bytedance/Personal/agent-engineering-lab-web/apps/agent-cli/src/agent-loop.ts:1)
 - 支持动态 system message 注入
 - 支持自动记忆注入、后台通知注入、团队通知注入、定时通知注入
 - 支持超长上下文恢复、自动压缩和错误分类恢复

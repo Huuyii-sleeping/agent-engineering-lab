@@ -8,6 +8,7 @@
 - `apps/web-console/`：Web 展示端（React + TypeScript + Vite）
 - `prd/incremental/`：按阶段拆分的 PRD（`PRD-00` 到后续）
 - `openspec/`：OpenSpec 变更、规格与归档记录
+- `docs/learning/claude-code/operations/`：按统一操作类型沉淀的架构讲解文档
 - `AGENT.md`：当前工作区执行规范
 
 ## 环境要求
@@ -61,6 +62,17 @@ pnpm build:web
 pnpm release:check
 ```
 
+该命令会进入 `agent-cli` 并串行执行 lint、unit test、build，以及当前已交付能力的 smoke / regression 验证。
+
+## 架构学习文档
+
+架构沉淀只维护 `operations/` 主线，不再维护按 PRD 编号排列的学习流水账。推荐从这里开始：
+
+```text
+docs/learning/claude-code/README.md
+docs/learning/claude-code/operations/
+```
+
 ## OpenSpec 常用命令
 
 在仓库根目录执行：
@@ -79,3 +91,4 @@ openspec archive "<change-name>" -y
 3. 实现并做 smoke/回归测试。
 4. 提交前按规则清理 `.tasks/.team/.worktrees/.transcripts/tmp` 等运行产物。
 5. 验证通过后归档变更并提交。
+6. 如果本轮改变了工程方法，更新 `docs/learning/claude-code/operations/` 中对应文档。
