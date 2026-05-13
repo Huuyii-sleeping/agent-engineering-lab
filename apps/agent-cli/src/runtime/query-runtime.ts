@@ -1,8 +1,9 @@
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import type { AgentAppRuntimeDeps } from "../bootstrap/app-runtime.js";
 import { withCompactRuntimeContext } from "../tools/context-compact.js";
-import { appendSystemMessages, findLastAssistantText } from "./query-messages.js";
+import { findLastAssistantText } from "./query-messages.js";
 import type { AgentRuntimeState } from "./query-types.js";
+import { applyUserPromptSubmit } from "./query-user-prompt.js";
 
 export type QueryRuntimeResult =
   | {
@@ -25,23 +26,19 @@ type RunUserQueryOptions = {
 };
 
 export async function runUserQuery(opts: RunUserQueryOptions): Promise<QueryRuntimeResult> {
-  const prompt = opts.prompt.trim();
-  const promptHooks = await opts.app.hookService.run("UserPromptSubmit", {
-    session_id: opts.runtimeState.sessionId,
-    payload: { prompt },
+  const promptSubmit = await applyUserPromptSubmit({
+    history: opts.history,
+    runtimeState: opts.runtimeState,
+    prompt: opts.prompt,
+    hookService: opts.app.hookService,
   });
-  if (promptHooks.blocked) {
+  if (!promptSubmit.ok) {
     return {
       ok: false,
-      error: {
-        code: "HOOK_BLOCKED",
-        message: promptHooks.blockReason ?? "prompt blocked by hook",
-      },
+      error: promptSubmit.error,
     };
   }
 
-  appendSystemMessages(opts.history, promptHooks.messages);
-  opts.history.push({ role: "user", content: prompt });
   await withCompactRuntimeContext({ messages: opts.history }, async () =>
     opts.app.queryEngine.run({
       messages: opts.history,

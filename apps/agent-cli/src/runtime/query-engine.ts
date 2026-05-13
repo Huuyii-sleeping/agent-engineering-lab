@@ -5,6 +5,7 @@ import {
   finalizeToolDrivenRound,
   runQueryStopStage,
 } from "./query-finalization.js";
+import { beginQueryEngineRound, recordQueryLoopStart } from "./query-engine-round.js";
 import { requestQueryModel } from "./query-model.js";
 import { prepareQueryRound } from "./query-preparation.js";
 import { runQueryToolStage } from "./query-tools.js";
@@ -34,40 +35,27 @@ export class QueryEngine {
   }
 
   async run(opts: QueryEngineRunInput): Promise<void> {
-    const summarizeText = (value: string, max = 160): string => {
-      const trimmed = value.trim();
-      if (trimmed.length <= max) {
-        return trimmed;
-      }
-      return `${trimmed.slice(0, max)}...`;
-    };
-
     while (true) {
-      opts.runtimeState.roundCounter += 1;
-      opts.runtimeState.touchedPaths.clear();
-      opts.runtimeState.wroteWorkspaceFiles = false;
-      const traceId = this.runtimeServices.observabilityService.createTraceId();
-      let stopReason = "tool_calls_processed";
-      let stopToolCallCount = 0;
-      const latestUser = [...opts.messages]
-        .reverse()
-        .find((item) => item.role === "user" && typeof item.content === "string") as
-        | { role: "user"; content: string }
-        | undefined;
+      const round = beginQueryEngineRound({
+        messages: opts.messages,
+        runtimeState: opts.runtimeState,
+        observabilityService: this.runtimeServices.observabilityService,
+      });
+      const traceId = round.traceId;
+      let stopReason = round.stopReason;
+      let stopToolCallCount = round.stopToolCallCount;
       try {
         const tools = opts.tools ?? (await this.runtimeServices.toolService.listTools());
-        await this.runtimeServices.observabilityService.recordEvent(
-          "loop_start",
-          {
-            round: opts.runtimeState.roundCounter,
-            latestUserInput: latestUser?.content ? summarizeText(latestUser.content) : "",
-          },
-          { traceId },
-        );
+        await recordQueryLoopStart({
+          observabilityService: this.runtimeServices.observabilityService,
+          traceId,
+          round: opts.runtimeState.roundCounter,
+          latestUserInput: round.latestUserInput,
+        });
         const preparedRound = await prepareQueryRound({
           runtimeState: opts.runtimeState,
           traceId,
-          latestUserInput: latestUser?.content ?? "",
+          latestUserInput: round.latestUserInput,
           hookService: this.runtimeServices.hookService,
           memoryService: this.runtimeServices.memoryService,
           notificationService: this.runtimeServices.notificationService,
@@ -90,7 +78,7 @@ export class QueryEngine {
           messages: opts.messages,
           runtimeState: opts.runtimeState,
           traceId,
-          latestUserInput: latestUser?.content ?? "",
+          latestUserInput: round.latestUserInput,
           memoryContext: preparedRound.memoryContext,
           dynamicSystemMessages: preparedRound.dynamicSystemMessages,
           modelPolicyService: this.runtimeServices.modelPolicyService,

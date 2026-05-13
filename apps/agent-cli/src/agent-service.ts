@@ -1,19 +1,14 @@
-import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import { createAgentRuntimeState, type AgentAppRuntimeDeps } from "./bootstrap/app-runtime.js";
+import type { AgentAppRuntimeDeps } from "./bootstrap/app-runtime.js";
+import {
+  createAgentSessionRecord,
+  nowMs,
+  sortSessionsByCreatedAt,
+  summarizeSession,
+  type AgentSessionRecord,
+} from "./agent-service-sessions.js";
 import { runUserQuery } from "./runtime/query-runtime.js";
-import type { AgentRuntimeState } from "./runtime/query-types.js";
 import type { NotificationServiceLike, RuntimeCoordinationServiceLike } from "./services/index.js";
-
-type AgentSessionRecord = {
-  id: string;
-  createdAt: number;
-  updatedAt: number;
-  busy: boolean;
-  history: ChatCompletionMessageParam[];
-  runtimeState: AgentRuntimeState;
-};
 
 export type AgentServiceDeps = AgentAppRuntimeDeps;
 
@@ -21,10 +16,6 @@ type ChatRequest = {
   session_id?: string;
   message?: string;
 };
-
-function nowMs(): number {
-  return Date.now();
-}
 
 function json(res: ServerResponse, statusCode: number, payload: unknown): void {
   res.statusCode = statusCode;
@@ -53,17 +44,6 @@ function parseBody<T>(req: IncomingMessage): Promise<T> {
       }
     });
   });
-}
-
-function summarizeSession(session: AgentSessionRecord): Record<string, unknown> {
-  return {
-    id: session.id,
-    createdAt: session.createdAt,
-    updatedAt: session.updatedAt,
-    busy: session.busy,
-    messageCount: session.history.length,
-    rounds: session.runtimeState.roundCounter,
-  };
 }
 
 export class AgentService {
@@ -99,22 +79,13 @@ export class AgentService {
   }
 
   createSession(): AgentSessionRecord {
-    const id = randomUUID();
-    const createdAt = nowMs();
-    const record: AgentSessionRecord = {
-      id,
-      createdAt,
-      updatedAt: createdAt,
-      busy: false,
-      history: [],
-      runtimeState: createAgentRuntimeState(id),
-    };
-    this.sessions.set(id, record);
+    const record = createAgentSessionRecord();
+    this.sessions.set(record.id, record);
     return record;
   }
 
   listSessions(): AgentSessionRecord[] {
-    return [...this.sessions.values()].sort((a, b) => a.createdAt - b.createdAt);
+    return sortSessionsByCreatedAt(this.sessions.values());
   }
 
   getSession(sessionId: string): AgentSessionRecord | null {

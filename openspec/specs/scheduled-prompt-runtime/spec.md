@@ -53,3 +53,14 @@ Scheduler 内部边界重构 MUST 保持既有 5-field / 6-field cron 语义、d
 - **WHEN** 同一秒内重复 tick，或 one-shot schedule 首次命中后再次遇到相同命中时刻
 - **THEN** scheduler manager 仍会避免重复发射通知，并保持 non-recurring schedule 在首次命中后禁用
 
+### Requirement: Runtime notification boundary corrections MUST preserve scheduled prompt injection semantics
+Runtime notification 边界校正 MUST 保持 scheduled prompt drain、system message 注入文案、console summary 和 notification observability 语义不变。
+
+#### Scenario: scheduled prompt 注入
+- **WHEN** 存在待消费的 scheduled prompt notifications
+- **THEN** 系统继续生成 `<scheduled_prompt>` block 与 scheduled prompt instruction，并追加到动态 system messages
+
+#### Scenario: scheduled prompt 观测
+- **WHEN** scheduled prompt notification 被收集
+- **THEN** 系统继续记录 source 为 `schedule` 的 notification event，payload 保持 scheduleId、firedAt、recurring 和 prompt
+
