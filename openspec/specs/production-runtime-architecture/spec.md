@@ -306,3 +306,65 @@ Runtime 剩余收口 MUST 区分 QueryEngine round state、notification formatte
 - **WHEN** 系统调整 session summary、record 创建或排序规则
 - **THEN** 维护者主要修改 service session helper 边界，而不是修改 query runtime 或 HTTP 路由主体
 
+### Requirement: CLI MUST provide a local multi-line composer mode
+CLI MUST 提供本地多行 composer 模式，让用户可以先草拟、预览，再把完整草稿一次性提交给模型。
+
+#### Scenario: User enters composer mode
+- **WHEN** 用户输入 `/compose`
+- **THEN** 系统进入草稿模式
+- **AND** 后续普通文本输入只追加到 draft
+
+#### Scenario: User previews the current draft
+- **WHEN** 用户输入 `/preview`
+- **THEN** 系统展示当前 draft 内容、行数和摘要
+- **AND** 不调用模型
+
+#### Scenario: User sends the current draft
+- **WHEN** 用户输入 `/send`
+- **THEN** 系统把当前 draft 作为一次完整 prompt 发给模型
+- **AND** draft 在发送后被清空
+
+#### Scenario: User cancels the current draft
+- **WHEN** 用户输入 `/cancel`
+- **THEN** 系统丢弃当前 draft
+- **AND** 退出草稿模式
+
+### Requirement: Composer mode MUST be reflected in terminal interaction surfaces
+Composer 模式 MUST 在 CLI / TUI 的 prompt、footer 或控制面中明确展示，避免用户误以为当前输入会直接发送。
+
+#### Scenario: Prompt reflects composer state
+- **WHEN** 用户已经进入 composer 模式
+- **THEN** prompt 或 footer 显示 draft line count 或 composer active 状态
+
+### Requirement: Composer mode MUST not trigger non-explicit local shortcuts
+在 composer 模式中，普通文本输入 MUST 不触发审批快捷词等隐式本地动作，除非用户明确使用 slash command。
+
+#### Scenario: Approval shortcut text inside draft
+- **WHEN** 用户处于 composer 模式并输入 `approve`、`批准`、`yes`
+- **THEN** 文本被追加到 draft
+- **AND** 不执行审批动作
+
+### Requirement: Composer draft editing MUST preserve intentional blank lines and support local rollback
+在 composer 模式中，CLI / TUI MUST 保留用户有意输入的空行，并提供本地草稿回退能力，避免长草稿只能追加不能修正。
+
+#### Scenario: Blank line is preserved while drafting
+- **WHEN** 用户已进入 composer 模式并提交一个空行
+- **THEN** 系统把该空行追加到 draft
+- **AND** 后续 `/preview` 或 `/send` 能看到该空行仍然存在
+
+#### Scenario: User removes the latest draft lines
+- **WHEN** 用户输入 `/pop` 或 `/pop 3`
+- **THEN** 系统移除最近 1 行或 3 行 draft
+- **AND** 返回最新 draft 的行数和字符数摘要
+
+### Requirement: Composer surfaces MUST provide structured draft visibility
+Composer 相关交互面 MUST 提供结构化 draft 可视能力，而不只是一个抽象“已进入草稿模式”的状态提示。
+
+#### Scenario: Preview shows draft structure
+- **WHEN** 用户输入 `/preview`
+- **THEN** 输出展示 line count、char count 和有结构的 draft 内容
+
+#### Scenario: TUI exposes a dedicated draft panel
+- **WHEN** 用户在 TUI 中处于 composer 模式
+- **THEN** 仪表盘展示独立 draft panel
+- **AND** 该 panel 至少显示草稿摘要与最近若干行内容

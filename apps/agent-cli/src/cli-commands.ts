@@ -1,6 +1,7 @@
 import {
   renderCliApprovals,
   renderCliCompactSummary,
+  renderCliComposer,
   renderCliConfig,
   renderCliDoctor,
   renderCliError,
@@ -30,6 +31,7 @@ export type CliCommandResult =
       exit?: boolean;
       showBanner?: boolean;
       nextSessionId?: string | null;
+      submitPrompt?: string;
     };
 
 export type CliCommandContext = {
@@ -47,6 +49,15 @@ export type CliCommandContext = {
   rejectRequest(requestId: string): Promise<string>;
   getUsage(): Promise<CliUsageSnapshot>;
   compactSession(keepRecent?: number): Promise<CliCompactSummary>;
+  isComposing(): boolean;
+  getComposeLineCount(): number;
+  getComposeCharCount(): number;
+  startCompose(): { lineCount: number; charCount: number };
+  appendComposeLine(line: string): { lineCount: number; charCount: number };
+  previewCompose(): { lineCount: number; charCount: number; content: string } | null;
+  popCompose(count: number): { removedLineCount: number; lineCount: number; charCount: number; content: string } | null;
+  sendCompose(): { lineCount: number; charCount: number; content: string } | null;
+  cancelCompose(): { lineCount: number; charCount: number; content: string } | null;
   getModel(): string;
   setModel(model: string): Promise<boolean>;
   addWorkspaceRoot(root: string): Promise<{ ok: true; root: string } | { ok: false; error: string }>;
@@ -176,6 +187,9 @@ async function maybeHandleApprovalShortcut(
   input: string,
   context: CliCommandContext,
 ): Promise<CliCommandResult | null> {
+  if (context.isComposing()) {
+    return null;
+  }
   const normalized = input.trim().toLowerCase();
   const isApprove =
     normalized === "批准" || normalized === "同意" || normalized === "approve" || normalized === "yes";
@@ -205,6 +219,13 @@ export async function dispatchCliCommand(
   if (approvalShortcut) {
     return approvalShortcut;
   }
+  if (context.isComposing() && !input.trim().startsWith("/")) {
+    const appended = context.appendComposeLine(input);
+    return {
+      handled: true,
+      output: `draft updated: ${appended.lineCount} line(s) / ${appended.charCount} chars`,
+    };
+  }
   const parsed = parseArgs(input);
   if (!parsed) {
     return { handled: false };
@@ -212,6 +233,84 @@ export async function dispatchCliCommand(
 
   if (parsed.command === "help") {
     return { handled: true, output: renderCliHelp() };
+  }
+  if (parsed.command === "compose") {
+    const draft = context.startCompose();
+    return {
+      handled: true,
+      output:
+        draft.lineCount > 0
+          ? `composer resumed: ${draft.lineCount} line(s) / ${draft.charCount} chars`
+          : "composer started: enter lines, then /send, /preview, or /cancel",
+    };
+  }
+  if (parsed.command === "preview") {
+    const draft = context.previewCompose();
+    if (!draft) {
+      return {
+        handled: true,
+        output: renderCliError("no draft", "start with /compose before previewing"),
+      };
+    }
+    return {
+      handled: true,
+      output: renderCliComposer(draft),
+    };
+  }
+  if (parsed.command === "pop") {
+    const count = parsed.args[0] ? Number(parsed.args[0]) : 1;
+    if (parsed.args[0] && (!Number.isInteger(count) || count <= 0)) {
+      return {
+        handled: true,
+        output: renderCliError("invalid pop count", `unsupported value: ${parsed.args[0]}`, "use /pop or /pop 3"),
+      };
+    }
+    const draft = context.popCompose(count);
+    if (!draft) {
+      return {
+        handled: true,
+        output: renderCliError("no draft", "start with /compose before removing draft lines"),
+      };
+    }
+    if (draft.removedLineCount === 0) {
+      return {
+        handled: true,
+        output: `draft unchanged: 0 line(s) removed, ${draft.lineCount} line(s) / ${draft.charCount} chars remain`,
+      };
+    }
+    return {
+      handled: true,
+      output:
+        `draft rewound: removed ${draft.removedLineCount} line(s), ` +
+        `${draft.lineCount} line(s) / ${draft.charCount} chars remain`,
+    };
+  }
+  if (parsed.command === "send") {
+    const draft = context.sendCompose();
+    if (!draft || !draft.content.trim()) {
+      return {
+        handled: true,
+        output: renderCliError("no draft", "start with /compose and add at least one line before /send"),
+      };
+    }
+    return {
+      handled: true,
+      output: `submitting draft: ${draft.lineCount} line(s) / ${draft.charCount} chars`,
+      submitPrompt: draft.content,
+    };
+  }
+  if (parsed.command === "cancel") {
+    const draft = context.cancelCompose();
+    if (!draft) {
+      return {
+        handled: true,
+        output: renderCliError("no draft", "there is no active draft to cancel"),
+      };
+    }
+    return {
+      handled: true,
+      output: `draft discarded: ${draft.lineCount} line(s) / ${draft.charCount} chars`,
+    };
   }
   if (parsed.command === "status") {
     return { handled: true, output: renderCliStatus(await context.getStatus()) };

@@ -1,4 +1,5 @@
 import * as process from "node:process";
+import type { CliComposePreview } from "./cli-composer.js";
 import type { CliPermissionMode } from "./cli-permissions.js";
 
 export type CliThemeName = "atlas" | "plain";
@@ -112,6 +113,12 @@ export type CliApprovalListItem = {
   risk: string;
   status: string;
   reason: string;
+};
+
+export type CliComposerSnapshot = {
+  active: boolean;
+  lineCount: number;
+  charCount: number;
 };
 
 export type CliCloseoutInput = {
@@ -250,8 +257,11 @@ export function resetCliUiForTest(): void {
   COLOR_ENABLED = true;
 }
 
-export function renderCliPrompt(sessionId: string | null): string {
+export function renderCliPrompt(sessionId: string | null, composer?: CliComposerSnapshot): string {
   const suffix = sessionId ? sessionId.slice(0, 6) : "shell";
+  if (composer?.active) {
+    return `${warning(`draft:${suffix}`)} ${muted(`${composer.lineCount}l/${composer.charCount}c`)} ${muted("..")} `;
+  }
   return `${accent(`agent:${suffix}`)} ${muted(">>")} `;
 }
 
@@ -320,6 +330,11 @@ export function renderCliConfig(snapshot: CliConfigSnapshot): string {
 export function renderCliHelp(): string {
   const commands = [
     "/help       show commands and examples",
+    "/compose    start or resume multi-line draft mode",
+    "/preview    inspect the current draft",
+    "/pop [n]    remove the latest 1 or N draft line(s)",
+    "/send       submit the current draft",
+    "/cancel     discard the current draft",
     "/status     show runtime status",
     "/config     show config paths and current theme",
     "/model      show or set model: /model gpt-5-mini",
@@ -438,6 +453,36 @@ export function renderCliUsage(snapshot: CliUsageSnapshot): string {
       { label: "daily $", value: formatUsd(snapshot.dailyEstimatedCostUsd) },
       { label: "day", value: snapshot.dayKey },
     ]),
+  ].join("\n");
+}
+
+export function renderCliComposerLines(preview: CliComposePreview, limit?: number): string[] {
+  const lines = preview.content.split("\n");
+  if (preview.lineCount === 0) {
+    return ["(empty draft)"];
+  }
+  const total = lines.length;
+  const startIndex = limit && limit > 0 && total > limit ? total - limit : 0;
+  const lineNumberWidth = Math.max(2, String(total).length);
+  const rendered: string[] = [];
+  if (startIndex > 0) {
+    rendered.push(`... ${startIndex} earlier line(s)`);
+  }
+  for (let index = startIndex; index < total; index += 1) {
+    rendered.push(`${String(index + 1).padStart(lineNumberWidth, "0")}| ${lines[index] ?? ""}`.trimEnd());
+  }
+  return rendered;
+}
+
+export function renderCliComposer(preview: CliComposePreview): string {
+  return [
+    strong("Composer"),
+    renderRows([
+      { label: "lines", value: String(preview.lineCount) },
+      { label: "chars", value: String(preview.charCount) },
+    ]),
+    "",
+    ...renderCliComposerLines(preview),
   ].join("\n");
 }
 

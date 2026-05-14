@@ -7,6 +7,7 @@ import type { ChatCompletionMessageParam } from "openai/resources/chat/completio
 import { createAgentSessionRecord, type AgentSessionRecord } from "./agent-service-sessions.js";
 import { createAgentAppRuntime, type AgentAppRuntimeDeps } from "./bootstrap/app-runtime.js";
 import { dispatchCliCommand } from "./cli-commands.js";
+import { CliComposerStore } from "./cli-composer.js";
 import {
   collectCliConfigSnapshot,
   collectCliPermissionSnapshot,
@@ -208,6 +209,7 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
   let { app, startupIssue } = createShellAppRuntime(overrides);
   const rl = createInterface({ input, output });
   const sessions = new Map<string, CliSessionRecord>();
+  const composer = new CliComposerStore();
   const initialSession = createCliSession();
   sessions.set(initialSession.id, initialSession);
   let activeSessionId = initialSession.id;
@@ -237,6 +239,11 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
     }
     return session;
   };
+  const getComposerSnapshot = (sessionId: string | null) => ({
+    active: composer.isActive(sessionId),
+    lineCount: composer.lineCount(sessionId),
+    charCount: composer.preview(sessionId)?.charCount ?? 0,
+  });
   const renderBanner = () =>
     renderCliBanner({
       title: "Agent CLI",
@@ -244,12 +251,12 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
       mode: "interactive",
       model: app.model,
       sessionId: activeSessionId,
-      commands: ["/help", "/status", "/permissions", "/cost", "/model", "/doctor"],
+      commands: ["/help", "/compose", "/pop", "/send", "/status", "/permissions"],
     });
   const printAsyncEvent = (label: string, content: string) => {
     renderAsyncCliEvent({
       output,
-      prompt: renderCliPrompt(activeSessionId),
+      prompt: renderCliPrompt(activeSessionId, getComposerSnapshot(activeSessionId)),
       label,
       content,
       waitingForInput,
@@ -290,7 +297,7 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
       let query = "";
       try {
         waitingForInput = true;
-        query = await rl.question(renderCliPrompt(activeSessionId));
+        query = await rl.question(renderCliPrompt(activeSessionId, getComposerSnapshot(activeSessionId)));
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ERR_USE_AFTER_CLOSE") {
           break;
@@ -301,10 +308,10 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
       }
 
       const normalized = query.trim().toLowerCase();
-      if (!query.trim()) {
+      if (!query.trim() && !composer.isActive(activeSessionId)) {
         continue;
       }
-      if (normalized === "q" || normalized === "exit") {
+      if (!composer.isActive(activeSessionId) && (normalized === "q" || normalized === "exit")) {
         output.write(
           `${renderCliCloseout({
             sessionId: activeSessionId,
@@ -407,6 +414,15 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
         getUsage: () => collectCliUsageSnapshot(app.model),
         compactSession: async (keepRecent) =>
           compactMessages({ messages: getActiveSession().history }, "manual", keepRecent),
+        isComposing: () => composer.isActive(activeSessionId),
+        getComposeLineCount: () => composer.lineCount(activeSessionId),
+        getComposeCharCount: () => composer.preview(activeSessionId)?.charCount ?? 0,
+        startCompose: () => composer.start(activeSessionId),
+        appendComposeLine: (line) => composer.append(activeSessionId, line),
+        previewCompose: () => composer.preview(activeSessionId),
+        popCompose: (count) => composer.pop(activeSessionId, count),
+        sendCompose: () => composer.consume(activeSessionId),
+        cancelCompose: () => composer.cancel(activeSessionId),
         getModel: () => app.model,
         setModel: async (model) => rebuildApp(model),
         addWorkspaceRoot,
@@ -439,7 +455,10 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
           );
           break;
         }
-        continue;
+        if (!command.submitPrompt) {
+          continue;
+        }
+        query = command.submitPrompt;
       }
 
       if (query.trim().startsWith("!")) {

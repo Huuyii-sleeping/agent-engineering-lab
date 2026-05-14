@@ -6,6 +6,7 @@ import type { ChatCompletionMessageParam } from "openai/resources/chat/completio
 import { AgentService } from "../agent-service.js";
 import { createAgentAppRuntime, type AgentAppRuntimeDeps } from "../bootstrap/app-runtime.js";
 import { dispatchCliCommand } from "../cli-commands.js";
+import { CliComposerStore } from "../cli-composer.js";
 import {
   collectCliConfigSnapshot,
   collectCliPermissionSnapshot,
@@ -16,6 +17,7 @@ import {
 import { setCliPermissionMode } from "../cli-permissions.js";
 import {
   renderCliFooter,
+  renderCliComposerLines,
   getCliUiTheme,
   mergeCliColumns,
   renderCliBadge,
@@ -64,6 +66,10 @@ function getToolRunner(service: TerminalTuiServiceLike):
 export type TerminalTuiState = {
   model: string;
   activeSessionId: string | null;
+  composerActive?: boolean;
+  composerLineCount?: number;
+  composerCharCount?: number;
+  draftLines?: string[];
   sessionCount: number;
   toolCount: number;
   bridgeEndpoint: string;
@@ -119,7 +125,7 @@ export function renderTerminalTuiDashboard(state: TerminalTuiState): string {
     mode: "tui",
     model: state.model,
     sessionId: state.activeSessionId,
-    commands: ["/help", "/status", "/permissions", "/cost", "/model", "/doctor"],
+    commands: ["/help", "/compose", "/pop", "/send", "/status", "/permissions"],
   });
   const leftColumn = [
     ...renderCliPanel({
@@ -140,6 +146,11 @@ export function renderTerminalTuiDashboard(state: TerminalTuiState): string {
       minBodyLines: 9,
       lines: [
         "/help     command guide",
+        "/compose  multi-line draft mode",
+        "/preview  inspect current draft",
+        "/pop [n]  remove recent draft lines",
+        "/send     submit current draft",
+        "/cancel   discard current draft",
         "/clear    fresh session",
         "/redraw   repaint screen",
         "/use <id> switch session",
@@ -165,6 +176,26 @@ export function renderTerminalTuiDashboard(state: TerminalTuiState): string {
       lines: state.transcriptLines ?? ["No transcript yet."],
     }),
   ];
+  const draftPanel =
+    state.composerActive
+      ? [
+          "",
+          ...renderCliPanel({
+            title: "Draft",
+            width: rightWidth,
+            tone: "accent",
+            minBodyLines: 8,
+            lines:
+              state.draftLines && state.draftLines.length > 0
+                ? state.draftLines
+                : [
+                    `draft ${state.composerLineCount ?? 0} lines / ${state.composerCharCount ?? 0} chars`,
+                    "Use plain input to append.",
+                    "/preview /send /pop /cancel",
+                  ],
+          }),
+        ]
+      : [];
   const rightColumn = [
     ...renderCliPanel({
       title: "Runtime",
@@ -177,13 +208,14 @@ export function renderTerminalTuiDashboard(state: TerminalTuiState): string {
         `bridge ${state.bridgeEndpoint}`,
       ],
     }),
+    ...draftPanel,
     "",
     ...renderCliPanel({
       title: "Activity",
       width: rightWidth,
       tone: "warning",
-      minBodyLines: 17,
-      lines: state.activityLines ?? ["Ready.", "Use natural language or slash commands."],
+      minBodyLines: state.composerActive ? 10 : 17,
+      lines: state.activityLines ?? ["Ready.", "Use natural language, or start /compose for drafts."],
     }),
   ];
   const board = mergeCliColumns([leftColumn, centerColumn, rightColumn], gap).join("\n");
@@ -236,6 +268,7 @@ export async function handleTerminalTuiCommand(input: {
   model: string;
   startupIssue?: Error | null;
   setModel(model: string): Promise<boolean>;
+  composer: CliComposerStore;
 }): Promise<{ activeSessionId: string | null; output: string; exit: boolean; clearScreen?: boolean; showBanner?: boolean }> {
   const toolRunner = getToolRunner(input.service);
   const command = await dispatchCliCommand(input.line, {
@@ -292,6 +325,15 @@ export async function handleTerminalTuiCommand(input: {
         .find((item) => item.id === input.activeSessionId) ?? input.service.listSessions().at(-1);
       return compactMessages({ messages: (session?.history ?? []) as ChatCompletionMessageParam[] }, "manual", keepRecent);
     },
+    isComposing: () => input.composer.isActive(input.activeSessionId),
+    getComposeLineCount: () => input.composer.lineCount(input.activeSessionId),
+    getComposeCharCount: () => input.composer.preview(input.activeSessionId)?.charCount ?? 0,
+    startCompose: () => input.composer.start(input.activeSessionId),
+    appendComposeLine: (line) => input.composer.append(input.activeSessionId, line),
+    previewCompose: () => input.composer.preview(input.activeSessionId),
+    popCompose: (count) => input.composer.pop(input.activeSessionId, count),
+    sendCompose: () => input.composer.consume(input.activeSessionId),
+    cancelCompose: () => input.composer.cancel(input.activeSessionId),
     getModel: () => input.model,
     setModel: input.setModel,
     addWorkspaceRoot,
@@ -303,10 +345,58 @@ export async function handleTerminalTuiCommand(input: {
     },
   });
   if (command.handled) {
+    if (!command.submitPrompt) {
+      return {
+        activeSessionId: command.nextSessionId ?? input.activeSessionId,
+        output: command.output,
+        exit: Boolean(command.exit),
+        clearScreen: command.clearScreen,
+        showBanner: command.showBanner,
+      };
+    }
+    const nextSessionId = command.nextSessionId ?? input.activeSessionId;
+    const prompt = command.submitPrompt;
+    const prefixOutput = command.output ? [command.output] : [];
+    if (input.startupIssue) {
+      return {
+        activeSessionId: nextSessionId,
+        output: [
+          ...prefixOutput,
+          renderCliError("model not ready", input.startupIssue.message, "set /model <id> before sending prompts"),
+        ].join("\n"),
+        exit: false,
+        clearScreen: command.clearScreen,
+        showBanner: command.showBanner,
+      };
+    }
+    const sessionResult = await captureConsoleOutput(() =>
+      input.service.chat({
+        session_id: nextSessionId ?? undefined,
+        message: prompt,
+      }),
+    );
+    const session = sessionResult.result.session as { id?: unknown } | undefined;
+    const resolvedSessionId = typeof session?.id === "string" ? session.id : nextSessionId;
+    if (sessionResult.result.ok === false) {
+      const error = sessionResult.result.error as { message?: unknown } | undefined;
+      return {
+        activeSessionId: resolvedSessionId,
+        output: [
+          ...prefixOutput,
+          renderCliError("chat failed", String(error?.message ?? "chat failed")),
+          ...sessionResult.logs,
+        ].join("\n"),
+        exit: false,
+        clearScreen: command.clearScreen,
+        showBanner: command.showBanner,
+      };
+    }
     return {
-      activeSessionId: command.nextSessionId ?? input.activeSessionId,
-      output: command.output,
-      exit: Boolean(command.exit),
+      activeSessionId: resolvedSessionId,
+      output: [...prefixOutput, ...sessionResult.logs, renderCliSection("Assistant", String(sessionResult.result.assistant ?? ""))]
+        .filter(Boolean)
+        .join("\n"),
+      exit: false,
       clearScreen: command.clearScreen,
       showBanner: command.showBanner,
     };
@@ -395,6 +485,7 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
   }
   const input = opts.input ?? stdin;
   const output = opts.output ?? stdout;
+  const composer = new CliComposerStore();
   let activeSessionId: string | null = null;
   let currentModel = process.env.MODEL_ID?.trim() || "unset-model";
   let lastOutput =
@@ -426,6 +517,7 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
   const redraw = async () => {
     const sessions = service.listSessions();
     const tools = await service.toolsMetadata();
+    const draftPreview = composer.preview(activeSessionId);
     const status = await collectCliStatusSnapshot({
       mode: "tui",
       activeSessionId,
@@ -447,6 +539,18 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
       `${renderClearScreen()}${renderTerminalTuiDashboard({
         model: currentModel,
         activeSessionId,
+        composerActive: composer.isActive(activeSessionId),
+        composerLineCount: composer.lineCount(activeSessionId),
+        composerCharCount: draftPreview?.charCount ?? 0,
+        draftLines:
+          composer.isActive(activeSessionId) && draftPreview
+            ? [
+                `summary  ${draftPreview.lineCount} lines / ${draftPreview.charCount} chars`,
+                "actions  /preview /send /pop /cancel",
+                "",
+                ...renderCliComposerLines(draftPreview, 6),
+              ]
+            : undefined,
         sessionCount: sessions.length,
         toolCount: tools.length,
         bridgeEndpoint: status.bridgeEndpoint,
@@ -462,6 +566,11 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
           `workspace  ${status.workspace}`,
           `model      ${status.model}`,
           `session    ${status.activeSessionId ?? "(none)"}`,
+          `draft      ${
+            composer.isActive(activeSessionId)
+              ? `${composer.lineCount(activeSessionId)} lines / ${draftPreview?.charCount ?? 0} chars`
+              : "off"
+          }`,
           `perm       ${status.permissionMode} / ${status.pendingApprovals} pending`,
           `roots      ${status.workspaceRoots.length}`,
           `tools      ${status.toolCount}`,
@@ -475,6 +584,10 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
         footerSegments: [
           `model ${status.model}`,
           `permissions ${status.permissionMode}`,
+          composer.isActive(activeSessionId)
+            ? `draft ${composer.lineCount(activeSessionId)}l/${draftPreview?.charCount ?? 0}c`
+            : "draft off",
+          composer.isActive(activeSessionId) ? "preview/send/pop/cancel" : "compose to draft",
           `approvals ${status.pendingApprovals}`,
           `roots ${status.workspaceRoots.length}`,
           `session ${status.sessionPromptTokens + status.sessionCompletionTokens}/${status.sessionTokenBudget} tok`,
@@ -489,7 +602,13 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
   const rl = createInterface({ input, output });
   try {
     while (true) {
-      const line = await rl.question(renderCliPrompt(activeSessionId));
+      const line = await rl.question(
+        renderCliPrompt(activeSessionId, {
+          active: composer.isActive(activeSessionId),
+          lineCount: composer.lineCount(activeSessionId),
+          charCount: composer.preview(activeSessionId)?.charCount ?? 0,
+        }),
+      );
       const result = await handleTerminalTuiCommand({
         line,
         service,
@@ -497,6 +616,7 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
         model: currentModel,
         startupIssue,
         setModel,
+        composer,
       });
       activeSessionId = result.activeSessionId;
       if (result.output) {

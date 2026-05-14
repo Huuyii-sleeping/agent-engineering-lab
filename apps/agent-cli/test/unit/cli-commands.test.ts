@@ -6,6 +6,7 @@ import { resetCliPermissionModeForTest } from "../../src/cli-permissions.js";
 function createContext(): CliCommandContext {
   let theme: "atlas" | "plain" = "atlas";
   let model = "gpt-test";
+  let composeLines: string[] | null = null;
   return {
     activeSessionId: "s01",
     createSession: vi.fn(() => ({ id: "s02" })),
@@ -117,6 +118,53 @@ function createContext(): CliCommandContext {
       transcriptBeforePath: ".transcripts/before.jsonl",
       transcriptAfterPath: ".transcripts/after.jsonl",
     })),
+    isComposing: () => Array.isArray(composeLines),
+    getComposeLineCount: () => composeLines?.length ?? 0,
+    getComposeCharCount: () => composeLines?.join("\n").length ?? 0,
+    startCompose: vi.fn(() => {
+      composeLines = composeLines ?? [];
+      return { lineCount: composeLines.length, charCount: composeLines.join("\n").length };
+    }),
+    appendComposeLine: vi.fn((line: string) => {
+      composeLines = [...(composeLines ?? []), line];
+      return { lineCount: composeLines.length, charCount: composeLines.join("\n").length };
+    }),
+    previewCompose: vi.fn(() =>
+      composeLines
+        ? { lineCount: composeLines.length, charCount: composeLines.join("\n").length, content: composeLines.join("\n") }
+        : null,
+    ),
+    popCompose: vi.fn((count: number) => {
+      if (!composeLines) {
+        return null;
+      }
+      const removeCount = Math.max(0, Math.min(count, composeLines.length));
+      composeLines = composeLines.slice(0, composeLines.length - removeCount);
+      return {
+        removedLineCount: removeCount,
+        lineCount: composeLines.length,
+        charCount: composeLines.join("\n").length,
+        content: composeLines.join("\n"),
+      };
+    }),
+    sendCompose: vi.fn(() => {
+      if (!composeLines) {
+        return null;
+      }
+      const content = composeLines.join("\n");
+      const result = { lineCount: composeLines.length, charCount: content.length, content };
+      composeLines = null;
+      return result;
+    }),
+    cancelCompose: vi.fn(() => {
+      if (!composeLines) {
+        return null;
+      }
+      const content = composeLines.join("\n");
+      const result = { lineCount: composeLines.length, charCount: content.length, content };
+      composeLines = null;
+      return result;
+    }),
     getModel: () => model,
     setModel: vi.fn(async (nextModel: string) => {
       model = nextModel;
@@ -184,6 +232,33 @@ describe("cli-commands", () => {
     expect((await dispatchCliCommand("/compact 5", context)).output).toContain("Compact");
     expect((await dispatchCliCommand("/add-dir /tmp/demo", context)).output).toContain("added workspace root /tmp/demo");
     expect((await dispatchCliCommand("批准", context)).output).toContain("approved apr_1");
+  });
+
+  it("supports composer lifecycle and suppresses approval shortcuts while drafting", async () => {
+    const context = createContext();
+
+    expect((await dispatchCliCommand("/compose", context)).output).toContain("composer started");
+    expect((await dispatchCliCommand("approve", context)).output).toContain("draft updated");
+    expect((await dispatchCliCommand("", context)).output).toContain("draft updated");
+    const preview = await dispatchCliCommand("/preview", context);
+    expect(preview.output).toContain("Composer");
+    expect(preview.output).toContain("01| approve");
+    expect(preview.output).toContain("02|");
+    expect((await dispatchCliCommand("/pop", context)).output).toContain("removed 1 line(s)");
+    const send = await dispatchCliCommand("/send", context);
+    expect(send).toMatchObject({
+      handled: true,
+      submitPrompt: "approve",
+    });
+    expect((await dispatchCliCommand("/cancel", context)).output).toContain("no active draft");
+  });
+
+  it("validates /pop arguments and draft presence", async () => {
+    const context = createContext();
+
+    expect((await dispatchCliCommand("/pop", context)).output).toContain("start with /compose");
+    await dispatchCliCommand("/compose", context);
+    expect((await dispatchCliCommand("/pop nope", context)).output).toContain("invalid pop count");
   });
 
   it("rejects unknown commands with stable help", async () => {

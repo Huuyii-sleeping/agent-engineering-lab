@@ -4,10 +4,13 @@ import {
   renderCliBanner,
   renderCliCloseout,
   renderCliCompactSummary,
+  renderCliComposer,
+  renderCliComposerLines,
   renderCliDoctor,
   renderCliError,
   renderCliHelp,
   renderCliPermissions,
+  renderCliPrompt,
   renderCliStatus,
   renderCliUsage,
   resetCliUiForTest,
@@ -125,12 +128,30 @@ describe("cli-ui", () => {
         transcriptAfterPath: ".transcripts/after.jsonl",
       }),
     ).toContain("tokens       1000 -> 300 (-700)");
+    expect(
+      renderCliComposer({
+        lineCount: 2,
+        charCount: 12,
+        content: "hello\nworld",
+      }),
+    ).toContain("01| hello");
+    expect(
+      renderCliComposerLines({
+        lineCount: 3,
+        charCount: 4,
+        content: "a\n\nb",
+      }),
+    ).toEqual(["01| a", "02|", "03| b"]);
   });
 
   it("renders help and structured errors", () => {
     setCliUiColorEnabled(false);
+    expect(renderCliPrompt("sess_1", { active: true, lineCount: 2, charCount: 10 })).toContain("draft:sess_1");
     expect(renderCliHelp()).toContain("/permissions");
     expect(renderCliHelp()).toContain("/approve");
+    expect(renderCliHelp()).toContain("/compose");
+    expect(renderCliHelp()).toContain("/pop");
+    expect(renderCliHelp()).toContain("/send");
     expect(renderCliHelp()).toContain("!<cmd>");
     expect(renderCliError("startup", "MODEL_ID missing", "run /doctor")).toContain("next  run /doctor");
   });

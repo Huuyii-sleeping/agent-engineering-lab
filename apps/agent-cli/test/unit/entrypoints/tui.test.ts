@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { CliComposerStore } from "../../../src/cli-composer.js";
 import {
   handleTerminalTuiCommand,
   renderTerminalTuiDashboard,
@@ -58,6 +59,10 @@ describe("entrypoints/tui", () => {
     const dashboard = renderTerminalTuiDashboard({
       model: "gpt-test",
       activeSessionId: "s01",
+      composerActive: true,
+      composerLineCount: 2,
+      composerCharCount: 11,
+      draftLines: ["summary  2 lines / 11 chars", "actions  /preview /send /pop /cancel", "", "01| hello", "02| world"],
       sessionCount: 2,
       toolCount: 3,
       bridgeEndpoint: "/events",
@@ -66,6 +71,9 @@ describe("entrypoints/tui", () => {
     expect(dashboard).toContain("Agent CLI");
     expect(dashboard).toContain("mode");
     expect(dashboard).toContain("session");
+    expect(dashboard).toContain("Draft");
+    expect(dashboard).toContain("actions /preview /send");
+    expect(dashboard).toContain("/pop /cancel");
   });
 
   it("handles session and tool commands", async () => {
@@ -76,6 +84,7 @@ describe("entrypoints/tui", () => {
       activeSessionId: null,
       model: "gpt-test",
       setModel: vi.fn(async () => true),
+      composer: new CliComposerStore(),
     });
     const sessions = await handleTerminalTuiCommand({
       line: "/sessions",
@@ -83,6 +92,7 @@ describe("entrypoints/tui", () => {
       activeSessionId: created.activeSessionId,
       model: "gpt-test",
       setModel: vi.fn(async () => true),
+      composer: new CliComposerStore(),
     });
     const tools = await handleTerminalTuiCommand({
       line: "/tools",
@@ -90,6 +100,7 @@ describe("entrypoints/tui", () => {
       activeSessionId: created.activeSessionId,
       model: "gpt-test",
       setModel: vi.fn(async () => true),
+      composer: new CliComposerStore(),
     });
 
     expect(created).toMatchObject({ activeSessionId: "s02", output: "started fresh session s02" });
@@ -106,6 +117,7 @@ describe("entrypoints/tui", () => {
       activeSessionId: "s01",
       model: "gpt-test",
       setModel: vi.fn(async () => true),
+      composer: new CliComposerStore(),
     });
     const approve = await handleTerminalTuiCommand({
       line: "/approve apr_1",
@@ -113,6 +125,7 @@ describe("entrypoints/tui", () => {
       activeSessionId: "s01",
       model: "gpt-test",
       setModel: vi.fn(async () => true),
+      composer: new CliComposerStore(),
     });
 
     expect(approvals.output).toContain("Approvals");
@@ -127,6 +140,7 @@ describe("entrypoints/tui", () => {
       activeSessionId: "s01",
       model: "gpt-test",
       setModel: vi.fn(async () => true),
+      composer: new CliComposerStore(),
     });
 
     expect(service.chat).toHaveBeenCalledWith({ session_id: "s01", message: "hello" });
@@ -143,9 +157,94 @@ describe("entrypoints/tui", () => {
       activeSessionId: "s01",
       model: "gpt-test",
       setModel: vi.fn(async () => true),
+      composer: new CliComposerStore(),
     });
 
     expect(result.output).toContain("Shell");
     expect(result.output).toContain("ran:pwd");
+  });
+
+  it("supports composer flow in the TUI", async () => {
+    const service = createService();
+    const composer = new CliComposerStore();
+    const start = await handleTerminalTuiCommand({
+      line: "/compose",
+      service,
+      activeSessionId: "s01",
+      model: "gpt-test",
+      setModel: vi.fn(async () => true),
+      composer,
+    });
+    const append = await handleTerminalTuiCommand({
+      line: "first line",
+      service,
+      activeSessionId: "s01",
+      model: "gpt-test",
+      setModel: vi.fn(async () => true),
+      composer,
+    });
+    const send = await handleTerminalTuiCommand({
+      line: "/send",
+      service,
+      activeSessionId: "s01",
+      model: "gpt-test",
+      setModel: vi.fn(async () => true),
+      composer,
+    });
+
+    expect(start.output).toContain("composer started");
+    expect(append.output).toContain("draft updated");
+    expect(service.chat).toHaveBeenCalledWith({ session_id: "s01", message: "first line" });
+    expect(send.output).toContain("submitting draft");
+    expect(send.output).toContain("reply:first line");
+  });
+
+  it("preserves blank lines and supports /pop in the TUI composer", async () => {
+    const service = createService();
+    const composer = new CliComposerStore();
+    await handleTerminalTuiCommand({
+      line: "/compose",
+      service,
+      activeSessionId: "s01",
+      model: "gpt-test",
+      setModel: vi.fn(async () => true),
+      composer,
+    });
+    await handleTerminalTuiCommand({
+      line: "first line",
+      service,
+      activeSessionId: "s01",
+      model: "gpt-test",
+      setModel: vi.fn(async () => true),
+      composer,
+    });
+    await handleTerminalTuiCommand({
+      line: "",
+      service,
+      activeSessionId: "s01",
+      model: "gpt-test",
+      setModel: vi.fn(async () => true),
+      composer,
+    });
+    const preview = await handleTerminalTuiCommand({
+      line: "/preview",
+      service,
+      activeSessionId: "s01",
+      model: "gpt-test",
+      setModel: vi.fn(async () => true),
+      composer,
+    });
+    const pop = await handleTerminalTuiCommand({
+      line: "/pop",
+      service,
+      activeSessionId: "s01",
+      model: "gpt-test",
+      setModel: vi.fn(async () => true),
+      composer,
+    });
+
+    expect(preview.output).toContain("01| first line");
+    expect(preview.output).toContain("02|");
+    expect(pop.output).toContain("removed 1 line(s)");
   });
 });
