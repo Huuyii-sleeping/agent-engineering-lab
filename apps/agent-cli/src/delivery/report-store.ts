@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
-import type { DeliveryReport } from "./delivery-types.js";
+import type { DeliveryReport } from "./types.js";
 
 export function getDeliveryReportRoot(): string {
   return path.join(process.cwd(), ".delivery");

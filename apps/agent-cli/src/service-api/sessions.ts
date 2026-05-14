@@ -1,7 +1,7 @@
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { randomUUID } from "node:crypto";
-import { createAgentRuntimeState } from "./bootstrap/app-runtime.js";
-import type { AgentRuntimeState } from "./runtime/query-types.js";
+import { createAgentRuntimeState } from "../bootstrap/app-runtime.js";
+import type { AgentRuntimeState } from "../runtime/query-types.js";
 
 export type AgentSessionRecord = {
   id: string;

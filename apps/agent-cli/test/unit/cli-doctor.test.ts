@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { collectCliStatusSnapshot, runCliDoctor } from "../../src/cli-doctor.js";
-import { resetCliUiForTest } from "../../src/cli-ui.js";
+import { collectCliStatusSnapshot, runCliDoctor } from "../../src/cli/doctor.js";
+import { resetCliUiForTest } from "../../src/cli/ui.js";
 
 const originalModelId = process.env.MODEL_ID;
 

@@ -1,4 +1,4 @@
-import type { CliSessionSummary } from "./cli-ui.js";
+import type { CliSessionSummary } from "./ui.js";
 
 export type CliCompletionContext = {
   sessions: CliSessionSummary[];
@@ -17,6 +17,7 @@ const CLI_COMMANDS = [
   "cancel",
   "status",
   "config",
+  "architecture",
   "model",
   "permissions",
   "approvals",
@@ -54,7 +55,7 @@ const PERMISSION_MODES = ["default", "accept-edits", "plan"];
 const THEMES = ["atlas", "plain"];
 const WORKFLOWS = ["agent", "draw"];
 const KNOWN_MODELS = ["gpt-5", "gpt-5-mini", "gpt-4o", "gpt-4o-mini"];
-const PALETTE_QUERIES = ["review", "session", "history", "help", "runtime", "approval", "draft", "workflow", "draw"];
+const PALETTE_QUERIES = ["review", "session", "history", "help", "runtime", "approval", "draft", "workflow", "draw", "architecture"];
 
 function uniqueValues(values: string[]): string[] {
   return [...new Set(values.filter(Boolean))];

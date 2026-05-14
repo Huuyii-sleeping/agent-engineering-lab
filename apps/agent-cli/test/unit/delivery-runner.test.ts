@@ -3,8 +3,8 @@ import {
   classifyDeliveryFailure,
   isRetryableDeliveryFailure,
   resolveDeliveryCommand,
-} from "../../src/delivery-runner.js";
-import type { DeliveryFailure } from "../../src/delivery-types.js";
+} from "../../src/delivery/runner.js";
+import type { DeliveryFailure } from "../../src/delivery/types.js";
 
 describe("delivery runner", () => {
   it("preserves deterministic stage failure classification", () => {

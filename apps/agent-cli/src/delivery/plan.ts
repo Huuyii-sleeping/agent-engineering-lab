@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
-import type { DeliveryContext, DeliveryStagePlan } from "./delivery-types.js";
+import type { DeliveryContext, DeliveryStagePlan } from "./types.js";
 
 export function fileExistsInJsonScript(pkgJson: string, script: string): boolean {
   try {

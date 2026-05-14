@@ -1,7 +1,7 @@
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import type { HookServiceLike, ObservabilityServiceLike } from "../services/index.js";
 import type { ToolServiceLike } from "../tools/service.js";
-import { renderCliEvent } from "../cli-ui.js";
+import { renderCliEvent } from "../cli/ui.js";
 import {
   linkApprovalRequestToCandidate,
   trackPendingApprovalCandidate,

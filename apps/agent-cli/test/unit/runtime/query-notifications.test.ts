@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { NotificationServiceLike } from "../../../src/notification-service.js";
-import type { ObservabilityServiceLike } from "../../../src/observability-service.js";
+import type { NotificationServiceLike } from "../../../src/services/notification-service.js";
+import type { ObservabilityServiceLike } from "../../../src/services/observability-service.js";
 import { collectDynamicSystemMessages } from "../../../src/runtime/query-notifications.js";
 
 function createObservabilityService(): ObservabilityServiceLike {

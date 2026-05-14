@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import type { AgentAppRuntimeDeps } from "./bootstrap/app-runtime.js";
+import type { AgentAppRuntimeDeps } from "../bootstrap/app-runtime.js";
 import {
   createAgentSessionRecord,
   nowMs,
@@ -7,9 +7,9 @@ import {
   summarizeSession,
   summarizeSessionTranscript,
   type AgentSessionRecord,
-} from "./agent-service-sessions.js";
-import { runUserQuery } from "./runtime/query-runtime.js";
-import type { NotificationServiceLike, RuntimeCoordinationServiceLike } from "./services/index.js";
+} from "./sessions.js";
+import { runUserQuery } from "../runtime/query-runtime.js";
+import type { NotificationServiceLike, RuntimeCoordinationServiceLike } from "../services/index.js";
 
 export type AgentServiceDeps = AgentAppRuntimeDeps;
 

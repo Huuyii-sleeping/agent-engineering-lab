@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import * as process from "node:process";
 import { afterEach, describe, expect, it } from "vitest";
-import { loadLatestDeliveryReport, runDeliveryValidation } from "../../src/delivery.js";
+import { loadLatestDeliveryReport, runDeliveryValidation } from "../../src/delivery/index.js";
 
 const tempDirs: string[] = [];
 

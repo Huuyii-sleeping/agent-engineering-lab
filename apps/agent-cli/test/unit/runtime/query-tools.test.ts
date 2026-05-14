@@ -1,8 +1,8 @@
 import OpenAI from "openai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentRuntimeState } from "../../../src/agent-loop.js";
-import type { HookServiceLike } from "../../../src/hook-service.js";
-import type { ObservabilityServiceLike } from "../../../src/observability-service.js";
+import type { HookServiceLike } from "../../../src/services/hook-service.js";
+import type { ObservabilityServiceLike } from "../../../src/services/observability-service.js";
 import { runQueryToolStage } from "../../../src/runtime/query-tools.js";
 import type { ToolServiceLike } from "../../../src/tools/service.js";
 

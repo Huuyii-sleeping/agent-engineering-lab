@@ -3,12 +3,12 @@ import {
   getCliPaletteGroupLabel,
   type CliPaletteCandidate,
   type CliPaletteView,
-} from "./cli-palette.js";
-import type { CliComposePreview } from "./cli-composer.js";
-import type { CliPermissionMode } from "./cli-permissions.js";
-import type { PromptDump } from "./prompt/inspect.js";
-import type { CliTranscriptEntry, CliTranscriptView } from "./cli-transcript.js";
-import { getCliWorkflowLabel, type CliWorkflowMode } from "./cli-workflow.js";
+} from "./palette.js";
+import type { CliComposePreview } from "./composer.js";
+import type { CliPermissionMode } from "./permissions.js";
+import type { PromptDump } from "../prompt/inspect.js";
+import type { CliTranscriptEntry, CliTranscriptView } from "./transcript.js";
+import { getCliWorkflowLabel, type CliWorkflowMode } from "./workflow.js";
 
 export type CliThemeName = "atlas" | "plain";
 
@@ -204,6 +204,7 @@ const CLI_HELP_TOPICS = [
       "/config     show config paths and current theme",
       "/model      show or set model: /model gpt-5-mini",
       "/permissions show or set permission mode",
+      "/architecture inspect the local runtime architecture coverage",
       "/skills     list discovered local skills",
       "/skill <x>  inspect one local skill body",
       "/prompt     dump the current stable system prompt",
@@ -211,7 +212,7 @@ const CLI_HELP_TOPICS = [
       "/compact    compact current session history",
       "/redraw     clear screen and redraw banner",
     ],
-    examples: ["/status", "/skills", "/skill openspec-apply-change", "/prompt"],
+    examples: ["/status", "/architecture", "/skills", "/prompt"],
   },
   {
     id: "approvals",
@@ -479,7 +480,7 @@ export function renderCliGuideLines(input: {
       "brief     /compose starts a multi-line draw brief",
       "review    /preview inspects numbered brief lines",
       "browse    /history last /search bug /peek 12 /tail",
-      "runtime   /status /model /permissions /skills /prompt",
+      "runtime   /status /model /permissions /architecture /skills /prompt",
       input.pendingApprovals > 0 ? "approvals /approvals /approve <id> /reject <id>" : "workspace /doctor /add-dir /theme",
       "shell     !<cmd> runs a direct shell command",
     ];
@@ -490,7 +491,7 @@ export function renderCliGuideLines(input: {
     "palette   /palette review /palette open 2",
     input.sessionCount > 0 ? "session   /sessions /use 2 /next /prev" : "session   /clear creates the first local session",
     "browse    /history last /search bug /peek 12 /tail",
-    input.startupIssue ? "startup   /model <id> reactivates local chat" : "runtime   /status /model /permissions /skills /prompt",
+    input.startupIssue ? "startup   /model <id> reactivates local chat" : "runtime   /status /model /permissions /architecture /skills /prompt",
     input.pendingApprovals > 0
       ? "approvals /approvals /approve <id> /reject <id>"
       : "workspace /doctor /add-dir /theme",
@@ -572,6 +573,41 @@ export function renderCliConfig(snapshot: CliConfigSnapshot): string {
   ].join("\n");
 }
 
+export function renderCliArchitecture(): string {
+  return [
+    strong("Architecture"),
+    renderRows([
+      {
+        label: "reference",
+        value: "github.com/liuup/claude-code-analysis/blob/main/analysis/01-architecture-overview.md",
+      },
+      {
+        label: "verdict",
+        value: "核心六层大多已覆盖；remote/bridge/daemon 类远程平台形态未做成独立产品面。",
+      },
+    ]),
+    "",
+    strong("Covered"),
+    "- CLI 引导层: src/main.ts + src/entrypoints/cli-dispatcher.ts + headless/tui/mcp-server。",
+    "- 组合根/初始化层: src/bootstrap/app-runtime.ts + src/services/runtime-services.ts + src/config.ts。",
+    "- 执行内核: src/runtime/query-engine.ts + query-preparation/model/tools/finalization。",
+    "- Tool/Permission 层: src/tools/service.ts + catalog/executor + security/team/worktree/task/scheduler/background/subagent。",
+    "- Memory/Persistence 层: src/memory/* 与 .memory/.security/.schedule/.tasks/.transcripts 持久化副作用。",
+    "- MCP 扩展层: src/tools/mcp*.ts，同时通过 src/entrypoints/mcp-server.ts 对外暴露 MCP server。",
+    "",
+    strong("Stronger Here"),
+    "- 权限模式、审批队列和 approval replay 已产品化，不只是单点 canUseTool 判断。",
+    "- delivery 自动验证、closeout、handoff 和 OpenSpec 形成修改到验证的闭环。",
+    "- skills 加载、prompt dump、palette、workflow、transcript browse 都是内建本地控制面。",
+    "- 异步运行时不止 swarm：还包括 scheduler、background task、subagent、team、worktree 和 task board。",
+    "",
+    strong("Not Covered"),
+    "- 没有单独的 remote-control / bridge / daemon 进程形态。",
+    "- 没有远程 orchestrator、websocket reconnect 或独立 swarm backend registry。",
+    "- 工具执行以统一执行契约为主，没有单独暴露 concurrency-safe batch API。",
+  ].join("\n");
+}
+
 export function renderCliHelp(topic: CliHelpTopicId = "overview"): string {
   if (topic === "all") {
     return [
@@ -591,7 +627,7 @@ export function renderCliHelp(topic: CliHelpTopicId = "overview"): string {
     "sessions   /sessions /use /next /prev /clear",
     "workflow   /workflow agent | /workflow draw",
     "browse     /history /search /peek /tail",
-    "runtime    /status /config /model /permissions /skills /skill /prompt /cost /compact /redraw",
+    "runtime    /status /config /model /permissions /architecture /skills /skill /prompt /cost /compact /redraw",
     "approvals  /approvals /approve /reject /doctor /add-dir /tools /theme",
     "shell      !<cmd> | /exit",
     "TUI keys    Ctrl+G help | Ctrl+K palette | Ctrl+N next | Ctrl+P prev | Ctrl+L redraw | Esc cancel draft",
@@ -601,6 +637,7 @@ export function renderCliHelp(topic: CliHelpTopicId = "overview"): string {
     "- /palette review",
     "- /help sessions",
     "- /search hook blocked",
+    "- /architecture",
     "- /model gpt-5-mini",
     "- /permissions plan",
   ].join("\n");

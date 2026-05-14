@@ -1,7 +1,7 @@
 import * as process from "node:process";
 import { pathToFileURL } from "node:url";
-import { AgentService, createAgentHttpServer } from "./agent-service.js";
-import { createAgentAppRuntime } from "./bootstrap/app-runtime.js";
+import { AgentService, createAgentHttpServer } from "./index.js";
+import { createAgentAppRuntime } from "../bootstrap/app-runtime.js";
 
 const port = Number(process.env.AGENT_HTTP_PORT ?? 3181);
 

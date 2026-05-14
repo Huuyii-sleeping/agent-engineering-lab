@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { completeCliLine } from "../../src/cli-completion.js";
+import { completeCliLine } from "../../src/cli/completion.js";
 
 describe("cli-completion", () => {
   const context = {
@@ -15,9 +15,11 @@ describe("cli-completion", () => {
 
   it("completes slash commands and help topics", () => {
     const [commandHits] = completeCliLine("/he", context);
+    const [architectureHits] = completeCliLine("/ar", context);
     const [helpHits] = completeCliLine("/help t", context);
 
     expect(commandHits).toContain("/help");
+    expect(architectureHits).toContain("/architecture");
     expect(helpHits).toContain("/help transcript");
   });
 
@@ -50,5 +52,6 @@ describe("cli-completion", () => {
     expect(paletteHits).toContain("/palette review");
     expect(paletteHits).toContain("/palette open 1");
     expect(paletteHits).toContain("/palette workflow");
+    expect(paletteHits).toContain("/palette architecture");
   });
 });

@@ -3,7 +3,7 @@ import {
   createAgentSessionRecord,
   sortSessionsByCreatedAt,
   summarizeSession,
-} from "../../src/agent-service-sessions.js";
+} from "../../src/service-api/sessions.js";
 
 describe("agent-service-sessions", () => {
   it("creates isolated session records with stable summary shape", () => {

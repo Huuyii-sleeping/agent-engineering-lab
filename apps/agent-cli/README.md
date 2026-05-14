@@ -78,10 +78,12 @@ pnpm --filter agent-web-console dev
 
 ### 1. CLI 主循环
 
-- 入口在 [src/main.ts](/Users/bytedance/Personal/agent-engineering-lab-web/apps/agent-cli/src/main.ts:1) 和 [src/cli.ts](/Users/bytedance/Personal/agent-engineering-lab-web/apps/agent-cli/src/cli.ts:1)
+- 入口在 [src/main.ts](/Users/bytedance/Personal/agent-engineering-lab-web/apps/agent-cli/src/main.ts:1) 和 [src/cli/index.ts](/Users/bytedance/Personal/agent-engineering-lab-web/apps/agent-cli/src/cli/index.ts:1)
 - 支持交互式对话
 - 支持调度器后台轮询
 - 调度到点后会主动把结果推回 CLI，而不是只在下次用户发问时处理
+- 支持本地 inspection surface，例如 `/doctor`、`/prompt`、`/architecture`
+- HTTP service / session API 相关实现收拢在 [src/service-api/index.ts](/Users/bytedance/Personal/agent-engineering-lab-web/apps/agent-cli/src/service-api/index.ts:1) 和 [src/service-api/server.ts](/Users/bytedance/Personal/agent-engineering-lab-web/apps/agent-cli/src/service-api/server.ts:1)
 
 ### 2. Prompt 构建与恢复
 

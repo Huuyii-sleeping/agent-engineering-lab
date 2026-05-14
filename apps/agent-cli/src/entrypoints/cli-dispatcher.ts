@@ -9,6 +9,7 @@ type CliMode =
   | "print"
   | "mcp-server"
   | "tui"
+  | "architecture"
   | "dump-system-prompt";
 
 export type CliInvocation =
@@ -19,6 +20,7 @@ export type CliInvocation =
   | { mode: "print"; prompt: string }
   | { mode: "mcp-server" }
   | { mode: "tui" }
+  | { mode: "architecture" }
   | { mode: "dump-system-prompt" };
 
 export type CliIo = {
@@ -48,6 +50,7 @@ export function renderCliHelp(): string {
     "  agent-cli server                Start HTTP service",
     "  agent-cli mcp-server            Start stdio MCP server",
     "  agent-cli tui                   Start terminal TUI console",
+    "  agent-cli architecture          Print the local architecture overview",
     "  agent-cli dump-system-prompt    Print the current stable system prompt",
     "  agent-cli --version             Print version",
     "  agent-cli --help                Print help",
@@ -76,6 +79,9 @@ export function parseCliInvocation(argv: string[]): CliInvocation {
   }
   if (normalized === "--tui" || normalized === "tui") {
     return { mode: "tui" };
+  }
+  if (normalized === "--architecture" || normalized === "architecture") {
+    return { mode: "architecture" };
   }
   if (normalized === "--dump-system-prompt" || normalized === "dump-system-prompt") {
     return { mode: "dump-system-prompt" };
@@ -120,7 +126,7 @@ export async function dispatchCli(
     return 0;
   }
   if (invocation.mode === "server") {
-    const { runServer } = await import("../server.js");
+    const { runServer } = await import("../service-api/server.js");
     await runServer();
     return 0;
   }
@@ -132,6 +138,11 @@ export async function dispatchCli(
   if (invocation.mode === "tui") {
     const { runTerminalTui } = await import("./tui.js");
     await runTerminalTui({ input: io.stdin, output: io.stdout });
+    return 0;
+  }
+  if (invocation.mode === "architecture") {
+    const { runArchitectureOverview } = await import("./architecture.js");
+    await runArchitectureOverview({ output: io.stdout });
     return 0;
   }
   if (invocation.mode === "dump-system-prompt") {
@@ -149,7 +160,7 @@ export async function dispatchCli(
     return runHeadlessQuery({ prompt, output: io.stdout, errorOutput: io.stderr });
   }
 
-  const { runCli } = await import("../cli.js");
+  const { runCli } = await import("../cli/index.js");
   await runCli();
   return 0;
 }

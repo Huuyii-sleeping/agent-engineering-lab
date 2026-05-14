@@ -2,11 +2,11 @@ import type OpenAI from "openai";
 import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
 import { describe, expect, it, vi } from "vitest";
 import type { AgentRuntimeState } from "../../../src/agent-loop.js";
-import type { DeliveryServiceLike } from "../../../src/delivery-service.js";
-import type { HookServiceLike } from "../../../src/hook-service.js";
-import type { MemoryServiceLike } from "../../../src/memory-service.js";
-import type { ModelPolicyServiceLike } from "../../../src/model-policy-service.js";
-import type { ObservabilityServiceLike } from "../../../src/observability-service.js";
+import type { DeliveryServiceLike } from "../../../src/services/delivery-service.js";
+import type { HookServiceLike } from "../../../src/services/hook-service.js";
+import type { MemoryServiceLike } from "../../../src/services/memory-service.js";
+import type { ModelPolicyServiceLike } from "../../../src/services/model-policy-service.js";
+import type { ObservabilityServiceLike } from "../../../src/services/observability-service.js";
 import { runUserQuery } from "../../../src/runtime/query-runtime.js";
 import type { StaticPromptSource } from "../../../src/prompt/types.js";
 

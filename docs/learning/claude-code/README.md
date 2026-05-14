@@ -6,12 +6,13 @@
 
 ## 推荐阅读顺序
 
-1. [operations/01-组合根与运行时装配.md](/Users/bytedance/Personal/agent-engineering-lab-web/docs/learning/claude-code/operations/01-组合根与运行时装配.md)
-2. [operations/02-Agent主循环阶段化.md](/Users/bytedance/Personal/agent-engineering-lab-web/docs/learning/claude-code/operations/02-Agent主循环阶段化.md)
-3. [operations/03-工具能力边界.md](/Users/bytedance/Personal/agent-engineering-lab-web/docs/learning/claude-code/operations/03-工具能力边界.md)
-4. [operations/04-异步协作与任务运行时.md](/Users/bytedance/Personal/agent-engineering-lab-web/docs/learning/claude-code/operations/04-异步协作与任务运行时.md)
-5. [operations/05-质量验证与交付闭环.md](/Users/bytedance/Personal/agent-engineering-lab-web/docs/learning/claude-code/operations/05-质量验证与交付闭环.md)
-6. [operations/06-规格驱动与收口工作法.md](/Users/bytedance/Personal/agent-engineering-lab-web/docs/learning/claude-code/operations/06-规格驱动与收口工作法.md)
+1. [operations/00-架构总览与外部对照.md](/Users/bytedance/Personal/agent-engineering-lab-web/docs/learning/claude-code/operations/00-架构总览与外部对照.md)
+2. [operations/01-组合根与运行时装配.md](/Users/bytedance/Personal/agent-engineering-lab-web/docs/learning/claude-code/operations/01-组合根与运行时装配.md)
+3. [operations/02-Agent主循环阶段化.md](/Users/bytedance/Personal/agent-engineering-lab-web/docs/learning/claude-code/operations/02-Agent主循环阶段化.md)
+4. [operations/03-工具能力边界.md](/Users/bytedance/Personal/agent-engineering-lab-web/docs/learning/claude-code/operations/03-工具能力边界.md)
+5. [operations/04-异步协作与任务运行时.md](/Users/bytedance/Personal/agent-engineering-lab-web/docs/learning/claude-code/operations/04-异步协作与任务运行时.md)
+6. [operations/05-质量验证与交付闭环.md](/Users/bytedance/Personal/agent-engineering-lab-web/docs/learning/claude-code/operations/05-质量验证与交付闭环.md)
+7. [operations/06-规格驱动与收口工作法.md](/Users/bytedance/Personal/agent-engineering-lab-web/docs/learning/claude-code/operations/06-规格驱动与收口工作法.md)
 
 ## 后续文档原则
 

@@ -4,13 +4,13 @@ vi.mock("../../../src/runtime/query-notifications.js", () => ({
 }));
 
 import type { AgentRuntimeState } from "../../../src/agent-loop.js";
-import type { HookServiceLike } from "../../../src/hook-service.js";
-import type { MemoryServiceLike } from "../../../src/memory-service.js";
-import type { NotificationServiceLike } from "../../../src/notification-service.js";
-import type { ObservabilityServiceLike } from "../../../src/observability-service.js";
+import type { HookServiceLike } from "../../../src/services/hook-service.js";
+import type { MemoryServiceLike } from "../../../src/services/memory-service.js";
+import type { NotificationServiceLike } from "../../../src/services/notification-service.js";
+import type { ObservabilityServiceLike } from "../../../src/services/observability-service.js";
 import { prepareQueryRound } from "../../../src/runtime/query-preparation.js";
 import { collectDynamicSystemMessages } from "../../../src/runtime/query-notifications.js";
-import type { RuntimeCoordinationServiceLike } from "../../../src/runtime-coordination-service.js";
+import type { RuntimeCoordinationServiceLike } from "../../../src/services/runtime-coordination-service.js";
 
 function createRuntimeState(): AgentRuntimeState {
   return {

@@ -51,6 +51,19 @@ Query / conversation runtime MUST 作为可复用核心存在，能够被 CLI、
 - **WHEN** 某个 service 主要属于工具协议、注册或执行子系统内部
 - **THEN** 该 service 可以保留在 `tools/` 等所属层目录中，并由设计文档说明不迁移原因
 
+### Requirement: Service API and HTTP surface internals MUST live under a dedicated module subtree
+会话管理与 HTTP service surface MUST 具备独立目录边界，避免这类对外 API 相关实现继续散落在应用根层源码目录，或与 runtime `services/` 依赖包混在一起。
+
+#### Scenario: 维护者阅读源码根目录
+- **WHEN** 维护者阅读 `apps/agent-cli/src/`
+- **THEN** 应能明确区分 runtime `services/` 依赖包与对外 service API / HTTP surface
+- **AND** `AgentService`、session helpers 和 server launcher 位于专门的 `service-api/` 子目录，而不是持续平铺在 `src/` 根层
+
+#### Scenario: 多入口复用统一 service API 子树
+- **WHEN** CLI dispatcher、TUI、MCP server 或 HTTP 启动器需要复用会话管理与对外 service API 能力
+- **THEN** 它们通过 `service-api/` 子目录中的稳定模块引用 `AgentService`、session helpers 和 server launcher
+- **AND** 不要求调用方继续依赖散落在 `src/` 根层的 `agent-service*` 或 `server.ts` 文件路径
+
 ### Requirement: Query runtime services MUST be composable as a dependency bundle
 Query runtime 的横切 service 依赖 MUST 能作为稳定依赖包装配和传递，而不是长期依赖不断扩张的构造函数字段列表。
 
@@ -549,7 +562,7 @@ TUI 本地 command palette MUST 提供独立的选择面，而不是只输出静
 #### Scenario: User opens the palette panel
 - **WHEN** 用户通过 `/palette` 或 `Ctrl+K` 打开本地 palette
 - **THEN** TUI 展示顶部 `Command Bar`
-- **AND** TUI 以紧凑结果浮层块展示候选，而不是继续侵入主会话区
+- **AND** `Command Bar` 与 `Palette Results` 采用共享的轻量居中浮层布局，而不是一个全宽一个局部居中
 
 #### Scenario: User moves the current selection
 - **WHEN** palette panel 已打开
@@ -559,7 +572,8 @@ TUI 本地 command palette MUST 提供独立的选择面，而不是只输出静
 #### Scenario: User scans grouped compact palette results
 - **WHEN** palette 已打开且用户查看当前候选
 - **THEN** TUI 在结果中明确展示分组与 query 命中
-- **AND** command bar 展示当前选中候选的 preview summary 与操作提示
+- **AND** command bar 展示当前选中候选的 preview summary
+- **AND** overlay 以更紧凑的命令优先结果行和精简 keys hint 展示当前可执行动作
 
 ### Requirement: TUI local command palette MUST support query submission and direct execution
 TUI 本地 command palette MUST 支持本地 query 刷新与当前选中项直接执行。

@@ -1,5 +1,5 @@
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import type { DeliveryReport } from "../delivery.js";
+import type { DeliveryReport } from "../delivery/index.js";
 import type { DeliveryServiceLike } from "../services/index.js";
 import type { AgentRuntimeState } from "./query-types.js";
 import type { ToolDrivenStopReason } from "./query-finalization-types.js";

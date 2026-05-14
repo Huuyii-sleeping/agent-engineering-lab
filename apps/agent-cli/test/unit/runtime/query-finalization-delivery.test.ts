@@ -1,6 +1,6 @@
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { describe, expect, it, vi } from "vitest";
-import type { DeliveryReport } from "../../../src/delivery.js";
+import type { DeliveryReport } from "../../../src/delivery/index.js";
 import type { DeliveryServiceLike } from "../../../src/services/index.js";
 import {
   runAutoDeliveryFinalizer,

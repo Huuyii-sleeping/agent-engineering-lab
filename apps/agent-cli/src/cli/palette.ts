@@ -1,5 +1,5 @@
-import type { CliSessionSummary } from "./cli-ui.js";
-import type { CliWorkflowMode } from "./cli-workflow.js";
+import type { CliSessionSummary } from "./ui.js";
+import type { CliWorkflowMode } from "./workflow.js";
 
 export type CliPaletteCandidate = {
   id: string;
@@ -217,6 +217,14 @@ function staticPaletteCandidates(context: CliPaletteContext): CliPaletteCandidat
       summary: "Review the current local permission mode.",
       command: "/permissions",
       keywords: ["permissions", "approvals", "mode", "runtime"],
+    },
+    {
+      id: "runtime-architecture",
+      group: "runtime",
+      title: "Inspect runtime architecture coverage",
+      summary: "Compare the local runtime layers against the external architecture overview.",
+      command: "/architecture",
+      keywords: ["architecture", "overview", "runtime", "layers", "claude", "compare"],
     },
     {
       id: "runtime-skills",

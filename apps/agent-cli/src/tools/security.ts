@@ -1,5 +1,5 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
-import { applyCliPermissionMode, getCliPermissionMode } from "../cli-permissions.js";
+import { applyCliPermissionMode, getCliPermissionMode } from "../cli/permissions.js";
 import { SecurityManager } from "./security-manager.js";
 import type { SecurityGateResult } from "./security-types.js";
 import { fail, parseArgsJson } from "./security-types.js";

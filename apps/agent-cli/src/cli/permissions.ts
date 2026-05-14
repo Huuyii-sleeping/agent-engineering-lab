@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
-import { normalizeApprovalRequest } from "./tools/security-approvals.js";
-import type { ApprovalRequest } from "./tools/security-types.js";
-import { safeJsonParse } from "./tools/security-types.js";
+import { normalizeApprovalRequest } from "../tools/security-approvals.js";
+import type { ApprovalRequest } from "../tools/security-types.js";
+import { safeJsonParse } from "../tools/security-types.js";
 
 export type CliPermissionMode = "default" | "accept-edits" | "plan";
 

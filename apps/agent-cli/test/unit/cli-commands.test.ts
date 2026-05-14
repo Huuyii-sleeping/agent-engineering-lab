@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { dispatchCliCommand } from "../../src/cli-commands.js";
-import type { CliCommandContext } from "../../src/cli-commands.js";
-import { CliPaletteStore } from "../../src/cli-palette.js";
-import { resetCliPermissionModeForTest } from "../../src/cli-permissions.js";
-import { CliTranscriptBrowserStore } from "../../src/cli-transcript.js";
-import type { CliWorkflowMode } from "../../src/cli-workflow.js";
+import { dispatchCliCommand } from "../../src/cli/commands.js";
+import type { CliCommandContext } from "../../src/cli/commands.js";
+import { CliPaletteStore } from "../../src/cli/palette.js";
+import { resetCliPermissionModeForTest } from "../../src/cli/permissions.js";
+import { CliTranscriptBrowserStore } from "../../src/cli/transcript.js";
+import type { CliWorkflowMode } from "../../src/cli/workflow.js";
 
 function createContext(input: {
   activeSessionId?: string;
@@ -302,6 +302,7 @@ describe("cli-commands", () => {
     expect((await dispatchCliCommand("/help missing", context)).output).toContain("unknown help topic");
     expect((await dispatchCliCommand("/status", context)).output).toContain("Status");
     expect((await dispatchCliCommand("/doctor", context)).output).toContain("Doctor");
+    expect((await dispatchCliCommand("/architecture", context)).output).toContain("Architecture");
   });
 
   it("handles theme, redraw, and clear commands deterministically", async () => {
@@ -331,6 +332,7 @@ describe("cli-commands", () => {
     expect((await dispatchCliCommand("/permissions", context)).output).toContain("Permissions");
     expect((await dispatchCliCommand("/permissions plan", context)).output).toContain("mode");
     expect((await dispatchCliCommand("/approvals", context)).output).toContain("Approvals");
+    expect((await dispatchCliCommand("/architecture", context)).output).toContain("remote/bridge/daemon");
     expect((await dispatchCliCommand("/approve apr_1", context)).output).toContain("approved apr_1");
     expect((await dispatchCliCommand("/reject apr_1", context)).output).toContain("rejected apr_1");
     expect((await dispatchCliCommand("/skills", context)).output).toContain("openspec-apply-change");

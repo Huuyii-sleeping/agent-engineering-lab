@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { DELIVERY_MAX_CAPTURE, summarizeDeliveryReport, truncateDeliveryOutput } from "../../src/delivery-types.js";
-import type { DeliveryReport } from "../../src/delivery-types.js";
+import { DELIVERY_MAX_CAPTURE, summarizeDeliveryReport, truncateDeliveryOutput } from "../../src/delivery/types.js";
+import type { DeliveryReport } from "../../src/delivery/types.js";
 
 function createReport(overrides: Partial<DeliveryReport> = {}): DeliveryReport {
   return {

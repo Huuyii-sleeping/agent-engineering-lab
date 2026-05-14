@@ -1,8 +1,8 @@
 import type OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { describe, expect, it, vi } from "vitest";
-import { renderAsyncCliEvent, runScheduledRound } from "../../src/cli.js";
-import { resetCliUiForTest, setCliUiColorEnabled } from "../../src/cli-ui.js";
+import { renderAsyncCliEvent, runScheduledRound } from "../../src/cli/index.js";
+import { resetCliUiForTest, setCliUiColorEnabled } from "../../src/cli/ui.js";
 import type { AgentRuntimeState } from "../../src/agent-loop.js";
 import type { StaticPromptSource } from "../../src/prompt/types.js";
 

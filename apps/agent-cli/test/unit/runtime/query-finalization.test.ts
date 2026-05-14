@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentRuntimeState } from "../../../src/agent-loop.js";
-import type { HookServiceLike } from "../../../src/hook-service.js";
+import type { HookServiceLike } from "../../../src/services/hook-service.js";
 import {
   finalizeAssistantOnlyRound,
   finalizeToolDrivenRound,
   runQueryStopStage,
 } from "../../../src/runtime/query-finalization.js";
-import type { DeliveryServiceLike } from "../../../src/delivery-service.js";
+import type { DeliveryServiceLike } from "../../../src/services/delivery-service.js";
 
 function createRuntimeState(): AgentRuntimeState {
   return {

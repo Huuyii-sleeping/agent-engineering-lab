@@ -8,8 +8,8 @@ import {
   getDeliveryReportRoot,
   loadLatestDeliveryReportFromStore,
   saveDeliveryReport,
-} from "../../src/delivery-report-store.js";
-import type { DeliveryReport } from "../../src/delivery-types.js";
+} from "../../src/delivery/report-store.js";
+import type { DeliveryReport } from "../../src/delivery/types.js";
 
 const tempDirs: string[] = [];
 
@@ -24,7 +24,7 @@ function createReport(): DeliveryReport {
     schemaVersion: 1,
     generatedAt: 1,
     mode: "manual",
-    changedPaths: ["apps/agent-cli/src/delivery.ts"],
+    changedPaths: ["apps/agent-cli/src/delivery/index.ts"],
     summary: {
       status: "passed",
       totalStages: 1,

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   listCliHelpTopics,
   renderCliApprovals,
+  renderCliArchitecture,
   renderCliBanner,
   renderCliCloseout,
   renderCliCompactSummary,
@@ -27,7 +28,7 @@ import {
   resetCliUiForTest,
   resolveCliHelpTopic,
   setCliUiColorEnabled,
-} from "../../src/cli-ui.js";
+} from "../../src/cli/ui.js";
 
 afterEach(() => {
   resetCliUiForTest();
@@ -89,10 +90,10 @@ describe("cli-ui", () => {
     expect(
       renderCliCloseout({
         sessionId: "sess_1",
-        changedPaths: ["apps/agent-cli/src/cli.ts"],
+        changedPaths: ["apps/agent-cli/src/cli/index.ts"],
         validationSummary: "delivery validation passed",
       }),
-    ).toContain("changes     apps/agent-cli/src/cli.ts");
+    ).toContain("changes     apps/agent-cli/src/cli/index.ts");
     expect(
       renderCliPermissions({
         mode: "plan",
@@ -179,6 +180,7 @@ describe("cli-ui", () => {
     expect(renderCliHelp()).toContain("/palette");
     expect(renderCliHelp()).toContain("/skills");
     expect(renderCliHelp()).toContain("/prompt");
+    expect(renderCliHelp()).toContain("/architecture");
     expect(renderCliHelp()).toContain("Ctrl+G help");
     expect(renderCliHelp()).toContain("Ctrl+K palette");
     expect(renderCliHelp("draft")).toContain("Help: Draft");
@@ -217,7 +219,7 @@ describe("cli-ui", () => {
         sessionCount: 2,
         pendingApprovals: 0,
       }),
-    ).toSatisfy((lines: string[]) => lines.some((line) => line.includes("/skills /prompt")));
+    ).toSatisfy((lines: string[]) => lines.some((line) => line.includes("/architecture /skills /prompt")));
     expect(
       renderCliGuideLines({
         composerActive: false,
@@ -264,6 +266,9 @@ describe("cli-ui", () => {
         ["missing-skill"],
       ),
     ).toContain("System Prompt");
+    expect(renderCliArchitecture()).toContain("Architecture");
+    expect(renderCliArchitecture()).toContain("Stronger Here");
+    expect(renderCliArchitecture()).toContain("remote/bridge/daemon");
     expect(
       renderCliShortcutLines({
         composerActive: false,

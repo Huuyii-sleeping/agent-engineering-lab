@@ -1,5 +1,5 @@
-import { analyzeToolOutput } from "./runtime/query-tool-results.js";
-import { renderCliError, renderCliEvent, renderCliSection } from "./cli-ui.js";
+import { analyzeToolOutput } from "../runtime/query-tool-results.js";
+import { renderCliError, renderCliEvent, renderCliSection } from "./ui.js";
 
 export async function runCliShellShortcut(
   command: string,

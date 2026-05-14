@@ -1,6 +1,7 @@
 import {
   listCliHelpTopics,
   renderCliApprovals,
+  renderCliArchitecture,
   renderCliCompactSummary,
   renderCliComposer,
   renderCliConfig,
@@ -28,13 +29,13 @@ import {
   type CliStatusSnapshot,
   type CliThemeName,
   type CliUsageSnapshot,
-} from "./cli-ui.js";
-import type { CliDoctorReport } from "./cli-ui.js";
-import type { CliPaletteCandidate, CliPaletteView } from "./cli-palette.js";
-import type { CliPermissionMode } from "./cli-permissions.js";
-import type { PromptDump } from "./prompt/inspect.js";
-import type { CliTranscriptView } from "./cli-transcript.js";
-import type { CliWorkflowMode } from "./cli-workflow.js";
+} from "./ui.js";
+import type { CliDoctorReport } from "./ui.js";
+import type { CliPaletteCandidate, CliPaletteView } from "./palette.js";
+import type { CliPermissionMode } from "./permissions.js";
+import type { PromptDump } from "../prompt/inspect.js";
+import type { CliTranscriptView } from "./transcript.js";
+import type { CliWorkflowMode } from "./workflow.js";
 
 export type CliCommandResult =
   | { handled: false }
@@ -468,6 +469,9 @@ export async function dispatchCliCommand(
   }
   if (parsed.command === "config") {
     return { handled: true, output: renderCliConfig(await context.getConfig()) };
+  }
+  if (parsed.command === "architecture") {
+    return { handled: true, output: renderCliArchitecture() };
   }
   if (parsed.command === "model") {
     const nextModel = parsed.args.join(" ").trim();

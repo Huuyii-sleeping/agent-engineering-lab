@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CliTranscriptBrowserStore, createCliTranscriptEntries } from "../../src/cli-transcript.js";
+import { CliTranscriptBrowserStore, createCliTranscriptEntries } from "../../src/cli/transcript.js";
 
 describe("cli-transcript", () => {
   const messages = [

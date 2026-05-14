@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CliComposerStore } from "../../src/cli-composer.js";
+import { CliComposerStore } from "../../src/cli/composer.js";
 
 describe("cli-composer", () => {
   it("tracks draft lifecycle per session", () => {

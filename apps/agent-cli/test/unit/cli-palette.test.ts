@@ -3,7 +3,7 @@ import {
   buildCliPaletteCandidates,
   CliPaletteStore,
   searchCliPaletteCandidates,
-} from "../../src/cli-palette.js";
+} from "../../src/cli/palette.js";
 
 describe("cli-palette", () => {
   const context = {
@@ -24,6 +24,7 @@ describe("cli-palette", () => {
     expect(candidates.some((candidate) => candidate.command === "/use 2")).toBe(true);
     expect(candidates.some((candidate) => candidate.command === "/approvals")).toBe(true);
     expect(candidates.some((candidate) => candidate.command === "/workflow draw")).toBe(true);
+    expect(candidates.some((candidate) => candidate.command === "/architecture")).toBe(true);
   });
 
   it("fuzzy-searches local palette candidates", () => {

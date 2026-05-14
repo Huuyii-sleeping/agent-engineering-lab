@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import * as process from "node:process";
 import { afterEach, describe, expect, it } from "vitest";
-import { buildDeliveryPlan, fileExistsInJsonScript } from "../../src/delivery-plan.js";
+import { buildDeliveryPlan, fileExistsInJsonScript } from "../../src/delivery/plan.js";
 
 const tempDirs: string[] = [];
 
@@ -57,7 +57,7 @@ describe("delivery plan", () => {
       });
 
       const docsPlan = await buildDeliveryPlan({ changedPaths: ["README.md"] });
-      const cliPlan = await buildDeliveryPlan({ changedPaths: ["apps/agent-cli/src/delivery.ts"] });
+      const cliPlan = await buildDeliveryPlan({ changedPaths: ["apps/agent-cli/src/delivery/index.ts"] });
 
       expect(cliPlan.map((item) => item.stage)).toEqual([
         "lint",
@@ -86,7 +86,9 @@ describe("delivery plan", () => {
         false,
         false,
       ]);
-      expect(cliPlan.slice(3).map((item) => item.condition?.({ changedPaths: ["apps/agent-cli/src/delivery.ts"] }))).toEqual([
+      expect(
+        cliPlan.slice(3).map((item) => item.condition?.({ changedPaths: ["apps/agent-cli/src/delivery/index.ts"] })),
+      ).toEqual([
         true,
         true,
         true,

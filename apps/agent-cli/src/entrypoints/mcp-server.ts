@@ -1,5 +1,5 @@
 import { stdin, stdout } from "node:process";
-import { AgentService } from "../agent-service.js";
+import { AgentService } from "../service-api/index.js";
 import { createAgentAppRuntime } from "../bootstrap/app-runtime.js";
 import { writeFrame } from "../tools/mcp-protocol.js";
 

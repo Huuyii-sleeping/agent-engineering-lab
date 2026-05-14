@@ -8,7 +8,7 @@ import {
   collectCliApprovalSummary,
   resetCliPermissionModeForTest,
   setCliPermissionMode,
-} from "../../src/cli-permissions.js";
+} from "../../src/cli/permissions.js";
 
 const tempDirs: string[] = [];
 

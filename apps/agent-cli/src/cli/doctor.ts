@@ -1,8 +1,8 @@
 import { access, constants, readFile } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
-import type { AgentAppRuntimeDeps } from "./bootstrap/app-runtime.js";
-import { collectCliApprovalSummary, getCliPermissionMode } from "./cli-permissions.js";
+import type { AgentAppRuntimeDeps } from "../bootstrap/app-runtime.js";
+import { collectCliApprovalSummary, getCliPermissionMode } from "./permissions.js";
 import {
   getCliUiTheme,
   type CliConfigSnapshot,
@@ -11,12 +11,12 @@ import {
   type CliDoctorReport,
   type CliStatusSnapshot,
   type CliUsageSnapshot,
-} from "./cli-ui.js";
-import { loadHooksConfig } from "./hooks/config.js";
-import { readModelUsageSnapshot } from "./model-policy.js";
-import { loadMcpServerConfigs } from "./tools/mcp-config.js";
-import { RUNTIME_CONFIG } from "./runtime-config.js";
-import { listWorkspaceRoots } from "./workspace-roots.js";
+} from "./ui.js";
+import { loadHooksConfig } from "../hooks/config.js";
+import { readModelUsageSnapshot } from "../model-policy.js";
+import { loadMcpServerConfigs } from "../tools/mcp-config.js";
+import { RUNTIME_CONFIG } from "../runtime-config.js";
+import { listWorkspaceRoots } from "../workspace-roots.js";
 
 async function readPackageJson(): Promise<{ scripts?: Record<string, string> }> {
   try {

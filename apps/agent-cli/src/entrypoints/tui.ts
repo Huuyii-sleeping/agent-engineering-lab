@@ -4,26 +4,26 @@ import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import type OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import { AgentService } from "../agent-service.js";
+import { AgentService } from "../service-api/index.js";
 import { createAgentAppRuntime, type AgentAppRuntimeDeps } from "../bootstrap/app-runtime.js";
-import { dispatchCliCommand } from "../cli-commands.js";
-import { completeCliLine } from "../cli-completion.js";
-import { CliComposerStore } from "../cli-composer.js";
+import { dispatchCliCommand } from "../cli/commands.js";
+import { completeCliLine } from "../cli/completion.js";
+import { CliComposerStore } from "../cli/composer.js";
 import {
   CliPaletteStore,
   getCliPaletteGroupLabel,
   type CliPaletteCandidate,
   type CliPaletteContext,
   type CliPaletteView,
-} from "../cli-palette.js";
+} from "../cli/palette.js";
 import {
   collectCliConfigSnapshot,
   collectCliPermissionSnapshot,
   collectCliStatusSnapshot,
   collectCliUsageSnapshot,
   runCliDoctor,
-} from "../cli-doctor.js";
-import { setCliPermissionMode } from "../cli-permissions.js";
+} from "../cli/doctor.js";
+import { setCliPermissionMode } from "../cli/permissions.js";
 import {
   listCliHelpTopics,
   renderCliFooter,
@@ -41,12 +41,12 @@ import {
   renderCliShortcutLines,
   renderCliTranscriptLines,
   setCliUiTheme,
-} from "../cli-ui.js";
+} from "../cli/ui.js";
 import { createClient, getStaticPromptSource } from "../config.js";
 import { inspectPromptSource } from "../prompt/inspect.js";
-import { runCliShellShortcut } from "../cli-shell.js";
-import { CliTranscriptBrowserStore } from "../cli-transcript.js";
-import type { CliWorkflowMode } from "../cli-workflow.js";
+import { runCliShellShortcut } from "../cli/shell.js";
+import { CliTranscriptBrowserStore } from "../cli/transcript.js";
+import type { CliWorkflowMode } from "../cli/workflow.js";
 import { getSkillCatalog, loadSkill } from "../skills/loader.js";
 import { compactMessages } from "../tools/context-compact.js";
 import { addWorkspaceRoot } from "../workspace-roots.js";
@@ -214,14 +214,21 @@ function renderTerminalTuiPaletteCandidateLine(
   query: string,
 ): string {
   const marker = index === selectedIndex ? ">" : " ";
-  return `${marker} [${index + 1}] ${highlightTerminalTuiPaletteQuery(candidate.title, query)} -> ${highlightTerminalTuiPaletteQuery(candidate.command, query)}`;
+  return `${marker} [${index + 1}] ${highlightTerminalTuiPaletteQuery(candidate.command, query)}  |  ${highlightTerminalTuiPaletteQuery(candidate.title, query)}`;
+}
+
+function formatTerminalTuiPaletteFocus(state: TerminalTuiPaletteState): string {
+  const selected = getTerminalTuiSelectedPaletteCandidate(state);
+  if (!selected) {
+    return "(none)";
+  }
+  return `[${state.selectedIndex + 1}/${state.view.candidates.length}] ${getCliPaletteGroupLabel(selected.group)} ${selected.command}`;
 }
 
 export function renderTerminalTuiPaletteLines(
   state: TerminalTuiPaletteState,
   maxEntries = 6,
 ): string[] {
-  const selected = getTerminalTuiSelectedPaletteCandidate(state);
   const visibleCandidates = state.view.candidates.slice(0, maxEntries);
   const groupedLines: string[] = [];
   let currentGroup: CliPaletteCandidate["group"] | null = null;
@@ -235,14 +242,13 @@ export function renderTerminalTuiPaletteLines(
     }
     groupedLines.push(renderTerminalTuiPaletteCandidateLine(candidate, index, state.selectedIndex, state.query));
   }
+  if (state.view.candidates.length > visibleCandidates.length) {
+    groupedLines.push("", `more      +${state.view.candidates.length - visibleCandidates.length} candidate(s)`);
+  }
   return [
     `query     ${state.query || "(top actions)"}`,
     `results   ${state.view.candidates.length} shown / ${state.view.total} total`,
-    `selected  ${
-      selected ? `[${state.selectedIndex + 1}] ${selected.command}` : "(none)"
-    }`,
-    "actions   Enter open | Up/Down move | Esc close",
-    "search    Type to filter locally",
+    "keys      Enter open | Up/Down/^N/^P move | Esc close",
     "",
     ...(state.view.candidates.length > 0 ? groupedLines : ["No palette candidates found."]),
   ];
@@ -305,10 +311,8 @@ export function renderTerminalTuiPaletteBarLines(state: TerminalTuiPaletteState)
   const selected = getTerminalTuiSelectedPaletteCandidate(state);
   return [
     `input     ${state.query || "(top actions)"}`,
-    `selected  ${selected ? `[${state.selectedIndex + 1}/${state.view.candidates.length}] ${selected.command}` : "(none)"}`,
-    `group     ${selected ? getCliPaletteGroupLabel(selected.group) : "(none)"}`,
+    `focus     ${formatTerminalTuiPaletteFocus(state)}`,
     `preview   ${selected ? highlightTerminalTuiPaletteQuery(selected.summary, state.query) : "no candidate selected"}`,
-    "mode      live filter active | Enter open | Up/Down move | Esc close",
   ];
 }
 
@@ -406,24 +410,28 @@ export function renderTerminalTuiDashboard(state: TerminalTuiState): string {
     }),
   ];
   const board = mergeCliColumns([leftColumn, centerColumn, rightColumn], gap).join("\n");
+  const paletteOverlayWidth = Math.max(48, Math.min(80, width - 16));
   const paletteBar =
     state.paletteOpen
-      ? renderCliPanel({
-          title: "Command Bar",
-          width: Math.max(48, width - 2),
-          tone: "accent",
-          minBodyLines: 3,
-          lines: state.paletteBarLines ?? ["input     (top actions)"],
-        })
+      ? centerTerminalTuiBlock(
+          renderCliPanel({
+            title: "Command Bar",
+            width: paletteOverlayWidth,
+            tone: "accent",
+            minBodyLines: 3,
+            lines: state.paletteBarLines ?? ["input     (top actions)"],
+          }),
+          width,
+        )
       : [];
   const paletteOverlay =
     state.paletteOpen
       ? centerTerminalTuiBlock(
           renderCliPanel({
             title: "Palette Results",
-            width: Math.max(44, Math.min(88, width - 12)),
+            width: paletteOverlayWidth,
             tone: "accent",
-            minBodyLines: 7,
+            minBodyLines: 6,
             lines: state.paletteLines ?? ["No palette candidates found."],
           }),
           width,
@@ -434,7 +442,6 @@ export function renderTerminalTuiDashboard(state: TerminalTuiState): string {
     `${renderCliBadge("full-screen", "accent")} ${renderCliBadge("tui", "success")} ${renderCliBadge(state.activeSessionId ? "session-live" : "session-empty", "warning")}${state.paletteOpen ? ` ${renderCliBadge("palette-live", "accent")}` : ""}`,
     "",
     ...paletteBar,
-    ...(paletteBar.length > 0 ? [""] : []),
     ...paletteOverlay,
     ...(paletteOverlay.length > 0 ? [""] : []),
     board,

@@ -70,6 +70,7 @@ pnpm release:check
 
 ```text
 docs/learning/claude-code/README.md
+docs/learning/claude-code/operations/00-架构总览与外部对照.md
 docs/learning/claude-code/operations/
 ```
 

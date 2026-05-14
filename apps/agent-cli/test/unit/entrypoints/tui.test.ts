@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { CliComposerStore } from "../../../src/cli-composer.js";
-import { CliPaletteStore } from "../../../src/cli-palette.js";
-import { CliTranscriptBrowserStore } from "../../../src/cli-transcript.js";
+import { CliComposerStore } from "../../../src/cli/composer.js";
+import { CliPaletteStore } from "../../../src/cli/palette.js";
+import { CliTranscriptBrowserStore } from "../../../src/cli/transcript.js";
 import {
   createTerminalTuiPaletteState,
   getTerminalTuiSelectedPaletteCandidate,
@@ -99,19 +99,16 @@ describe("entrypoints/tui", () => {
       paletteOpen: true,
       paletteBarLines: [
         "input     review",
-        "selected  [1/2] /use 2",
-        "group     session",
+        "focus     [1/2] session /use 2",
         "preview   review session",
-        "mode      live filter active | Enter open | Up/Down move | Esc close",
       ],
       paletteLines: [
         "query     review",
         "results   2 shown / 2 total",
-        "selected  [1] /use 2",
-        "actions   Enter open | Up/Down move | Esc close",
+        "keys      Enter open | Up/Down/^N/^P move | Esc close",
         "",
         "group     session",
-        "> [1] Switch to session [2] s02-review -> /use 2",
+        "> [1] /use 2  |  Switch to session [2] s02-review",
       ],
     });
 
@@ -131,8 +128,8 @@ describe("entrypoints/tui", () => {
     expect(dashboard).toContain("Palette Results");
     expect(dashboard).toContain("palette-live");
     expect(dashboard).toContain("tui/draw");
-    expect(dashboard).toContain("live filter active");
-    expect(dashboard).toContain("Enter open | Up/Down move | Esc close");
+    expect(dashboard).toContain("focus [1/2] session /use 2");
+    expect(dashboard).toContain("Enter open | Up/Down/^N/^P move | Esc close");
     expect(dashboard).toContain("preview review session");
     expect(dashboard).toContain("actions /preview /send");
     expect(dashboard).toContain("/pop /cancel");
@@ -169,7 +166,7 @@ describe("entrypoints/tui", () => {
 
     expect(getTerminalTuiSelectedPaletteCandidate(opened)?.command).toBe("/use 2");
     expect(getTerminalTuiSelectedPaletteCandidate(moved)?.command).toBe("/history");
-    expect(renderTerminalTuiPaletteLines(moved)).toContain("selected  [2] /history");
+    expect(renderTerminalTuiPaletteLines(moved)).toContain("> [2] /history  |  Browse transcript window");
   });
 
   it("derives live palette queries from local key input", () => {
@@ -201,11 +198,11 @@ describe("entrypoints/tui", () => {
       },
     });
 
+    expect(renderTerminalTuiPaletteBarLines(state)).toContain("focus     [1/1] session /use 2");
     expect(renderTerminalTuiPaletteBarLines(state)).toContain("preview   <<review>> session");
-    expect(renderTerminalTuiPaletteBarLines(state)).toContain("group     session");
-    expect(renderTerminalTuiPaletteLines(state).join("\n")).toContain("s02-<<review>>");
+    expect(renderTerminalTuiPaletteLines(state).join("\n")).toContain("/use 2  |  Switch to session [2] s02-<<review>>");
     expect(renderTerminalTuiPaletteLines(state).join("\n")).toContain("group     session");
-    expect(renderTerminalTuiPaletteLines(state)).toContain("search    Type to filter locally");
+    expect(renderTerminalTuiPaletteLines(state)).toContain("keys      Enter open | Up/Down/^N/^P move | Esc close");
   });
 
   it("resolves supported keyboard shortcuts only when the prompt buffer is empty", () => {

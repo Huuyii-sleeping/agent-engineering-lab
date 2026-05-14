@@ -4,20 +4,20 @@ import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import type OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import { createAgentSessionRecord, type AgentSessionRecord } from "./agent-service-sessions.js";
-import { createAgentAppRuntime, type AgentAppRuntimeDeps } from "./bootstrap/app-runtime.js";
-import { dispatchCliCommand } from "./cli-commands.js";
-import { completeCliLine } from "./cli-completion.js";
-import { CliComposerStore } from "./cli-composer.js";
-import { CliPaletteStore } from "./cli-palette.js";
+import { createAgentSessionRecord, type AgentSessionRecord } from "../service-api/sessions.js";
+import { createAgentAppRuntime, type AgentAppRuntimeDeps } from "../bootstrap/app-runtime.js";
+import { dispatchCliCommand } from "./commands.js";
+import { completeCliLine } from "./completion.js";
+import { CliComposerStore } from "./composer.js";
+import { CliPaletteStore } from "./palette.js";
 import {
   collectCliConfigSnapshot,
   collectCliPermissionSnapshot,
   collectCliStatusSnapshot,
   collectCliUsageSnapshot,
   runCliDoctor,
-} from "./cli-doctor.js";
-import { setCliPermissionMode } from "./cli-permissions.js";
+} from "./doctor.js";
+import { setCliPermissionMode } from "./permissions.js";
 import {
   listCliHelpTopics,
   getCliUiTheme,
@@ -29,23 +29,23 @@ import {
   renderCliPrompt,
   renderCliSection,
   setCliUiTheme,
-} from "./cli-ui.js";
-import { inspectPromptSource } from "./prompt/inspect.js";
-import { CliTranscriptBrowserStore } from "./cli-transcript.js";
-import type { CliWorkflowMode } from "./cli-workflow.js";
-import { createClient, getStaticPromptSource } from "./config.js";
-import { summarizeDeliveryReport } from "./delivery-types.js";
-import { dropPendingApprovalReplay, popPendingApprovalReplay } from "./runtime/query-tool-approvals.js";
-import { analyzeToolOutput, markWriteSideEffect } from "./runtime/query-tool-results.js";
-import { parseToolArgs } from "./runtime/tool-runtime.js";
-import type { AgentRuntimeState } from "./runtime/query-types.js";
-import { runUserQuery } from "./runtime/query-runtime.js";
-import { RUNTIME_CONFIG } from "./runtime-config.js";
-import type { RuntimeCoordinationServiceLike } from "./services/index.js";
-import { runCliShellShortcut } from "./cli-shell.js";
-import { getSkillCatalog, loadSkill } from "./skills/loader.js";
-import { compactMessages, withCompactRuntimeContext } from "./tools/context-compact.js";
-import { addWorkspaceRoot } from "./workspace-roots.js";
+} from "./ui.js";
+import { inspectPromptSource } from "../prompt/inspect.js";
+import { CliTranscriptBrowserStore } from "./transcript.js";
+import type { CliWorkflowMode } from "./workflow.js";
+import { createClient, getStaticPromptSource } from "../config.js";
+import { summarizeDeliveryReport } from "../delivery/types.js";
+import { dropPendingApprovalReplay, popPendingApprovalReplay } from "../runtime/query-tool-approvals.js";
+import { analyzeToolOutput, markWriteSideEffect } from "../runtime/query-tool-results.js";
+import { parseToolArgs } from "../runtime/tool-runtime.js";
+import type { AgentRuntimeState } from "../runtime/query-types.js";
+import { runUserQuery } from "../runtime/query-runtime.js";
+import { RUNTIME_CONFIG } from "../runtime-config.js";
+import type { RuntimeCoordinationServiceLike } from "../services/index.js";
+import { runCliShellShortcut } from "./shell.js";
+import { getSkillCatalog, loadSkill } from "../skills/loader.js";
+import { compactMessages, withCompactRuntimeContext } from "../tools/context-compact.js";
+import { addWorkspaceRoot } from "../workspace-roots.js";
 
 type LineEditor = {
   line: string;
