@@ -14,8 +14,11 @@ import {
   renderCliPalette,
   renderCliPaletteLines,
   renderCliPermissions,
+  renderCliPromptDump,
   renderCliPrompt,
   renderCliSessions,
+  renderCliSkillDetail,
+  renderCliSkills,
   renderCliShortcutLines,
   renderCliStatus,
   renderCliTranscript,
@@ -174,6 +177,8 @@ describe("cli-ui", () => {
     expect(renderCliHelp()).toContain("/history");
     expect(renderCliHelp()).toContain("/workflow agent");
     expect(renderCliHelp()).toContain("/palette");
+    expect(renderCliHelp()).toContain("/skills");
+    expect(renderCliHelp()).toContain("/prompt");
     expect(renderCliHelp()).toContain("Ctrl+G help");
     expect(renderCliHelp()).toContain("Ctrl+K palette");
     expect(renderCliHelp("draft")).toContain("Help: Draft");
@@ -211,9 +216,54 @@ describe("cli-ui", () => {
         composerActive: false,
         sessionCount: 2,
         pendingApprovals: 0,
+      }),
+    ).toSatisfy((lines: string[]) => lines.some((line) => line.includes("/skills /prompt")));
+    expect(
+      renderCliGuideLines({
+        composerActive: false,
+        sessionCount: 2,
+        pendingApprovals: 0,
         workflow: "draw",
       }),
     ).toContain("workflow  /workflow agent | /workflow draw");
+    expect(
+      renderCliSkills(
+        [
+          {
+            name: "openspec-apply-change",
+            description: "Implement tasks from an OpenSpec change.",
+            path: ".codex/skills/openspec-apply-change/SKILL.md",
+            root: ".codex/skills",
+            loaded: true,
+          },
+        ],
+        ["openspec-apply-change"],
+        ["missing-skill"],
+      ),
+    ).toContain("openspec-apply-change");
+    expect(
+      renderCliSkillDetail({
+        name: "openspec-apply-change",
+        description: "Implement tasks from an OpenSpec change.",
+        path: ".codex/skills/openspec-apply-change/SKILL.md",
+        root: ".codex/skills",
+        metadata: { name: "openspec-apply-change" },
+        content: "Use the apply workflow.",
+        loaded: true,
+      }),
+    ).toContain("Use the apply workflow.");
+    expect(
+      renderCliPromptDump(
+        {
+          primarySystemPrompt: "## Core\ncore",
+          supplementalSystemMessages: [],
+          stableSectionIds: ["core"],
+          dynamicSectionIds: [],
+        },
+        ["openspec-apply-change"],
+        ["missing-skill"],
+      ),
+    ).toContain("System Prompt");
     expect(
       renderCliShortcutLines({
         composerActive: false,

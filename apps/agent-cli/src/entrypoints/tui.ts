@@ -43,9 +43,11 @@ import {
   setCliUiTheme,
 } from "../cli-ui.js";
 import { createClient, getStaticPromptSource } from "../config.js";
+import { inspectPromptSource } from "../prompt/inspect.js";
 import { runCliShellShortcut } from "../cli-shell.js";
 import { CliTranscriptBrowserStore } from "../cli-transcript.js";
 import type { CliWorkflowMode } from "../cli-workflow.js";
+import { getSkillCatalog, loadSkill } from "../skills/loader.js";
 import { compactMessages } from "../tools/context-compact.js";
 import { addWorkspaceRoot } from "../workspace-roots.js";
 
@@ -544,6 +546,40 @@ export async function handleTerminalTuiCommand(input: {
         return JSON.stringify({ ok: false, error: { message: "security tools are not available for this TUI service" } });
       }
       return toolRunner("security_reject", JSON.stringify({ request_id: requestId }));
+    },
+    listSkills: async () => {
+      const catalog = getSkillCatalog();
+      return {
+        skills: catalog.available,
+        loadedNames: catalog.loadedNames,
+        missingNames: catalog.missingNames,
+      };
+    },
+    getSkill: async (name) => {
+      const skill = loadSkill(name);
+      if (!skill) {
+        return null;
+      }
+      const catalog = getSkillCatalog();
+      return {
+        name: skill.name,
+        description: skill.description,
+        path: skill.path,
+        root: skill.root,
+        metadata: skill.metadata,
+        content: skill.content,
+        loaded: catalog.loadedNames.some(
+          (loadedName) => loadedName.toLowerCase() === skill.name.toLowerCase(),
+        ),
+      };
+    },
+    dumpSystemPrompt: async () => {
+      const catalog = getSkillCatalog();
+      return {
+        dump: inspectPromptSource(getStaticPromptSource()),
+        loadedNames: catalog.loadedNames,
+        missingNames: catalog.missingNames,
+      };
     },
     getUsage: () => collectCliUsageSnapshot(input.model),
     compactSession: async (keepRecent) => {

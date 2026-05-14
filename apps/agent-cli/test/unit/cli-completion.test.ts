@@ -37,6 +37,7 @@ describe("cli-completion", () => {
     const [workflowHits] = completeCliLine("/workflow ", context);
     const [searchHits] = completeCliLine("/search ", context);
     const [paletteHits] = completeCliLine("/palette ", context);
+    const [promptHits] = completeCliLine("/prompt ", context);
 
     expect(permissionHits).toContain("/permissions plan");
     expect(historyHits).toContain("/history first");
@@ -45,6 +46,7 @@ describe("cli-completion", () => {
     expect(historyHits).toContain("/history last");
     expect(workflowHits).toContain("/workflow draw");
     expect(searchHits).toContain("/search next");
+    expect(promptHits).toContain("/prompt dump");
     expect(paletteHits).toContain("/palette review");
     expect(paletteHits).toContain("/palette open 1");
     expect(paletteHits).toContain("/palette workflow");

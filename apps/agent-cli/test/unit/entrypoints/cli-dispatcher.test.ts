@@ -15,6 +15,7 @@ describe("entrypoints/cli-dispatcher", () => {
     expect(parseCliInvocation(["server"])).toEqual({ mode: "server" });
     expect(parseCliInvocation(["--mcp-server"])).toEqual({ mode: "mcp-server" });
     expect(parseCliInvocation(["tui"])).toEqual({ mode: "tui" });
+    expect(parseCliInvocation(["dump-system-prompt"])).toEqual({ mode: "dump-system-prompt" });
   });
 
   it("parses headless print prompts", () => {
@@ -31,5 +32,6 @@ describe("entrypoints/cli-dispatcher", () => {
     expect(help).toContain("Run one headless query");
     expect(help).toContain("Start stdio MCP server");
     expect(help).toContain("Start terminal TUI console");
+    expect(help).toContain("Print the current stable system prompt");
   });
 });

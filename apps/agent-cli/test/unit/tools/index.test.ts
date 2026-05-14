@@ -13,4 +13,14 @@ describe("tools/index", () => {
     expect(output.ok).toBe(false);
     expect(output.error?.code).toBe("REPLAY_DRY_RUN_BLOCKED");
   });
+
+  it("loads a discovered local skill through the base tool surface", async () => {
+    const output = JSON.parse(
+      await runToolByName("load_skill", JSON.stringify({ name: "openspec-apply-change" })),
+    ) as { ok?: boolean; skill?: { name?: string; content?: string } };
+
+    expect(output.ok).toBe(true);
+    expect(output.skill?.name).toBe("openspec-apply-change");
+    expect(output.skill?.content).toContain("Implement tasks from an OpenSpec change");
+  });
 });

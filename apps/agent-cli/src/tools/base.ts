@@ -25,6 +25,7 @@ import {
   runScheduleRemove,
   SCHEDULER_TOOLS,
 } from "./scheduler.js";
+import { runListSkills, runLoadSkill, SKILL_TOOLS } from "./skills.js";
 import {
   TEAM_TOOLS,
   runTeamAddTeammate,
@@ -76,6 +77,8 @@ const REPLAY_SAFE_TOOLS = new Set([
   "team_read_inbox",
   "team_list_requests",
   "check_background",
+  "list_skills",
+  "load_skill",
 ]);
 
 export const BASE_UNKNOWN_TOOL = JSON.stringify({
@@ -96,6 +99,8 @@ const BASE_HANDLERS: Record<string, ToolHandler> = {
   memory_search: async (args) =>
     DEFAULT_MEMORY_SERVICE.runSearch(args.query, args.limit, args.layer, args.type),
   memory_list: async (args) => DEFAULT_MEMORY_SERVICE.runList(args.layer, args.limit),
+  list_skills: async () => runListSkills(),
+  load_skill: async (args) => runLoadSkill(args.name),
   todo: async (args) => runTodo(args.items),
   task_create: async (args) => runTaskCreate(args.subject, args.description),
   task_update: async (args) =>
@@ -187,6 +192,7 @@ export const BASE_TOOLS: ChatCompletionTool[] = [
     },
   },
   ...MEMORY_TOOLS,
+  ...SKILL_TOOLS,
   ...TODO_TOOLS,
   ...TASK_TOOLS,
   ...SCHEDULER_TOOLS,
@@ -248,6 +254,9 @@ export function previewBaseToolCall(name: string, argumentsJson: string): string
   const args = parseToolArgs(argumentsJson);
   if (typeof args.path === "string") {
     return `${name} ${args.path}`;
+  }
+  if (typeof args.name === "string" && name === "load_skill") {
+    return `${name} ${args.name}`;
   }
   if (name === "task_get" && args.task_id !== undefined) {
     return `${name} ${String(args.task_id)}`;

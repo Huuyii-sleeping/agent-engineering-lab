@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 import OpenAI from "openai";
 import * as process from "node:process";
 import type { StaticPromptSource } from "./prompt/types.js";
+import { getConfiguredSkills, toPromptSkillBlocks } from "./skills/loader.js";
 
 dotenv.config({ override: true });
 
@@ -15,10 +16,11 @@ const TOOL_PROMPT_LINES = [
 ];
 
 export function getStaticPromptSource(): StaticPromptSource {
+  const configuredSkills = getConfiguredSkills();
   return {
     core: CORE_PROMPT,
     tools: [...TOOL_PROMPT_LINES],
-    skills: [],
+    skills: toPromptSkillBlocks(configuredSkills.selected),
     rules: [],
   };
 }

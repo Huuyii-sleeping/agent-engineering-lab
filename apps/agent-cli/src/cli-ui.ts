@@ -6,6 +6,7 @@ import {
 } from "./cli-palette.js";
 import type { CliComposePreview } from "./cli-composer.js";
 import type { CliPermissionMode } from "./cli-permissions.js";
+import type { PromptDump } from "./prompt/inspect.js";
 import type { CliTranscriptEntry, CliTranscriptView } from "./cli-transcript.js";
 import { getCliWorkflowLabel, type CliWorkflowMode } from "./cli-workflow.js";
 
@@ -128,6 +129,19 @@ export type CliComposerSnapshot = {
   charCount: number;
 };
 
+export type CliSkillSummary = {
+  name: string;
+  description: string;
+  path: string;
+  root: string;
+  loaded: boolean;
+};
+
+export type CliSkillDetail = CliSkillSummary & {
+  metadata: Record<string, string>;
+  content: string;
+};
+
 export type CliHelpTopicId =
   | "overview"
   | "draft"
@@ -190,11 +204,14 @@ const CLI_HELP_TOPICS = [
       "/config     show config paths and current theme",
       "/model      show or set model: /model gpt-5-mini",
       "/permissions show or set permission mode",
+      "/skills     list discovered local skills",
+      "/skill <x>  inspect one local skill body",
+      "/prompt     dump the current stable system prompt",
       "/cost       show token and cost summary",
       "/compact    compact current session history",
       "/redraw     clear screen and redraw banner",
     ],
-    examples: ["/status", "/model gpt-5-mini", "/permissions plan", "/compact 5"],
+    examples: ["/status", "/skills", "/skill openspec-apply-change", "/prompt"],
   },
   {
     id: "approvals",
@@ -462,7 +479,7 @@ export function renderCliGuideLines(input: {
       "brief     /compose starts a multi-line draw brief",
       "review    /preview inspects numbered brief lines",
       "browse    /history last /search bug /peek 12 /tail",
-      "runtime   /status /model /permissions /cost",
+      "runtime   /status /model /permissions /skills /prompt",
       input.pendingApprovals > 0 ? "approvals /approvals /approve <id> /reject <id>" : "workspace /doctor /add-dir /theme",
       "shell     !<cmd> runs a direct shell command",
     ];
@@ -473,7 +490,7 @@ export function renderCliGuideLines(input: {
     "palette   /palette review /palette open 2",
     input.sessionCount > 0 ? "session   /sessions /use 2 /next /prev" : "session   /clear creates the first local session",
     "browse    /history last /search bug /peek 12 /tail",
-    input.startupIssue ? "startup   /model <id> reactivates local chat" : "runtime   /status /model /permissions /cost",
+    input.startupIssue ? "startup   /model <id> reactivates local chat" : "runtime   /status /model /permissions /skills /prompt",
     input.pendingApprovals > 0
       ? "approvals /approvals /approve <id> /reject <id>"
       : "workspace /doctor /add-dir /theme",
@@ -574,7 +591,7 @@ export function renderCliHelp(topic: CliHelpTopicId = "overview"): string {
     "sessions   /sessions /use /next /prev /clear",
     "workflow   /workflow agent | /workflow draw",
     "browse     /history /search /peek /tail",
-    "runtime    /status /config /model /permissions /cost /compact /redraw",
+    "runtime    /status /config /model /permissions /skills /skill /prompt /cost /compact /redraw",
     "approvals  /approvals /approve /reject /doctor /add-dir /tools /theme",
     "shell      !<cmd> | /exit",
     "TUI keys    Ctrl+G help | Ctrl+K palette | Ctrl+N next | Ctrl+P prev | Ctrl+L redraw | Esc cancel draft",
@@ -703,6 +720,70 @@ export function renderCliTools(tools: Array<Record<string, string>>): string {
     ...tools.map((tool) =>
       `${accent(tool.name ?? "(unnamed)")} [${tool.target ?? "unknown"}] ${truncate(tool.description ?? "", 96)}`,
     ),
+  ].join("\n");
+}
+
+export function renderCliSkills(skills: CliSkillSummary[], loadedNames: string[], missingNames: string[]): string {
+  const lines = [strong("Skills")];
+  if (skills.length === 0) {
+    lines.push(muted("No skills discovered. Add .codex/skills/**/SKILL.md or set AGENT_SKILL_ROOTS."));
+  } else {
+    lines.push(
+      ...skills.map((skill) => {
+        const state = skill.loaded ? success("loaded") : muted("available");
+        const description = skill.description ? ` ${truncate(skill.description, 72)}` : "";
+        return `${state} ${accent(skill.name)}${description}\n${muted("path")}  ${skill.path}`;
+      }),
+    );
+  }
+  if (loadedNames.length > 0) {
+    lines.push("", `${muted("prompt")}  ${loadedNames.join(", ")}`);
+  }
+  if (missingNames.length > 0) {
+    lines.push(`${muted("missing")}  ${missingNames.join(", ")}`);
+  }
+  return lines.join("\n");
+}
+
+export function renderCliSkillDetail(skill: CliSkillDetail): string {
+  const metadataEntries = Object.entries(skill.metadata);
+  const metadata = metadataEntries.length > 0
+    ? metadataEntries.map(([key, value]) => `${key}: ${value}`).join(", ")
+    : "(none)";
+  return [
+    strong(`Skill: ${skill.name}`),
+    renderRows([
+      { label: "state", value: skill.loaded ? "loaded into prompt" : "available" },
+      { label: "path", value: skill.path },
+      { label: "root", value: skill.root },
+      { label: "meta", value: metadata },
+    ]),
+    "",
+    skill.content.trim() || muted("(empty skill body)"),
+  ].join("\n");
+}
+
+export function renderCliPromptDump(
+  dump: PromptDump,
+  loadedNames: string[],
+  missingNames: string[],
+): string {
+  return [
+    strong("System Prompt"),
+    renderRows([
+      { label: "stable", value: dump.stableSectionIds.join(", ") || "(none)" },
+      { label: "dynamic", value: dump.dynamicSectionIds.join(", ") || "(none)" },
+      { label: "skills", value: loadedNames.join(", ") || "(none)" },
+      { label: "missing", value: missingNames.join(", ") || "(none)" },
+    ]),
+    "",
+    strong("Primary"),
+    dump.primarySystemPrompt || muted("(empty)"),
+    "",
+    strong("Supplemental"),
+    dump.supplementalSystemMessages.length > 0
+      ? dump.supplementalSystemMessages.join("\n\n---\n\n")
+      : muted("(none)"),
   ].join("\n");
 }
 

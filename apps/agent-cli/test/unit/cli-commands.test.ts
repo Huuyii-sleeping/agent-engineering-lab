@@ -131,6 +131,42 @@ function createContext(input: {
         },
       }),
     ),
+    listSkills: vi.fn(async () => ({
+      skills: [
+        {
+          name: "openspec-apply-change",
+          description: "Implement tasks from an OpenSpec change.",
+          path: ".codex/skills/openspec-apply-change/SKILL.md",
+          root: ".codex/skills",
+          loaded: true,
+        },
+      ],
+      loadedNames: ["openspec-apply-change"],
+      missingNames: ["missing-skill"],
+    })),
+    getSkill: vi.fn(async (name: string) =>
+      name === "openspec-apply-change"
+        ? {
+            name,
+            description: "Implement tasks from an OpenSpec change.",
+            path: ".codex/skills/openspec-apply-change/SKILL.md",
+            root: ".codex/skills",
+            metadata: { name, description: "Implement tasks from an OpenSpec change." },
+            content: "Use the apply workflow.",
+            loaded: true,
+          }
+        : null,
+    ),
+    dumpSystemPrompt: vi.fn(async () => ({
+      dump: {
+        primarySystemPrompt: "## Core\ncore\n\n## Skills\n### openspec-apply-change\nUse the apply workflow.",
+        supplementalSystemMessages: [],
+        stableSectionIds: ["core", "skills"],
+        dynamicSectionIds: [],
+      },
+      loadedNames: ["openspec-apply-change"],
+      missingNames: ["missing-skill"],
+    })),
     getUsage: vi.fn(async () => ({
       model,
       sessionPromptTokens: 120,
@@ -297,6 +333,9 @@ describe("cli-commands", () => {
     expect((await dispatchCliCommand("/approvals", context)).output).toContain("Approvals");
     expect((await dispatchCliCommand("/approve apr_1", context)).output).toContain("approved apr_1");
     expect((await dispatchCliCommand("/reject apr_1", context)).output).toContain("rejected apr_1");
+    expect((await dispatchCliCommand("/skills", context)).output).toContain("openspec-apply-change");
+    expect((await dispatchCliCommand("/skill openspec-apply-change", context)).output).toContain("Use the apply workflow.");
+    expect((await dispatchCliCommand("/prompt", context)).output).toContain("System Prompt");
     expect((await dispatchCliCommand("/cost", context)).output).toContain("Usage");
     expect((await dispatchCliCommand("/compact 5", context)).output).toContain("Compact");
     expect((await dispatchCliCommand("/add-dir /tmp/demo", context)).output).toContain("added workspace root /tmp/demo");
@@ -437,6 +476,14 @@ describe("cli-commands", () => {
     expect((await dispatchCliCommand("/peek nope", context)).output).toContain("invalid transcript entry");
     expect((await dispatchCliCommand("/peek next", createContext())).output).toContain("peek not active");
     expect((await dispatchCliCommand("/peek 99", context)).output).toContain("transcript entry not found");
+  });
+
+  it("validates skill and prompt inspection commands", async () => {
+    const context = createContext();
+
+    expect((await dispatchCliCommand("/skill", context)).output).toContain("missing skill name");
+    expect((await dispatchCliCommand("/skill missing", context)).output).toContain("skill not found");
+    expect((await dispatchCliCommand("/prompt other", context)).output).toContain("unknown prompt action");
   });
 
   it("rejects unknown commands with stable help", async () => {

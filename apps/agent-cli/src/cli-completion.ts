@@ -27,6 +27,8 @@ const CLI_COMMANDS = [
   "compact",
   "add-dir",
   "tools",
+  "skills",
+  "skill",
   "sessions",
   "workflow",
   "palette",
@@ -38,6 +40,7 @@ const CLI_COMMANDS = [
   "prev",
   "doctor",
   "theme",
+  "prompt",
   "redraw",
   "clear",
   "new",
@@ -116,6 +119,9 @@ function completionCandidatesForCommand(command: string, context: CliCompletionC
   }
   if (command === "history") {
     return ["/history", "/history first", "/history prev", "/history next", "/history last"];
+  }
+  if (command === "prompt") {
+    return ["/prompt", "/prompt dump"];
   }
   if (command === "palette") {
     const openCandidates = context.paletteEntryCount > 0

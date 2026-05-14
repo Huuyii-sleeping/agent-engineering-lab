@@ -9,7 +9,10 @@ import {
   renderCliHelp,
   renderCliPalette,
   renderCliPermissions,
+  renderCliPromptDump,
   renderCliSessions,
+  renderCliSkillDetail,
+  renderCliSkills,
   renderCliStatus,
   renderCliTranscript,
   renderCliTools,
@@ -20,6 +23,8 @@ import {
   type CliConfigSnapshot,
   type CliPermissionSnapshot,
   type CliSessionSummary,
+  type CliSkillDetail,
+  type CliSkillSummary,
   type CliStatusSnapshot,
   type CliThemeName,
   type CliUsageSnapshot,
@@ -27,6 +32,7 @@ import {
 import type { CliDoctorReport } from "./cli-ui.js";
 import type { CliPaletteCandidate, CliPaletteView } from "./cli-palette.js";
 import type { CliPermissionMode } from "./cli-permissions.js";
+import type { PromptDump } from "./prompt/inspect.js";
 import type { CliTranscriptView } from "./cli-transcript.js";
 import type { CliWorkflowMode } from "./cli-workflow.js";
 
@@ -55,6 +61,9 @@ export type CliCommandContext = {
   listApprovals(status?: "pending" | "approved" | "rejected" | "expired" | "consumed"): Promise<string>;
   approveRequest(requestId: string): Promise<string>;
   rejectRequest(requestId: string): Promise<string>;
+  listSkills(): Promise<{ skills: CliSkillSummary[]; loadedNames: string[]; missingNames: string[] }>;
+  getSkill(name: string): Promise<CliSkillDetail | null>;
+  dumpSystemPrompt(): Promise<{ dump: PromptDump; loadedNames: string[]; missingNames: string[] }>;
   getUsage(): Promise<CliUsageSnapshot>;
   compactSession(keepRecent?: number): Promise<CliCompactSummary>;
   isComposing(): boolean;
@@ -599,6 +608,33 @@ export async function dispatchCliCommand(
   if (parsed.command === "tools") {
     return { handled: true, output: renderCliTools(await context.listTools()) };
   }
+  if (parsed.command === "skills") {
+    const catalog = await context.listSkills();
+    return {
+      handled: true,
+      output: renderCliSkills(catalog.skills, catalog.loadedNames, catalog.missingNames),
+    };
+  }
+  if (parsed.command === "skill") {
+    const skillName = parsed.args.join(" ").trim();
+    if (!skillName) {
+      return {
+        handled: true,
+        output: renderCliError("missing skill name", "use /skill <name>"),
+      };
+    }
+    const skill = await context.getSkill(skillName);
+    if (!skill) {
+      return {
+        handled: true,
+        output: renderCliError("skill not found", `unknown skill: ${skillName}`, "run /skills to inspect available skills"),
+      };
+    }
+    return {
+      handled: true,
+      output: renderCliSkillDetail(skill),
+    };
+  }
   if (parsed.command === "sessions") {
     return { handled: true, output: renderCliSessions(context.listSessions()) };
   }
@@ -804,6 +840,20 @@ export async function dispatchCliCommand(
       output: `theme set to ${nextTheme}`,
       clearScreen: true,
       showBanner: true,
+    };
+  }
+  if (parsed.command === "prompt") {
+    const action = parsed.args.join(" ").trim().toLowerCase();
+    if (action && action !== "dump") {
+      return {
+        handled: true,
+        output: renderCliError("unknown prompt action", `unsupported prompt action: ${action}`, "use /prompt or /prompt dump"),
+      };
+    }
+    const promptDump = await context.dumpSystemPrompt();
+    return {
+      handled: true,
+      output: renderCliPromptDump(promptDump.dump, promptDump.loadedNames, promptDump.missingNames),
     };
   }
   if (parsed.command === "redraw") {

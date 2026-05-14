@@ -219,6 +219,22 @@ function staticPaletteCandidates(context: CliPaletteContext): CliPaletteCandidat
       keywords: ["permissions", "approvals", "mode", "runtime"],
     },
     {
+      id: "runtime-skills",
+      group: "runtime",
+      title: "List discovered skills",
+      summary: "Inspect the local skill catalog and prompt-loaded skills.",
+      command: "/skills",
+      keywords: ["skills", "skill", "runtime", "catalog", "prompt"],
+    },
+    {
+      id: "runtime-prompt",
+      group: "runtime",
+      title: "Dump current system prompt",
+      summary: "Inspect the current stable prompt pipeline output without using the model.",
+      command: "/prompt",
+      keywords: ["prompt", "system", "runtime", "inspect", "dump"],
+    },
+    {
       id: "runtime-cost",
       group: "runtime",
       title: "Inspect usage and cost",

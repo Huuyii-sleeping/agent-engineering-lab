@@ -30,6 +30,7 @@ import {
   renderCliSection,
   setCliUiTheme,
 } from "./cli-ui.js";
+import { inspectPromptSource } from "./prompt/inspect.js";
 import { CliTranscriptBrowserStore } from "./cli-transcript.js";
 import type { CliWorkflowMode } from "./cli-workflow.js";
 import { createClient, getStaticPromptSource } from "./config.js";
@@ -42,6 +43,7 @@ import { runUserQuery } from "./runtime/query-runtime.js";
 import { RUNTIME_CONFIG } from "./runtime-config.js";
 import type { RuntimeCoordinationServiceLike } from "./services/index.js";
 import { runCliShellShortcut } from "./cli-shell.js";
+import { getSkillCatalog, loadSkill } from "./skills/loader.js";
 import { compactMessages, withCompactRuntimeContext } from "./tools/context-compact.js";
 import { addWorkspaceRoot } from "./workspace-roots.js";
 
@@ -434,6 +436,40 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
             "security_reject",
             JSON.stringify({ request_id: requestId }),
           );
+        },
+        listSkills: async () => {
+          const catalog = getSkillCatalog();
+          return {
+            skills: catalog.available,
+            loadedNames: catalog.loadedNames,
+            missingNames: catalog.missingNames,
+          };
+        },
+        getSkill: async (name) => {
+          const skill = loadSkill(name);
+          if (!skill) {
+            return null;
+          }
+          const catalog = getSkillCatalog();
+          return {
+            name: skill.name,
+            description: skill.description,
+            path: skill.path,
+            root: skill.root,
+            metadata: skill.metadata,
+            content: skill.content,
+            loaded: catalog.loadedNames.some(
+              (loadedName) => loadedName.toLowerCase() === skill.name.toLowerCase(),
+            ),
+          };
+        },
+        dumpSystemPrompt: async () => {
+          const catalog = getSkillCatalog();
+          return {
+            dump: inspectPromptSource(app.promptSource),
+            loadedNames: catalog.loadedNames,
+            missingNames: catalog.missingNames,
+          };
         },
         getUsage: () => collectCliUsageSnapshot(app.model),
         compactSession: async (keepRecent) =>
