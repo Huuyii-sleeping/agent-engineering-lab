@@ -11,9 +11,10 @@ describe("cli-palette", () => {
       { id: "s01-home", messageCount: 3, busy: false, active: true },
       { id: "s02-review", messageCount: 7, busy: true, active: false },
     ],
-    helpTopics: ["draft", "sessions", "runtime", "approvals", "transcript", "palette", "all"],
+    helpTopics: ["draft", "sessions", "runtime", "approvals", "transcript", "workflow", "palette", "all"],
     composerActive: false,
     pendingApprovals: 2,
+    workflow: "agent",
   } as const;
 
   it("builds static and dynamic palette candidates", () => {
@@ -22,6 +23,7 @@ describe("cli-palette", () => {
     expect(candidates.some((candidate) => candidate.command === "/help draft")).toBe(true);
     expect(candidates.some((candidate) => candidate.command === "/use 2")).toBe(true);
     expect(candidates.some((candidate) => candidate.command === "/approvals")).toBe(true);
+    expect(candidates.some((candidate) => candidate.command === "/workflow draw")).toBe(true);
   });
 
   it("fuzzy-searches local palette candidates", () => {

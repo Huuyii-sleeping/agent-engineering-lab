@@ -80,6 +80,7 @@ describe("entrypoints/tui", () => {
   it("renders dashboard state", () => {
     const dashboard = renderTerminalTuiDashboard({
       model: "gpt-test",
+      workflow: "draw",
       activeSessionId: "s01",
       composerActive: true,
       composerLineCount: 2,
@@ -99,6 +100,7 @@ describe("entrypoints/tui", () => {
       paletteBarLines: [
         "input     review",
         "selected  [1/2] /use 2",
+        "group     session",
         "preview   review session",
         "mode      live filter active | Enter open | Up/Down move | Esc close",
       ],
@@ -108,7 +110,8 @@ describe("entrypoints/tui", () => {
         "selected  [1] /use 2",
         "actions   Enter open | Up/Down move | Esc close",
         "",
-        "> [1] session  Switch to session [2] s02-review -> /use 2",
+        "group     session",
+        "> [1] Switch to session [2] s02-review -> /use 2",
       ],
     });
 
@@ -127,6 +130,7 @@ describe("entrypoints/tui", () => {
     expect(dashboard).toContain("Command Bar");
     expect(dashboard).toContain("Palette Results");
     expect(dashboard).toContain("palette-live");
+    expect(dashboard).toContain("tui/draw");
     expect(dashboard).toContain("live filter active");
     expect(dashboard).toContain("Enter open | Up/Down move | Esc close");
     expect(dashboard).toContain("preview review session");
@@ -198,7 +202,9 @@ describe("entrypoints/tui", () => {
     });
 
     expect(renderTerminalTuiPaletteBarLines(state)).toContain("preview   <<review>> session");
+    expect(renderTerminalTuiPaletteBarLines(state)).toContain("group     session");
     expect(renderTerminalTuiPaletteLines(state).join("\n")).toContain("s02-<<review>>");
+    expect(renderTerminalTuiPaletteLines(state).join("\n")).toContain("group     session");
     expect(renderTerminalTuiPaletteLines(state)).toContain("search    Type to filter locally");
   });
 
@@ -402,11 +408,37 @@ describe("entrypoints/tui", () => {
       composer: new CliComposerStore(),
       transcriptBrowser,
     });
+    const peekPrev = await handleTerminalTuiCommand({
+      line: "/peek prev",
+      service,
+      activeSessionId: "s01",
+      model: "gpt-test",
+      setModel: vi.fn(async () => true),
+      composer: new CliComposerStore(),
+      transcriptBrowser,
+    });
 
     expect(history.output).toContain("window");
     expect(prev.output).toContain("#02");
     expect(search.output).toContain("query     hook");
     expect(peek.output).toContain("entry     #04 assistant");
+    expect(peekPrev.output).toContain("entry     #03 user");
+  });
+
+  it("supports workflow commands in the TUI", async () => {
+    const service = createService();
+    const result = await handleTerminalTuiCommand({
+      line: "/workflow draw",
+      service,
+      activeSessionId: "s01",
+      model: "gpt-test",
+      workflow: "agent",
+      setModel: vi.fn(async () => true),
+      composer: new CliComposerStore(),
+    });
+
+    expect(result.workflow).toBe("draw");
+    expect(result.output).toContain("workflow set to draw");
   });
 
   it("supports palette commands in the TUI", async () => {

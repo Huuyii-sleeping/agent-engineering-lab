@@ -1,8 +1,13 @@
 import * as process from "node:process";
-import type { CliPaletteCandidate, CliPaletteView } from "./cli-palette.js";
+import {
+  getCliPaletteGroupLabel,
+  type CliPaletteCandidate,
+  type CliPaletteView,
+} from "./cli-palette.js";
 import type { CliComposePreview } from "./cli-composer.js";
 import type { CliPermissionMode } from "./cli-permissions.js";
 import type { CliTranscriptEntry, CliTranscriptView } from "./cli-transcript.js";
+import { getCliWorkflowLabel, type CliWorkflowMode } from "./cli-workflow.js";
 
 export type CliThemeName = "atlas" | "plain";
 
@@ -123,7 +128,16 @@ export type CliComposerSnapshot = {
   charCount: number;
 };
 
-export type CliHelpTopicId = "overview" | "draft" | "sessions" | "runtime" | "approvals" | "transcript" | "palette" | "all";
+export type CliHelpTopicId =
+  | "overview"
+  | "draft"
+  | "sessions"
+  | "runtime"
+  | "approvals"
+  | "transcript"
+  | "workflow"
+  | "palette"
+  | "all";
 
 export type CliCloseoutInput = {
   sessionId: string | null;
@@ -207,11 +221,29 @@ const CLI_HELP_TOPICS = [
       "/history    browse the current transcript window",
       "/history prev move to the previous transcript page",
       "/history next move to the next transcript page",
+      "/history first jump to the first transcript page",
+      "/history last jump to the latest transcript page",
       "/search <q> search the current transcript",
+      "/search next move to the next search match",
+      "/search prev move to the previous search match",
       "/peek <n>   expand one transcript entry",
+      "/peek next  expand the next transcript entry",
+      "/peek prev  expand the previous transcript entry",
       "/tail       return to the live tail view",
     ],
-    examples: ["/history", "/search bug", "/peek 12", "/tail"],
+    examples: ["/history last", "/search bug", "/search next", "/peek 12", "/peek next", "/tail"],
+  },
+  {
+    id: "workflow",
+    title: "Workflow",
+    summary: "Switch the local CLI/TUI surface between general agent work and draw-oriented brief work.",
+    commands: [
+      "/workflow       show the active local workflow",
+      "/workflow agent switch to the general agent workflow surface",
+      "/workflow draw  switch to the draw-oriented workflow surface",
+      "/palette draw   open workflow-related local launcher actions",
+    ],
+    examples: ["/workflow", "/workflow draw", "/workflow agent", "/palette workflow"],
   },
   {
     id: "palette",
@@ -355,12 +387,18 @@ export function resetCliUiForTest(): void {
   COLOR_ENABLED = true;
 }
 
-export function renderCliPrompt(sessionId: string | null, composer?: CliComposerSnapshot): string {
+export function renderCliPrompt(
+  sessionId: string | null,
+  composer?: CliComposerSnapshot,
+  workflow: CliWorkflowMode = "agent",
+): string {
   const suffix = sessionId ? sessionId.slice(0, 6) : "shell";
+  const workflowLabel = getCliWorkflowLabel(workflow);
   if (composer?.active) {
-    return `${warning(`draft:${suffix}`)} ${muted(`${composer.lineCount}l/${composer.charCount}c`)} ${muted("..")} `;
+    const prefix = workflow === "draw" ? `draw-draft:${suffix}` : `draft:${suffix}`;
+    return `${warning(prefix)} ${muted(`${composer.lineCount}l/${composer.charCount}c`)} ${muted("..")} `;
   }
-  return `${accent(`agent:${suffix}`)} ${muted(">>")} `;
+  return `${accent(`${workflowLabel}:${suffix}`)} ${muted(">>")} `;
 }
 
 export function listCliHelpTopics(): Array<Exclude<CliHelpTopicId, "overview">> {
@@ -400,25 +438,41 @@ export function renderCliGuideLines(input: {
   sessionCount: number;
   pendingApprovals: number;
   startupIssue?: boolean;
+  workflow?: CliWorkflowMode;
 }): string[] {
+  const workflow = input.workflow ?? "agent";
   if (input.composerActive) {
+    const composeLabel = workflow === "draw" ? "brief" : "draft";
     return [
       "help      /help draft or Ctrl+G",
-      "palette   /palette or Ctrl+K launches local actions",
-      "draft     plain text appends to the current draft",
+      workflow === "draw" ? "workflow  /workflow agent | /workflow draw" : "palette   /palette or Ctrl+K launches local actions",
+      `${composeLabel.padEnd(9)} plain text appends to the current ${composeLabel}`,
       "review    /preview shows numbered draft lines",
       "edit      /pop or /pop 3 removes recent lines",
       "send      /send submits the current draft",
       "cancel    Esc or /cancel discards the draft",
-      "browse    /history /search <q> /peek <n> /tail",
+      "browse    /history /search <q> /search next /peek <n>",
       "session   /next /prev keeps local navigation nearby",
+    ];
+  }
+  if (workflow === "draw") {
+    return [
+      "workflow  /workflow agent | /workflow draw",
+      "palette   /palette draw /palette workflow",
+      "brief     /compose starts a multi-line draw brief",
+      "review    /preview inspects numbered brief lines",
+      "browse    /history last /search bug /peek 12 /tail",
+      "runtime   /status /model /permissions /cost",
+      input.pendingApprovals > 0 ? "approvals /approvals /approve <id> /reject <id>" : "workspace /doctor /add-dir /theme",
+      "shell     !<cmd> runs a direct shell command",
     ];
   }
   return [
     "help      /help /help sessions /help palette",
+    "workflow  /workflow agent | /workflow draw",
     "palette   /palette review /palette open 2",
     input.sessionCount > 0 ? "session   /sessions /use 2 /next /prev" : "session   /clear creates the first local session",
-    "browse    /history /search bug /peek 12 /tail",
+    "browse    /history last /search bug /peek 12 /tail",
     input.startupIssue ? "startup   /model <id> reactivates local chat" : "runtime   /status /model /permissions /cost",
     input.pendingApprovals > 0
       ? "approvals /approvals /approve <id> /reject <id>"
@@ -514,10 +568,11 @@ export function renderCliHelp(topic: CliHelpTopicId = "overview"): string {
   }
   return [
     strong("Commands"),
-    "topics     /help draft | /help sessions | /help runtime | /help approvals | /help transcript | /help palette | /help all",
+    "topics     /help draft | /help sessions | /help runtime | /help approvals | /help transcript | /help workflow | /help palette | /help all",
     "palette    /palette /palette <query> /palette open <index>",
     "draft      /compose /preview /pop /send /cancel",
     "sessions   /sessions /use /next /prev /clear",
+    "workflow   /workflow agent | /workflow draw",
     "browse     /history /search /peek /tail",
     "runtime    /status /config /model /permissions /cost /compact /redraw",
     "approvals  /approvals /approve /reject /doctor /add-dir /tools /theme",
@@ -535,7 +590,24 @@ export function renderCliHelp(topic: CliHelpTopicId = "overview"): string {
 }
 
 function renderPaletteCandidateLine(candidate: CliPaletteCandidate, index: number): string {
-  return `[${index + 1}] ${candidate.group.padEnd(8)} ${truncate(candidate.title, 40)} -> ${candidate.command}`;
+  return `[${index + 1}] ${truncate(candidate.title, 52)} -> ${candidate.command}`;
+}
+
+function renderGroupedPaletteCandidateLines(candidates: CliPaletteCandidate[], maxEntries: number): string[] {
+  const visibleCandidates = candidates.slice(0, maxEntries);
+  const lines: string[] = [];
+  let currentGroup: CliPaletteCandidate["group"] | null = null;
+  for (const [index, candidate] of visibleCandidates.entries()) {
+    if (candidate.group !== currentGroup) {
+      if (lines.length > 0) {
+        lines.push("");
+      }
+      currentGroup = candidate.group;
+      lines.push(`group     ${getCliPaletteGroupLabel(candidate.group)}`);
+    }
+    lines.push(renderPaletteCandidateLine(candidate, index));
+  }
+  return lines;
 }
 
 export function renderCliPaletteLines(view: CliPaletteView, maxEntries = 8): string[] {
@@ -543,10 +615,9 @@ export function renderCliPaletteLines(view: CliPaletteView, maxEntries = 8): str
     `query     ${view.query || "(top actions)"}`,
     `results   ${view.candidates.length} shown / ${view.total} total`,
     "open      /palette open <index>",
+    "hints     grouped local actions",
     "",
-    ...(view.candidates.length > 0
-      ? view.candidates.slice(0, maxEntries).map((candidate, index) => renderPaletteCandidateLine(candidate, index))
-      : ["No palette candidates found."]),
+    ...(view.candidates.length > 0 ? renderGroupedPaletteCandidateLines(view.candidates, maxEntries) : ["No palette candidates found."]),
   ];
 }
 
@@ -577,7 +648,8 @@ export function renderCliTranscriptLines(view: CliTranscriptView, maxEntries = 1
   if (view.mode === "peek") {
     return [
       `entry     ${formatTranscriptIndex(view.entry.index)} ${view.entry.role} ${view.entry.lineCount} lines / ${view.entry.charCount} chars`,
-      `browse    /tail | /history | /search <query>`,
+      `browse    /peek prev | /peek next | /tail | /history`,
+      `nav       ${view.hasPrev ? "prev" : "-"} | ${view.hasNext ? "next" : "-"}`,
       `summary   ${truncate(view.entry.preview, 96)}`,
       "",
       ...renderTranscriptContentLines(view.entry, maxEntries),
@@ -588,15 +660,23 @@ export function renderCliTranscriptLines(view: CliTranscriptView, maxEntries = 1
     return [
       `query     ${view.query}`,
       `matches   ${view.matches.length} / ${view.total}`,
-      `browse    /peek <n> | /tail | /history`,
+      `focus     ${
+        view.selectedEntry
+          ? `[${view.selectedIndex + 1}/${view.matches.length}] ${formatTranscriptIndex(view.selectedEntry.index)} ${view.selectedEntry.role}`
+          : "(none)"
+      }`,
+      `browse    /search prev | /search next | /peek <n> | /tail`,
       "",
-      ...(matches.length > 0 ? matches.map(renderTranscriptEntrySummary) : ["No transcript matches found."]),
+      ...(matches.length > 0
+        ? matches.map((entry, index) => `${index === view.selectedIndex ? ">" : " "} ${renderTranscriptEntrySummary(entry)}`)
+        : ["No transcript matches found."]),
       ...(view.matches.length > matches.length ? [`... ${view.matches.length - matches.length} more match(es)`] : []),
     ];
   }
   return [
     `${view.mode === "tail" ? "tail" : "window"}      ${view.total === 0 ? "0/0" : `${view.start}-${view.end} / ${view.total}`}`,
-    `browse    /history prev | /history next | /search <query> | /peek <n> | /tail`,
+    `browse    /history first | /history prev | /history next | /history last`,
+    `detail    /search <query> | /peek <n> | /tail`,
     "",
     ...(view.entries.length > 0 ? view.entries.slice(0, maxEntries).map(renderTranscriptEntrySummary) : ["No transcript yet. Type a prompt or run /help."]),
   ];

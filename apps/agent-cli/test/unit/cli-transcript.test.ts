@@ -21,13 +21,21 @@ describe("cli-transcript", () => {
 
     const tail = store.tail("s01", messages);
     const history = store.history("s01", messages, "prev");
+    const first = store.history("s01", messages, "first");
+    const last = store.history("s01", messages, "last");
     const search = store.search("s01", messages, "hook");
+    const searchPrev = store.moveSearch("s01", messages, "prev");
     const peek = store.peek("s01", messages, 4);
+    const peekPrev = store.peekRelative("s01", messages, "prev");
 
     expect(tail).toMatchObject({ mode: "tail", start: 3, end: 4, total: 4 });
     expect(history).toMatchObject({ mode: "history", start: 1, end: 2, total: 4 });
-    expect(search).toMatchObject({ mode: "search", query: "hook", total: 4 });
+    expect(first).toMatchObject({ mode: "history", start: 1, end: 2, total: 4 });
+    expect(last).toMatchObject({ mode: "history", start: 3, end: 4, total: 4 });
+    expect(search).toMatchObject({ mode: "search", query: "hook", total: 4, selectedIndex: 0 });
+    expect(searchPrev).toMatchObject({ mode: "search", query: "hook", total: 4, selectedIndex: 0 });
     expect(search.mode === "search" ? search.matches[0]?.index : 0).toBe(4);
-    expect(peek).toMatchObject({ mode: "peek", total: 4, entry: { index: 4 } });
+    expect(peek).toMatchObject({ mode: "peek", total: 4, entry: { index: 4 }, hasPrev: true, hasNext: false });
+    expect(peekPrev).toMatchObject({ mode: "peek", total: 4, entry: { index: 3 } });
   });
 });

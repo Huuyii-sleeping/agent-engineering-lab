@@ -172,6 +172,7 @@ describe("cli-ui", () => {
     expect(renderCliHelp()).toContain("/compose");
     expect(renderCliHelp()).toContain("/next");
     expect(renderCliHelp()).toContain("/history");
+    expect(renderCliHelp()).toContain("/workflow agent");
     expect(renderCliHelp()).toContain("/palette");
     expect(renderCliHelp()).toContain("Ctrl+G help");
     expect(renderCliHelp()).toContain("Ctrl+K palette");
@@ -179,12 +180,15 @@ describe("cli-ui", () => {
     expect(renderCliHelp("draft")).toContain("/preview");
     expect(renderCliHelp("sessions")).toContain("/use <x>");
     expect(renderCliHelp("transcript")).toContain("/search <q>");
+    expect(renderCliHelp("workflow")).toContain("/workflow draw");
     expect(renderCliHelp("palette")).toContain("/palette open <n>");
     expect(renderCliHelp("all")).toContain("Help: Runtime");
     expect(renderCliHelp("all")).toContain("Help: Transcript");
+    expect(renderCliHelp("all")).toContain("Help: Workflow");
     expect(renderCliHelp("all")).toContain("Help: Palette");
     expect(listCliHelpTopics()).toContain("runtime");
     expect(listCliHelpTopics()).toContain("transcript");
+    expect(listCliHelpTopics()).toContain("workflow");
     expect(listCliHelpTopics()).toContain("palette");
     expect(resolveCliHelpTopic("draft")).toBe("draft");
     expect(resolveCliHelpTopic("missing")).toBeNull();
@@ -194,14 +198,22 @@ describe("cli-ui", () => {
         sessionCount: 2,
         pendingApprovals: 1,
       }),
-    ).toContain("browse    /history /search <q> /peek <n> /tail");
+    ).toContain("browse    /history /search <q> /search next /peek <n>");
     expect(
       renderCliGuideLines({
         composerActive: false,
         sessionCount: 2,
         pendingApprovals: 0,
       }),
-    ).toContain("browse    /history /search bug /peek 12 /tail");
+    ).toContain("browse    /history last /search bug /peek 12 /tail");
+    expect(
+      renderCliGuideLines({
+        composerActive: false,
+        sessionCount: 2,
+        pendingApprovals: 0,
+        workflow: "draw",
+      }),
+    ).toContain("workflow  /workflow agent | /workflow draw");
     expect(
       renderCliShortcutLines({
         composerActive: false,
@@ -227,6 +239,17 @@ describe("cli-ui", () => {
             charCount: 23,
           },
         ],
+        selectedIndex: 0,
+        selectedEntry: {
+          index: 4,
+          role: "assistant",
+          content: "hook blocked during run",
+          preview: "hook blocked during run",
+          lineCount: 1,
+          charCount: 23,
+        },
+        hasPrevMatch: false,
+        hasNextMatch: false,
       }),
     ).toContain("query     hook");
     expect(
@@ -241,6 +264,8 @@ describe("cli-ui", () => {
           lineCount: 1,
           charCount: 23,
         },
+        hasPrev: true,
+        hasNext: false,
       }),
     ).toContain("entry     #04 assistant");
     expect(renderCliError("startup", "MODEL_ID missing", "run /doctor")).toContain("next  run /doctor");
@@ -260,6 +285,22 @@ describe("cli-ui", () => {
         ],
       }).join("\n"),
     ).toContain("/palette open <index>");
+    expect(
+      renderCliPaletteLines({
+        query: "review",
+        total: 2,
+        candidates: [
+          {
+            id: "session-review",
+            group: "session",
+            title: "Switch to session [2] s02-review",
+            summary: "review session",
+            command: "/use 2",
+            keywords: ["review"],
+          },
+        ],
+      }).join("\n"),
+    ).toContain("group     session");
     expect(
       renderCliPalette({
         query: "review",

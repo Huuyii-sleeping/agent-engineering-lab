@@ -31,6 +31,7 @@ import {
   setCliUiTheme,
 } from "./cli-ui.js";
 import { CliTranscriptBrowserStore } from "./cli-transcript.js";
+import type { CliWorkflowMode } from "./cli-workflow.js";
 import { createClient, getStaticPromptSource } from "./config.js";
 import { summarizeDeliveryReport } from "./delivery-types.js";
 import { dropPendingApprovalReplay, popPendingApprovalReplay } from "./runtime/query-tool-approvals.js";
@@ -219,6 +220,7 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
   sessions.set(initialSession.id, initialSession);
   let activeSessionId = initialSession.id;
   let agentBusy = false;
+  let workflow: CliWorkflowMode = "agent";
   let waitingForInput = false;
   const rl = createInterface({
     input,
@@ -270,15 +272,15 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
     renderCliBanner({
       title: "Agent CLI",
       workspace: path.basename(process.cwd()),
-      mode: "interactive",
+      mode: `interactive/${workflow}`,
       model: app.model,
       sessionId: activeSessionId,
-      commands: ["/help", "/palette", "/history", "/next", "/compose", "/status"],
+      commands: ["/help", "/workflow", "/palette", "/history", "/next", "/compose", "/status"],
     });
   const printAsyncEvent = (label: string, content: string) => {
     renderAsyncCliEvent({
       output,
-      prompt: renderCliPrompt(activeSessionId, getComposerSnapshot(activeSessionId)),
+      prompt: renderCliPrompt(activeSessionId, getComposerSnapshot(activeSessionId), workflow),
       label,
       content,
       waitingForInput,
@@ -319,7 +321,7 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
       let query = "";
       try {
         waitingForInput = true;
-        query = await rl.question(renderCliPrompt(activeSessionId, getComposerSnapshot(activeSessionId)));
+        query = await rl.question(renderCliPrompt(activeSessionId, getComposerSnapshot(activeSessionId), workflow));
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ERR_USE_AFTER_CLOSE") {
           break;
@@ -368,7 +370,7 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
         listTools: async () => app.toolService.listToolMetadata(),
         getStatus: async () =>
           collectCliStatusSnapshot({
-            mode: "interactive",
+            mode: `interactive/${workflow}`,
             activeSessionId,
             sessionCount: sessions.size,
             bridgeEndpoint: "/events",
@@ -454,6 +456,11 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
           setCliUiTheme(theme);
           return true;
         },
+        getWorkflow: () => workflow,
+        setWorkflow: (nextWorkflow) => {
+          workflow = nextWorkflow;
+          return true;
+        },
         showPalette: async (query = "") =>
           paletteStore.search(
             activeSessionId,
@@ -467,13 +474,16 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
               helpTopics: listCliHelpTopics(),
               composerActive: composer.isActive(activeSessionId),
               pendingApprovals: (await collectCliPermissionSnapshot()).pendingApprovals,
+              workflow,
             },
             query,
           ),
         openPalette: (index) => paletteStore.open(activeSessionId, index),
         showTranscript: (direction = "current") => transcriptBrowser.history(activeSessionId, getActiveSession().history, direction),
         searchTranscript: (query) => transcriptBrowser.search(activeSessionId, getActiveSession().history, query),
+        moveTranscriptSearch: (direction) => transcriptBrowser.moveSearch(activeSessionId, getActiveSession().history, direction),
         peekTranscript: (entryIndex) => transcriptBrowser.peek(activeSessionId, getActiveSession().history, entryIndex),
+        moveTranscriptPeek: (direction) => transcriptBrowser.peekRelative(activeSessionId, getActiveSession().history, direction),
         tailTranscript: () => transcriptBrowser.tail(activeSessionId, getActiveSession().history),
       });
       if (command.handled) {

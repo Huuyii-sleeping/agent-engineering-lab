@@ -7,7 +7,7 @@ describe("cli-completion", () => {
       { id: "s01-home", messageCount: 2, busy: false, active: true },
       { id: "s02-review", messageCount: 1, busy: false, active: false },
     ],
-    helpTopics: ["draft", "sessions", "runtime", "approvals", "transcript", "all"],
+    helpTopics: ["draft", "sessions", "runtime", "approvals", "transcript", "workflow", "all"],
     transcriptEntryCount: 14,
     paletteEntryCount: 3,
     model: "gpt-test",
@@ -34,13 +34,19 @@ describe("cli-completion", () => {
   it("completes parameterized runtime commands", () => {
     const [permissionHits] = completeCliLine("/permissions ", context);
     const [historyHits] = completeCliLine("/history ", context);
+    const [workflowHits] = completeCliLine("/workflow ", context);
+    const [searchHits] = completeCliLine("/search ", context);
     const [paletteHits] = completeCliLine("/palette ", context);
 
     expect(permissionHits).toContain("/permissions plan");
+    expect(historyHits).toContain("/history first");
     expect(historyHits).toContain("/history prev");
     expect(historyHits).toContain("/history next");
+    expect(historyHits).toContain("/history last");
+    expect(workflowHits).toContain("/workflow draw");
+    expect(searchHits).toContain("/search next");
     expect(paletteHits).toContain("/palette review");
     expect(paletteHits).toContain("/palette open 1");
-    expect(paletteHits).toContain("/palette sessions");
+    expect(paletteHits).toContain("/palette workflow");
   });
 });

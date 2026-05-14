@@ -28,6 +28,7 @@ import type { CliDoctorReport } from "./cli-ui.js";
 import type { CliPaletteCandidate, CliPaletteView } from "./cli-palette.js";
 import type { CliPermissionMode } from "./cli-permissions.js";
 import type { CliTranscriptView } from "./cli-transcript.js";
+import type { CliWorkflowMode } from "./cli-workflow.js";
 
 export type CliCommandResult =
   | { handled: false }
@@ -71,11 +72,15 @@ export type CliCommandContext = {
   runDoctor(): Promise<CliDoctorReport>;
   getTheme(): CliThemeName;
   setTheme(theme: CliThemeName): boolean;
+  getWorkflow(): CliWorkflowMode;
+  setWorkflow(mode: CliWorkflowMode): boolean;
   showPalette(query?: string): Promise<CliPaletteView>;
   openPalette(index: number): CliPaletteCandidate | null;
-  showTranscript(direction?: "current" | "next" | "prev"): CliTranscriptView;
+  showTranscript(direction?: "current" | "next" | "prev" | "first" | "last"): CliTranscriptView;
   searchTranscript(query: string): CliTranscriptView;
+  moveTranscriptSearch(direction: "next" | "prev"): CliTranscriptView | null;
   peekTranscript(entryIndex: number): CliTranscriptView | null;
+  moveTranscriptPeek(direction: "next" | "prev"): CliTranscriptView | null;
   tailTranscript(): CliTranscriptView;
 };
 
@@ -597,6 +602,28 @@ export async function dispatchCliCommand(
   if (parsed.command === "sessions") {
     return { handled: true, output: renderCliSessions(context.listSessions()) };
   }
+  if (parsed.command === "workflow") {
+    const nextWorkflow = parsed.args[0]?.trim().toLowerCase();
+    if (!nextWorkflow) {
+      return { handled: true, output: `workflow: ${context.getWorkflow()}` };
+    }
+    if (nextWorkflow !== "agent" && nextWorkflow !== "draw") {
+      return {
+        handled: true,
+        output: renderCliError(
+          "unknown workflow",
+          `unsupported workflow: ${nextWorkflow}`,
+          "use /workflow agent or /workflow draw",
+        ),
+      };
+    }
+    context.setWorkflow(nextWorkflow);
+    return {
+      handled: true,
+      output: `workflow set to ${nextWorkflow}`,
+      showBanner: true,
+    };
+  }
   if (parsed.command === "palette") {
     const paletteAction = parsed.args[0]?.trim().toLowerCase();
     if (paletteAction === "open") {
@@ -650,18 +677,42 @@ export async function dispatchCliCommand(
   }
   if (parsed.command === "history") {
     const direction = parsed.args[0]?.trim().toLowerCase();
-    if (direction && direction !== "next" && direction !== "prev") {
+    if (direction && direction !== "next" && direction !== "prev" && direction !== "first" && direction !== "last") {
       return {
         handled: true,
-        output: renderCliError("unknown history action", `unsupported history action: ${parsed.args[0]}`, "use /history, /history prev, or /history next"),
+        output: renderCliError(
+          "unknown history action",
+          `unsupported history action: ${parsed.args[0]}`,
+          "use /history, /history first, /history prev, /history next, or /history last",
+        ),
       };
     }
     return {
       handled: true,
-      output: renderCliTranscript(context.showTranscript(direction === "next" || direction === "prev" ? direction : "current")),
+      output: renderCliTranscript(
+        context.showTranscript(
+          direction === "next" || direction === "prev" || direction === "first" || direction === "last"
+            ? direction
+            : "current",
+        ),
+      ),
     };
   }
   if (parsed.command === "search") {
+    const action = parsed.args[0]?.trim().toLowerCase();
+    if ((action === "next" || action === "prev") && parsed.args.length === 1) {
+      const view = context.moveTranscriptSearch(action);
+      if (!view) {
+        return {
+          handled: true,
+          output: renderCliError("search not active", "run /search <query> before moving across matches"),
+        };
+      }
+      return {
+        handled: true,
+        output: renderCliTranscript(view),
+      };
+    }
     const query = parsed.args.join(" ").trim();
     if (!query) {
       return {
@@ -675,6 +726,20 @@ export async function dispatchCliCommand(
     };
   }
   if (parsed.command === "peek") {
+    const relativeDirection = parsed.args[0]?.trim().toLowerCase();
+    if ((relativeDirection === "next" || relativeDirection === "prev") && parsed.args.length === 1) {
+      const view = context.moveTranscriptPeek(relativeDirection);
+      if (!view) {
+        return {
+          handled: true,
+          output: renderCliError("peek not active", "run /peek <index> before moving to adjacent transcript entries"),
+        };
+      }
+      return {
+        handled: true,
+        output: renderCliTranscript(view),
+      };
+    }
     const rawIndex = parsed.args[0]?.trim() ?? "";
     const entryIndex = Number(rawIndex);
     if (!rawIndex || !Number.isInteger(entryIndex) || entryIndex <= 0) {

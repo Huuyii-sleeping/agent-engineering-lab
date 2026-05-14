@@ -9,7 +9,13 @@ import { createAgentAppRuntime, type AgentAppRuntimeDeps } from "../bootstrap/ap
 import { dispatchCliCommand } from "../cli-commands.js";
 import { completeCliLine } from "../cli-completion.js";
 import { CliComposerStore } from "../cli-composer.js";
-import { CliPaletteStore, type CliPaletteCandidate, type CliPaletteContext, type CliPaletteView } from "../cli-palette.js";
+import {
+  CliPaletteStore,
+  getCliPaletteGroupLabel,
+  type CliPaletteCandidate,
+  type CliPaletteContext,
+  type CliPaletteView,
+} from "../cli-palette.js";
 import {
   collectCliConfigSnapshot,
   collectCliPermissionSnapshot,
@@ -39,6 +45,7 @@ import {
 import { createClient, getStaticPromptSource } from "../config.js";
 import { runCliShellShortcut } from "../cli-shell.js";
 import { CliTranscriptBrowserStore } from "../cli-transcript.js";
+import type { CliWorkflowMode } from "../cli-workflow.js";
 import { compactMessages } from "../tools/context-compact.js";
 import { addWorkspaceRoot } from "../workspace-roots.js";
 
@@ -73,6 +80,7 @@ function getToolRunner(service: TerminalTuiServiceLike):
 
 export type TerminalTuiState = {
   model: string;
+  workflow?: CliWorkflowMode;
   activeSessionId: string | null;
   composerActive?: boolean;
   composerLineCount?: number;
@@ -204,7 +212,7 @@ function renderTerminalTuiPaletteCandidateLine(
   query: string,
 ): string {
   const marker = index === selectedIndex ? ">" : " ";
-  return `${marker} [${index + 1}] ${candidate.group.padEnd(8)} ${highlightTerminalTuiPaletteQuery(candidate.title, query)} -> ${highlightTerminalTuiPaletteQuery(candidate.command, query)}`;
+  return `${marker} [${index + 1}] ${highlightTerminalTuiPaletteQuery(candidate.title, query)} -> ${highlightTerminalTuiPaletteQuery(candidate.command, query)}`;
 }
 
 export function renderTerminalTuiPaletteLines(
@@ -212,6 +220,19 @@ export function renderTerminalTuiPaletteLines(
   maxEntries = 6,
 ): string[] {
   const selected = getTerminalTuiSelectedPaletteCandidate(state);
+  const visibleCandidates = state.view.candidates.slice(0, maxEntries);
+  const groupedLines: string[] = [];
+  let currentGroup: CliPaletteCandidate["group"] | null = null;
+  for (const [index, candidate] of visibleCandidates.entries()) {
+    if (candidate.group !== currentGroup) {
+      if (groupedLines.length > 0) {
+        groupedLines.push("");
+      }
+      currentGroup = candidate.group;
+      groupedLines.push(`group     ${getCliPaletteGroupLabel(candidate.group)}`);
+    }
+    groupedLines.push(renderTerminalTuiPaletteCandidateLine(candidate, index, state.selectedIndex, state.query));
+  }
   return [
     `query     ${state.query || "(top actions)"}`,
     `results   ${state.view.candidates.length} shown / ${state.view.total} total`,
@@ -221,11 +242,7 @@ export function renderTerminalTuiPaletteLines(
     "actions   Enter open | Up/Down move | Esc close",
     "search    Type to filter locally",
     "",
-    ...(state.view.candidates.length > 0
-      ? state.view.candidates
-          .slice(0, maxEntries)
-          .map((candidate, index) => renderTerminalTuiPaletteCandidateLine(candidate, index, state.selectedIndex, state.query))
-      : ["No palette candidates found."]),
+    ...(state.view.candidates.length > 0 ? groupedLines : ["No palette candidates found."]),
   ];
 }
 
@@ -287,6 +304,7 @@ export function renderTerminalTuiPaletteBarLines(state: TerminalTuiPaletteState)
   return [
     `input     ${state.query || "(top actions)"}`,
     `selected  ${selected ? `[${state.selectedIndex + 1}/${state.view.candidates.length}] ${selected.command}` : "(none)"}`,
+    `group     ${selected ? getCliPaletteGroupLabel(selected.group) : "(none)"}`,
     `preview   ${selected ? highlightTerminalTuiPaletteQuery(selected.summary, state.query) : "no candidate selected"}`,
     "mode      live filter active | Enter open | Up/Down move | Esc close",
   ];
@@ -301,10 +319,10 @@ export function renderTerminalTuiDashboard(state: TerminalTuiState): string {
   const header = renderCliBanner({
     title: "Agent CLI",
     workspace: process.cwd().split("/").filter(Boolean).pop() ?? process.cwd(),
-    mode: "tui",
+    mode: state.workflow ? `tui/${state.workflow}` : "tui",
     model: state.model,
     sessionId: state.activeSessionId,
-    commands: ["/help", "/palette", "^G", "^K", "/next", "/compose", "/status"],
+    commands: ["/help", "/workflow", "/palette", "^G", "^K", "/next", "/compose", "/status"],
   });
   const leftColumn = [
     ...renderCliPanel({
@@ -460,15 +478,25 @@ export async function handleTerminalTuiCommand(input: {
   service: TerminalTuiServiceLike;
   activeSessionId: string | null;
   model: string;
+  workflow?: CliWorkflowMode;
   startupIssue?: Error | null;
   setModel(model: string): Promise<boolean>;
+  setWorkflow?(mode: CliWorkflowMode): boolean;
   composer: CliComposerStore;
   transcriptBrowser?: CliTranscriptBrowserStore;
   paletteStore?: CliPaletteStore;
-}): Promise<{ activeSessionId: string | null; output: string; exit: boolean; clearScreen?: boolean; showBanner?: boolean }> {
+}): Promise<{
+  activeSessionId: string | null;
+  workflow: CliWorkflowMode;
+  output: string;
+  exit: boolean;
+  clearScreen?: boolean;
+  showBanner?: boolean;
+}> {
   const transcriptBrowser = input.transcriptBrowser ?? new CliTranscriptBrowserStore();
   const paletteStore = input.paletteStore ?? new CliPaletteStore();
   const toolRunner = getToolRunner(input.service);
+  let workflow = input.workflow ?? "agent";
   const listSessionSummaries = () =>
     input.service.listSessions().map((session) => ({
       id: session.id,
@@ -484,7 +512,7 @@ export async function handleTerminalTuiCommand(input: {
     listTools: async () => input.service.toolsMetadata(),
     getStatus: async () =>
       collectCliStatusSnapshot({
-        mode: "tui",
+        mode: `tui/${workflow}`,
         activeSessionId: input.activeSessionId,
         sessionCount: input.service.listSessions().length,
         bridgeEndpoint: String(
@@ -542,6 +570,11 @@ export async function handleTerminalTuiCommand(input: {
       setCliUiTheme(theme);
       return true;
     },
+    getWorkflow: () => workflow,
+    setWorkflow: (nextWorkflow) => {
+      workflow = nextWorkflow;
+      return input.setWorkflow ? input.setWorkflow(nextWorkflow) : true;
+    },
     showPalette: async (query = "") =>
       paletteStore.search(
         input.activeSessionId,
@@ -550,6 +583,7 @@ export async function handleTerminalTuiCommand(input: {
           helpTopics: listCliHelpTopics(),
           composerActive: input.composer.isActive(input.activeSessionId),
           pendingApprovals: (await collectCliPermissionSnapshot()).pendingApprovals,
+          workflow,
         },
         query,
       ),
@@ -566,11 +600,23 @@ export async function handleTerminalTuiCommand(input: {
         .find((item) => item.id === input.activeSessionId) ?? input.service.listSessions().at(-1);
       return transcriptBrowser.search(input.activeSessionId, session?.history ?? [], query);
     },
+    moveTranscriptSearch: (direction) => {
+      const session = input.service
+        .listSessions()
+        .find((item) => item.id === input.activeSessionId) ?? input.service.listSessions().at(-1);
+      return transcriptBrowser.moveSearch(input.activeSessionId, session?.history ?? [], direction);
+    },
     peekTranscript: (entryIndex) => {
       const session = input.service
         .listSessions()
         .find((item) => item.id === input.activeSessionId) ?? input.service.listSessions().at(-1);
       return transcriptBrowser.peek(input.activeSessionId, session?.history ?? [], entryIndex);
+    },
+    moveTranscriptPeek: (direction) => {
+      const session = input.service
+        .listSessions()
+        .find((item) => item.id === input.activeSessionId) ?? input.service.listSessions().at(-1);
+      return transcriptBrowser.peekRelative(input.activeSessionId, session?.history ?? [], direction);
     },
     tailTranscript: () => {
       const session = input.service
@@ -583,6 +629,7 @@ export async function handleTerminalTuiCommand(input: {
     if (!command.submitPrompt) {
       return {
         activeSessionId: command.nextSessionId ?? input.activeSessionId,
+        workflow,
         output: command.output,
         exit: Boolean(command.exit),
         clearScreen: command.clearScreen,
@@ -595,6 +642,7 @@ export async function handleTerminalTuiCommand(input: {
     if (input.startupIssue) {
       return {
         activeSessionId: nextSessionId,
+        workflow,
         output: [
           ...prefixOutput,
           renderCliError("model not ready", input.startupIssue.message, "set /model <id> before sending prompts"),
@@ -616,6 +664,7 @@ export async function handleTerminalTuiCommand(input: {
       const error = sessionResult.result.error as { message?: unknown } | undefined;
       return {
         activeSessionId: resolvedSessionId,
+        workflow,
         output: [
           ...prefixOutput,
           renderCliError("chat failed", String(error?.message ?? "chat failed")),
@@ -628,6 +677,7 @@ export async function handleTerminalTuiCommand(input: {
     }
     return {
       activeSessionId: resolvedSessionId,
+      workflow,
       output: [...prefixOutput, ...sessionResult.logs, renderCliSection("Assistant", String(sessionResult.result.assistant ?? ""))]
         .filter(Boolean)
         .join("\n"),
@@ -639,19 +689,21 @@ export async function handleTerminalTuiCommand(input: {
 
   const line = input.line.trim();
   if (!line) {
-    return { activeSessionId: input.activeSessionId, output: "", exit: false };
+    return { activeSessionId: input.activeSessionId, workflow, output: "", exit: false };
   }
 
   if (line.startsWith("!")) {
     if (!toolRunner) {
       return {
         activeSessionId: input.activeSessionId,
+        workflow,
         output: renderCliError("shell unavailable", "direct shell mode is not available for this TUI service"),
         exit: false,
       };
     }
     return {
       activeSessionId: input.activeSessionId,
+      workflow,
       output: await runCliShellShortcut(line.slice(1), toolRunner),
       exit: false,
     };
@@ -660,6 +712,7 @@ export async function handleTerminalTuiCommand(input: {
   if (input.startupIssue) {
     return {
       activeSessionId: input.activeSessionId,
+      workflow,
       output: renderCliError("model not ready", input.startupIssue.message, "set /model <id> before sending prompts"),
       exit: false,
     };
@@ -677,12 +730,14 @@ export async function handleTerminalTuiCommand(input: {
     const error = result.error as { message?: unknown } | undefined;
     return {
       activeSessionId: nextSessionId,
+      workflow,
       output: [renderCliError("chat failed", String(error?.message ?? "chat failed")), ...logs].join("\n"),
       exit: false,
     };
   }
   return {
     activeSessionId: nextSessionId,
+    workflow,
     output: [...logs, renderCliSection("Assistant", String(result.assistant ?? ""))].filter(Boolean).join("\n"),
     exit: false,
   };
@@ -726,6 +781,7 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
   let paletteState = createTerminalTuiPaletteState();
   let activeSessionId: string | null = null;
   let currentModel = process.env.MODEL_ID?.trim() || "unset-model";
+  let currentWorkflow: CliWorkflowMode = "agent";
   let lastOutput =
     startupIssue?.message
       ? renderCliError("startup", startupIssue.message, "use /model <id> to activate the TUI")
@@ -761,7 +817,7 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
           active: composer.isActive(activeSessionId),
           lineCount: composer.lineCount(activeSessionId),
           charCount: composer.preview(activeSessionId)?.charCount ?? 0,
-        });
+        }, currentWorkflow);
 
   const buildPaletteContext = async (): Promise<CliPaletteContext> => {
     const permissions = await collectCliPermissionSnapshot();
@@ -775,6 +831,7 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
       helpTopics: listCliHelpTopics(),
       composerActive: composer.isActive(activeSessionId),
       pendingApprovals: permissions.pendingApprovals,
+      workflow: currentWorkflow,
     };
   };
 
@@ -804,7 +861,7 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
     const activeTranscriptSession = sessions.find((session) => session.id === activeSessionId) ?? sessions.at(-1);
     const transcriptView = transcriptBrowser.getView(activeSessionId, activeTranscriptSession?.history ?? []);
     const status = await collectCliStatusSnapshot({
-      mode: "tui",
+      mode: `tui/${currentWorkflow}`,
       activeSessionId,
       sessionCount: sessions.length,
       bridgeEndpoint: String(
@@ -823,6 +880,7 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
     output.write(
       `${renderClearScreen()}${renderTerminalTuiDashboard({
         model: currentModel,
+        workflow: currentWorkflow,
         activeSessionId,
         composerActive: composer.isActive(activeSessionId),
         composerLineCount: composer.lineCount(activeSessionId),
@@ -850,6 +908,7 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
         runtimeLines: [
           `workspace  ${status.workspace}`,
           `model      ${status.model}`,
+          `workflow   ${currentWorkflow}`,
           `session    ${status.activeSessionId ?? "(none)"}`,
           `position   ${sessions.length > 0 ? `${activeSessionIndex + 1}/${sessions.length}` : "0/0"}`,
           `draft      ${
@@ -873,6 +932,7 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
           sessionCount: sessions.length,
           pendingApprovals: status.pendingApprovals,
           startupIssue: Boolean(startupIssue),
+          workflow: currentWorkflow,
         }),
         shortcutLines: renderCliShortcutLines({
           composerActive: composer.isActive(activeSessionId),
@@ -882,11 +942,12 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
         paletteLines: paletteState.open ? renderTerminalTuiPaletteLines(paletteState, 6) : undefined,
         footerSegments: [
           `model ${status.model}`,
+          `workflow ${currentWorkflow}`,
           `session ${sessions.length > 0 ? `${activeSessionIndex + 1}/${sessions.length}` : "0/0"}`,
           "help /help ^G",
           paletteState.open ? "palette live ^K Esc Enter" : "palette /palette ^K",
           "switch /next /prev /use",
-          "browse /history /search /tail",
+          "browse /history /search /peek /tail",
           "keys ^G ^K ^N ^P ^L Esc",
           `permissions ${status.permissionMode}`,
           composer.isActive(activeSessionId)
@@ -1010,13 +1071,19 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
             service,
             activeSessionId,
             model: currentModel,
+            workflow: currentWorkflow,
             startupIssue,
             setModel,
+            setWorkflow: (nextWorkflow) => {
+              currentWorkflow = nextWorkflow;
+              return true;
+            },
             composer,
             paletteStore,
             transcriptBrowser,
           });
           activeSessionId = result.activeSessionId;
+          currentWorkflow = result.workflow;
           if (result.output) {
             lastOutput = result.output;
           }
@@ -1046,13 +1113,19 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
           service,
           activeSessionId,
           model: currentModel,
+          workflow: currentWorkflow,
           startupIssue,
           setModel,
+          setWorkflow: (nextWorkflow) => {
+            currentWorkflow = nextWorkflow;
+            return true;
+          },
           composer,
           paletteStore,
           transcriptBrowser,
         });
         activeSessionId = result.activeSessionId;
+        currentWorkflow = result.workflow;
         lastOutput = [
           `palette query '${paletteState.query || "(top actions)"}' [${paletteState.selectedIndex + 1}] -> ${selected.command}`,
           result.output,
@@ -1071,8 +1144,13 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
         service,
         activeSessionId,
         model: currentModel,
+        workflow: currentWorkflow,
         startupIssue,
         setModel,
+        setWorkflow: (nextWorkflow) => {
+          currentWorkflow = nextWorkflow;
+          return true;
+        },
         composer,
         paletteStore,
         transcriptBrowser,
@@ -1083,6 +1161,7 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
         closePaletteState();
       }
       activeSessionId = result.activeSessionId;
+      currentWorkflow = result.workflow;
       if (result.output) {
         lastOutput = result.output;
       }

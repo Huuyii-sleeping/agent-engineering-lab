@@ -1,8 +1,9 @@
 import type { CliSessionSummary } from "./cli-ui.js";
+import type { CliWorkflowMode } from "./cli-workflow.js";
 
 export type CliPaletteCandidate = {
   id: string;
-  group: "help" | "draft" | "session" | "browse" | "runtime" | "approval";
+  group: "workflow" | "help" | "draft" | "session" | "browse" | "runtime" | "approval";
   title: string;
   summary: string;
   command: string;
@@ -20,6 +21,7 @@ export type CliPaletteContext = {
   helpTopics: string[];
   composerActive: boolean;
   pendingApprovals: number;
+  workflow: CliWorkflowMode;
 };
 
 type CliPaletteState = {
@@ -44,8 +46,56 @@ function uniqueById(candidates: CliPaletteCandidate[]): CliPaletteCandidate[] {
   return next;
 }
 
+export const CLI_PALETTE_GROUP_ORDER = [
+  "workflow",
+  "help",
+  "draft",
+  "session",
+  "browse",
+  "runtime",
+  "approval",
+] as const satisfies readonly CliPaletteCandidate["group"][];
+
+export function getCliPaletteGroupLabel(group: CliPaletteCandidate["group"]): string {
+  if (group === "workflow") {
+    return "workflow";
+  }
+  if (group === "help") {
+    return "help";
+  }
+  if (group === "draft") {
+    return "draft";
+  }
+  if (group === "session") {
+    return "session";
+  }
+  if (group === "browse") {
+    return "browse";
+  }
+  if (group === "runtime") {
+    return "runtime";
+  }
+  return "approval";
+}
+
 function staticPaletteCandidates(context: CliPaletteContext): CliPaletteCandidate[] {
   const base: CliPaletteCandidate[] = [
+    {
+      id: "workflow-agent",
+      group: "workflow",
+      title: context.workflow === "agent" ? "Agent workflow (active)" : "Switch to agent workflow",
+      summary: "Use the general-purpose local agent control surface.",
+      command: "/workflow agent",
+      keywords: ["workflow", "agent", "mode", "surface", "general"],
+    },
+    {
+      id: "workflow-draw",
+      group: "workflow",
+      title: context.workflow === "draw" ? "Draw workflow (active)" : "Switch to draw workflow",
+      summary: "Use the draw-oriented local brief and launcher surface.",
+      command: "/workflow draw",
+      keywords: ["workflow", "draw", "image", "art", "mode", "surface"],
+    },
     {
       id: "help-overview",
       group: "help",
@@ -67,26 +117,42 @@ function staticPaletteCandidates(context: CliPaletteContext): CliPaletteCandidat
     {
       id: "draft-compose",
       group: "draft",
-      title: context.composerActive ? "Resume draft mode" : "Start draft mode",
-      summary: "Compose a multi-line local draft before sending it.",
+      title:
+        context.workflow === "draw"
+          ? context.composerActive
+            ? "Resume draw brief"
+            : "Start draw brief"
+          : context.composerActive
+            ? "Resume draft mode"
+            : "Start draft mode",
+      summary:
+        context.workflow === "draw"
+          ? "Compose a multi-line local draw brief before handing it off."
+          : "Compose a multi-line local draft before sending it.",
       command: "/compose",
-      keywords: ["draft", "compose", "prompt", "multiline"],
+      keywords:
+        context.workflow === "draw"
+          ? ["draft", "compose", "draw", "image", "brief", "multiline"]
+          : ["draft", "compose", "prompt", "multiline"],
     },
     {
       id: "draft-preview",
       group: "draft",
-      title: "Preview current draft",
-      summary: "Inspect numbered draft lines and size.",
+      title: context.workflow === "draw" ? "Preview current draw brief" : "Preview current draft",
+      summary: context.workflow === "draw" ? "Inspect numbered draw brief lines and size." : "Inspect numbered draft lines and size.",
       command: "/preview",
-      keywords: ["draft", "preview", "lines"],
+      keywords: context.workflow === "draw" ? ["draft", "preview", "draw", "brief", "lines"] : ["draft", "preview", "lines"],
     },
     {
       id: "draft-send",
       group: "draft",
-      title: "Send current draft",
-      summary: "Submit the local draft into the model request path.",
+      title: context.workflow === "draw" ? "Send current draw brief" : "Send current draft",
+      summary:
+        context.workflow === "draw"
+          ? "Submit the local draw brief through the current prompt path."
+          : "Submit the local draft into the model request path.",
       command: "/send",
-      keywords: ["draft", "send", "submit"],
+      keywords: context.workflow === "draw" ? ["draft", "send", "submit", "draw", "brief"] : ["draft", "send", "submit"],
     },
     {
       id: "session-list",
@@ -206,6 +272,9 @@ function dynamicSessionCandidates(context: CliPaletteContext): CliPaletteCandida
 }
 
 function candidateRank(candidate: CliPaletteCandidate): number {
+  if (candidate.group === "workflow") {
+    return 5;
+  }
   if (candidate.group === "help") {
     return 10;
   }
@@ -302,11 +371,11 @@ export function searchCliPaletteCandidates(
     }))
     .filter((entry) => entry.score > 0)
     .sort((left, right) => {
-      if (right.score !== left.score) {
-        return right.score - left.score;
-      }
       if (candidateRank(left.candidate) !== candidateRank(right.candidate)) {
         return candidateRank(left.candidate) - candidateRank(right.candidate);
+      }
+      if (right.score !== left.score) {
+        return right.score - left.score;
       }
       return left.candidate.title.localeCompare(right.candidate.title);
     });

@@ -28,6 +28,7 @@ const CLI_COMMANDS = [
   "add-dir",
   "tools",
   "sessions",
+  "workflow",
   "palette",
   "history",
   "search",
@@ -48,8 +49,9 @@ const CLI_COMMANDS = [
 const APPROVAL_STATUSES = ["pending", "approved", "rejected", "expired", "consumed"];
 const PERMISSION_MODES = ["default", "accept-edits", "plan"];
 const THEMES = ["atlas", "plain"];
+const WORKFLOWS = ["agent", "draw"];
 const KNOWN_MODELS = ["gpt-5", "gpt-5-mini", "gpt-4o", "gpt-4o-mini"];
-const PALETTE_QUERIES = ["review", "session", "history", "help", "runtime", "approval", "draft"];
+const PALETTE_QUERIES = ["review", "session", "history", "help", "runtime", "approval", "draft", "workflow", "draw"];
 
 function uniqueValues(values: string[]): string[] {
   return [...new Set(values.filter(Boolean))];
@@ -98,6 +100,9 @@ function completionCandidatesForCommand(command: string, context: CliCompletionC
   if (command === "theme") {
     return THEMES.map((theme) => `/theme ${theme}`);
   }
+  if (command === "workflow") {
+    return WORKFLOWS.map((workflow) => `/workflow ${workflow}`);
+  }
   if (command === "approvals") {
     return APPROVAL_STATUSES.map((status) => `/approvals ${status}`);
   }
@@ -110,7 +115,7 @@ function completionCandidatesForCommand(command: string, context: CliCompletionC
     return uniqueValues(["/use latest", ...sessionIndexes, ...sessionIds]);
   }
   if (command === "history") {
-    return ["/history", "/history prev", "/history next"];
+    return ["/history", "/history first", "/history prev", "/history next", "/history last"];
   }
   if (command === "palette") {
     const openCandidates = context.paletteEntryCount > 0
@@ -123,9 +128,12 @@ function completionCandidatesForCommand(command: string, context: CliCompletionC
     return ["/palette", ...queryCandidates, ...openCandidates];
   }
   if (command === "peek") {
-    return listRecentTranscriptIndexes(context.transcriptEntryCount).map((index) => `/peek ${index}`);
+    return ["/peek prev", "/peek next", ...listRecentTranscriptIndexes(context.transcriptEntryCount).map((index) => `/peek ${index}`)];
   }
-  if (command === "approve" || command === "reject" || command === "search" || command === "add-dir") {
+  if (command === "search") {
+    return ["/search prev", "/search next"];
+  }
+  if (command === "approve" || command === "reject" || command === "add-dir") {
     return [];
   }
   return [];

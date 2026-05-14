@@ -4,6 +4,7 @@ import type { CliCommandContext } from "../../src/cli-commands.js";
 import { CliPaletteStore } from "../../src/cli-palette.js";
 import { resetCliPermissionModeForTest } from "../../src/cli-permissions.js";
 import { CliTranscriptBrowserStore } from "../../src/cli-transcript.js";
+import type { CliWorkflowMode } from "../../src/cli-workflow.js";
 
 function createContext(input: {
   activeSessionId?: string;
@@ -12,6 +13,7 @@ function createContext(input: {
 } = {}): CliCommandContext {
   let theme: "atlas" | "plain" = "atlas";
   let model = "gpt-test";
+  let workflow: CliWorkflowMode = "agent";
   let composeLines: string[] | null = null;
   const paletteStore = new CliPaletteStore();
   const transcriptBrowser = new CliTranscriptBrowserStore(2);
@@ -215,6 +217,11 @@ function createContext(input: {
       theme = nextTheme;
       return true;
     },
+    getWorkflow: () => workflow,
+    setWorkflow: (nextWorkflow) => {
+      workflow = nextWorkflow;
+      return true;
+    },
     showPalette: async (query = "") =>
       paletteStore.search(
         activeSessionId,
@@ -225,16 +232,19 @@ function createContext(input: {
             busy: session.busy,
             active: session.id === activeSessionId,
           })),
-          helpTopics: ["draft", "sessions", "runtime", "approvals", "transcript", "palette", "all"],
+          helpTopics: ["draft", "sessions", "runtime", "approvals", "transcript", "workflow", "palette", "all"],
           composerActive: Array.isArray(composeLines),
           pendingApprovals: 1,
+          workflow,
         },
         query,
       ),
     openPalette: (index) => paletteStore.open(activeSessionId, index),
     showTranscript: (direction = "current") => transcriptBrowser.history(activeSessionId, transcriptMessages, direction),
     searchTranscript: (query) => transcriptBrowser.search(activeSessionId, transcriptMessages, query),
+    moveTranscriptSearch: (direction) => transcriptBrowser.moveSearch(activeSessionId, transcriptMessages, direction),
     peekTranscript: (entryIndex) => transcriptBrowser.peek(activeSessionId, transcriptMessages, entryIndex),
+    moveTranscriptPeek: (direction) => transcriptBrowser.peekRelative(activeSessionId, transcriptMessages, direction),
     tailTranscript: () => transcriptBrowser.tail(activeSessionId, transcriptMessages),
   };
 }
@@ -280,6 +290,8 @@ describe("cli-commands", () => {
 
     expect((await dispatchCliCommand("/model", context)).output).toContain("gpt-test");
     expect((await dispatchCliCommand("/model gpt-5-mini", context)).output).toContain("model set to gpt-5-mini");
+    expect((await dispatchCliCommand("/workflow", context)).output).toContain("workflow: agent");
+    expect((await dispatchCliCommand("/workflow draw", context)).output).toContain("workflow set to draw");
     expect((await dispatchCliCommand("/permissions", context)).output).toContain("Permissions");
     expect((await dispatchCliCommand("/permissions plan", context)).output).toContain("mode");
     expect((await dispatchCliCommand("/approvals", context)).output).toContain("Approvals");
@@ -371,16 +383,22 @@ describe("cli-commands", () => {
 
     const history = await dispatchCliCommand("/history", context);
     const prev = await dispatchCliCommand("/history prev", context);
+    const last = await dispatchCliCommand("/history last", context);
     const search = await dispatchCliCommand("/search hook", context);
+    const searchNext = await dispatchCliCommand("/search next", context);
     const peek = await dispatchCliCommand("/peek 4", context);
+    const peekPrev = await dispatchCliCommand("/peek prev", context);
     const tail = await dispatchCliCommand("/tail", context);
 
     expect(history.output).toContain("Transcript");
     expect(history.output).toContain("window");
     expect(prev.output).toContain("#02");
+    expect(last.output).toContain("window");
     expect(search.output).toContain("query     hook");
+    expect(searchNext.output).toContain("focus");
     expect(search.output).toContain("#04");
     expect(peek.output).toContain("entry     #04 assistant");
+    expect(peekPrev.output).toContain("entry     #03 user");
     expect(tail.output).toContain("tail");
   });
 
@@ -415,7 +433,9 @@ describe("cli-commands", () => {
 
     expect((await dispatchCliCommand("/history nope", context)).output).toContain("unknown history action");
     expect((await dispatchCliCommand("/search", context)).output).toContain("missing search query");
+    expect((await dispatchCliCommand("/search next", createContext())).output).toContain("search not active");
     expect((await dispatchCliCommand("/peek nope", context)).output).toContain("invalid transcript entry");
+    expect((await dispatchCliCommand("/peek next", createContext())).output).toContain("peek not active");
     expect((await dispatchCliCommand("/peek 99", context)).output).toContain("transcript entry not found");
   });
 
