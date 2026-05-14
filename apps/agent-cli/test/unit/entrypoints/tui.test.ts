@@ -94,6 +94,11 @@ describe("entrypoints/tui", () => {
       shortcutLines: ["ctrl+g    help", "ctrl+k    palette", "ctrl+n    next session", "esc       cancel draft"],
       footerSegments: ["model gpt-test", "session 1/2", "help /help ^G", "palette /palette ^K", "switch /next /prev /use", "keys ^G ^K ^N ^P ^L Esc"],
       paletteOpen: true,
+      paletteBarLines: [
+        "input     review",
+        "selected  [1/2] /use 2",
+        "mode      live filter active | Enter open | Up/Down move | Esc close",
+      ],
       paletteLines: [
         "query     review",
         "results   2 shown / 2 total",
@@ -116,8 +121,10 @@ describe("entrypoints/tui", () => {
     expect(dashboard).toContain("ctrl+k palette");
     expect(dashboard).toContain("palette /palette ^K");
     expect(dashboard).toContain("keys ^G ^K ^N ^P ^L Esc");
-    expect(dashboard).toContain("Palette");
+    expect(dashboard).toContain("Command Bar");
+    expect(dashboard).toContain("Palette Results");
     expect(dashboard).toContain("palette-live");
+    expect(dashboard).toContain("live filter active");
     expect(dashboard).toContain("Enter open | Up/Down move | Esc close");
     expect(dashboard).toContain("actions /preview /send");
     expect(dashboard).toContain("/pop /cancel");

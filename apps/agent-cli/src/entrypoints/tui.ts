@@ -89,6 +89,7 @@ export type TerminalTuiState = {
   shortcutLines?: string[];
   footerSegments?: string[];
   paletteOpen?: boolean;
+  paletteBarLines?: string[];
   paletteLines?: string[];
 };
 
@@ -253,6 +254,26 @@ function sanitizeActivityText(value: string): string {
   return value.replace(/\u001b\[[0-9;]*m/g, "");
 }
 
+function visibleLength(value: string): number {
+  return value.replace(/\u001b\[[0-9;]*m/g, "").length;
+}
+
+function centerTerminalTuiBlock(lines: string[], width: number): string[] {
+  return lines.map((line) => {
+    const padding = Math.max(0, Math.floor((width - visibleLength(line)) / 2));
+    return `${" ".repeat(padding)}${line}`;
+  });
+}
+
+export function renderTerminalTuiPaletteBarLines(state: TerminalTuiPaletteState): string[] {
+  const selected = getTerminalTuiSelectedPaletteCandidate(state);
+  return [
+    `input     ${state.query || "(top actions)"}`,
+    `selected  ${selected ? `[${state.selectedIndex + 1}/${state.view.candidates.length}] ${selected.command}` : "(none)"}`,
+    "mode      live filter active | Enter open | Up/Down move | Esc close",
+  ];
+}
+
 export function renderTerminalTuiDashboard(state: TerminalTuiState): string {
   const width = Math.max(96, process.stdout.columns ?? 120);
   const gap = 2;
@@ -300,21 +321,9 @@ export function renderTerminalTuiDashboard(state: TerminalTuiState): string {
       title: "Conversation",
       width: mainWidth,
       tone: "neutral",
-      minBodyLines: state.paletteOpen ? 10 : 18,
+      minBodyLines: 18,
       lines: state.transcriptLines ?? ["No transcript yet."],
     }),
-    ...(state.paletteOpen
-      ? [
-          "",
-          ...renderCliPanel({
-            title: "Palette",
-            width: mainWidth,
-            tone: "accent",
-            minBodyLines: 8,
-            lines: state.paletteLines ?? ["No palette candidates found."],
-          }),
-        ]
-      : []),
   ];
   const draftPanel =
     state.composerActive
@@ -359,10 +368,37 @@ export function renderTerminalTuiDashboard(state: TerminalTuiState): string {
     }),
   ];
   const board = mergeCliColumns([leftColumn, centerColumn, rightColumn], gap).join("\n");
+  const paletteBar =
+    state.paletteOpen
+      ? renderCliPanel({
+          title: "Command Bar",
+          width: Math.max(48, width - 2),
+          tone: "accent",
+          minBodyLines: 3,
+          lines: state.paletteBarLines ?? ["input     (top actions)"],
+        })
+      : [];
+  const paletteOverlay =
+    state.paletteOpen
+      ? centerTerminalTuiBlock(
+          renderCliPanel({
+            title: "Palette Results",
+            width: Math.max(44, Math.min(88, width - 12)),
+            tone: "accent",
+            minBodyLines: 7,
+            lines: state.paletteLines ?? ["No palette candidates found."],
+          }),
+          width,
+        )
+      : [];
   return [
     header,
     `${renderCliBadge("full-screen", "accent")} ${renderCliBadge("tui", "success")} ${renderCliBadge(state.activeSessionId ? "session-live" : "session-empty", "warning")}${state.paletteOpen ? ` ${renderCliBadge("palette-live", "accent")}` : ""}`,
     "",
+    ...paletteBar,
+    ...(paletteBar.length > 0 ? [""] : []),
+    ...paletteOverlay,
+    ...(paletteOverlay.length > 0 ? [""] : []),
     board,
     "",
     renderCliFooter(state.footerSegments ?? [`model ${state.model}`, `sessions ${state.sessionCount}`, `tools ${state.toolCount}`], width),
@@ -824,6 +860,7 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
           composerActive: composer.isActive(activeSessionId),
         }),
         paletteOpen: paletteState.open,
+        paletteBarLines: paletteState.open ? renderTerminalTuiPaletteBarLines(paletteState) : undefined,
         paletteLines: paletteState.open ? renderTerminalTuiPaletteLines(paletteState, 6) : undefined,
         footerSegments: [
           `model ${status.model}`,
