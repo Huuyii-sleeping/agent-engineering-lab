@@ -1,9 +1,8 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AgentAppRuntimeDeps } from "../bootstrap/app-runtime.js";
+import { AgentHost } from "../host/agent-host.js";
 import {
-  createAgentSessionRecord,
   nowMs,
-  sortSessionsByCreatedAt,
   summarizeSession,
   summarizeSessionTranscript,
   type AgentSessionRecord,
@@ -57,9 +56,9 @@ function parseBody<T>(req: IncomingMessage): Promise<T> {
 }
 
 export class AgentService {
-  private readonly sessions = new Map<string, AgentSessionRecord>();
   private readonly eventSubscribers = new Set<AgentServiceEventSubscriber>();
   private eventCounter = 0;
+  private readonly host: AgentHost;
   private readonly client: AgentServiceDeps["client"];
   private readonly model: AgentServiceDeps["model"];
   private readonly promptSource: AgentServiceDeps["promptSource"];
@@ -74,7 +73,8 @@ export class AgentService {
   private readonly runtimeServices: AgentServiceDeps["runtimeServices"];
   private readonly queryEngine: AgentServiceDeps["queryEngine"];
 
-  constructor(deps: AgentServiceDeps) {
+  constructor(deps: AgentServiceDeps, host?: AgentHost) {
+    this.host = host ?? new AgentHost(deps);
     this.client = deps.client;
     this.model = deps.model;
     this.promptSource = deps.promptSource;
@@ -91,18 +91,18 @@ export class AgentService {
   }
 
   createSession(): AgentSessionRecord {
-    const record = createAgentSessionRecord();
-    this.sessions.set(record.id, record);
+    const record = this.host.createSessionSync();
+    void this.host.persistSession(record);
     this.emitEvent("session.created", { session: summarizeSession(record) });
     return record;
   }
 
   listSessions(): AgentSessionRecord[] {
-    return sortSessionsByCreatedAt(this.sessions.values());
+    return this.host.listSessions();
   }
 
   getSession(sessionId: string): AgentSessionRecord | null {
-    return this.sessions.get(sessionId) ?? null;
+    return this.host.getSession(sessionId);
   }
 
   async toolsMetadata(): Promise<Array<Record<string, string>>> {
@@ -241,6 +241,7 @@ export class AgentService {
     } finally {
       session.busy = false;
       session.updatedAt = nowMs();
+      await this.host.persistSession(session);
     }
   }
 }

@@ -2,6 +2,7 @@ import type OpenAI from "openai";
 import { Readable, Writable } from "node:stream";
 import { afterEach, describe, expect, it } from "vitest";
 import { AgentService, createAgentHttpServer } from "../../src/service-api/index.js";
+import { AgentHost } from "../../src/host/agent-host.js";
 import type { DeliveryServiceLike } from "../../src/services/delivery-service.js";
 import type { HookServiceLike } from "../../src/services/hook-service.js";
 import type { AgentRuntimeState } from "../../src/agent-loop.js";
@@ -176,6 +177,37 @@ describe("agent service", () => {
     expect(sessions).toHaveLength(2);
     expect(first.id).not.toBe(second.id);
     expect(sessions[0]?.id).toBe(first.id);
+  });
+
+  it("shares session state when multiple services use the same host", () => {
+    const sharedDeps = {
+      client: {} as OpenAI,
+      model: "fake-model",
+      promptSource: PROMPT_SOURCE,
+      toolService: createToolService(),
+      deliveryService: createDeliveryService(),
+      hookService: createHookService(),
+      memoryService: createMemoryService(),
+      notificationService: {
+        add: async () => undefined,
+        drain: async () => [],
+      },
+      modelPolicyService: createModelPolicyService(),
+      observabilityService: createObservabilityService(),
+      runtimeCoordinationService: {
+        runAutonomyTick: async () => ({ ok: true, action: "idle" }),
+        tickScheduler: async () => undefined,
+      },
+      runtimeServices: undefined,
+      queryEngine: createLoopRunner(),
+    } as unknown as ConstructorParameters<typeof AgentHost>[0];
+    const host = new AgentHost(sharedDeps);
+    const first = new AgentService(sharedDeps, host);
+    const second = new AgentService(sharedDeps, host);
+
+    const session = first.createSession();
+
+    expect(second.listSessions().map((item) => item.id)).toEqual([session.id]);
   });
 
   it("keeps chat history isolated per session", async () => {

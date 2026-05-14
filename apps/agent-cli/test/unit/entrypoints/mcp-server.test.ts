@@ -1,7 +1,9 @@
+import { Readable, Writable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import {
   AGENT_MCP_TOOLS,
   handleAgentMcpRequest,
+  runAgentMcpServer,
   type AgentMcpServiceLike,
 } from "../../../src/entrypoints/mcp-server.js";
 
@@ -139,5 +141,28 @@ describe("entrypoints/mcp-server", () => {
         message: "unknown MCP tool: missing",
       },
     });
+  });
+
+  it("initializes the provided host before serving stdio MCP traffic", async () => {
+    const host = {
+      initialize: vi.fn(async () => undefined),
+      runtime: vi.fn(() => ({})),
+    };
+    const output = new Writable({
+      write(_chunk, _encoding, callback) {
+        callback();
+      },
+    });
+
+    await runAgentMcpServer({
+      input: Readable.from([]),
+      output,
+      host: host as {
+        initialize(): Promise<void>;
+        runtime(): unknown;
+      },
+    });
+
+    expect(host.initialize).toHaveBeenCalledTimes(1);
   });
 });

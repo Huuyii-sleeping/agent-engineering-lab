@@ -1,3 +1,4 @@
+import { Readable, Writable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import { CliComposerStore } from "../../../src/cli/composer.js";
 import { CliPaletteStore } from "../../../src/cli/palette.js";
@@ -13,6 +14,7 @@ import {
   renderTerminalTuiPaletteLines,
   resolveTerminalTuiPaletteLiveQuery,
   resolveTerminalTuiShortcut,
+  runTerminalTui,
   updateTerminalTuiPaletteState,
   type TerminalTuiServiceLike,
 } from "../../../src/entrypoints/tui.js";
@@ -604,5 +606,52 @@ describe("entrypoints/tui", () => {
     expect(preview.output).toContain("01| first line");
     expect(preview.output).toContain("02|");
     expect(pop.output).toContain("removed 1 line(s)");
+  });
+
+  it("initializes the provided host before starting the terminal TUI", async () => {
+    const host = {
+      initialize: vi.fn(async () => undefined),
+      runtime: vi.fn(
+        () =>
+          ({
+            client: {},
+            model: "gpt-test",
+            promptSource: { core: "test", tools: [], skills: [], rules: [] },
+            toolService: {
+              listTools: async () => [],
+              listToolRegistrations: async () => [],
+              listToolMetadata: async () => [],
+              previewToolCall: () => "",
+              runToolByName: async () => "",
+            },
+            deliveryService: {},
+            hookService: {},
+            memoryService: {},
+            notificationService: {},
+            modelPolicyService: {},
+            observabilityService: {},
+            runtimeCoordinationService: {},
+            runtimeServices: {},
+            queryEngine: {},
+          }) as unknown,
+      ),
+      listSessions: vi.fn(() => []),
+    };
+
+    await runTerminalTui({
+      input: Readable.from(["/exit\n"]),
+      output: new Writable({
+        write(_chunk, _encoding, callback) {
+          callback();
+        },
+      }),
+      host: host as {
+        initialize(): Promise<void>;
+        runtime(): unknown;
+        listSessions(): [];
+      },
+    });
+
+    expect(host.initialize).toHaveBeenCalledTimes(1);
   });
 });

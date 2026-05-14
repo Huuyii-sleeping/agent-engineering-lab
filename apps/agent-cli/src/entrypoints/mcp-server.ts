@@ -1,6 +1,7 @@
 import { stdin, stdout } from "node:process";
 import { AgentService } from "../service-api/index.js";
 import { createAgentAppRuntime } from "../bootstrap/app-runtime.js";
+import { AgentHost } from "../host/agent-host.js";
 import { writeFrame } from "../tools/mcp-protocol.js";
 
 type JsonRpcId = string | number | null;
@@ -222,12 +223,18 @@ export type AgentMcpServerOptions = {
   input?: NodeJS.ReadableStream;
   output?: NodeJS.WritableStream;
   service?: AgentMcpServiceLike;
+  host?: Pick<AgentHost, "initialize" | "runtime">;
 };
 
 export async function runAgentMcpServer(opts: AgentMcpServerOptions = {}): Promise<void> {
   const input = opts.input ?? stdin;
   const output = opts.output ?? stdout;
-  const service = opts.service ?? new AgentService(createAgentAppRuntime());
+  let service = opts.service;
+  if (!service) {
+    const host = opts.host ?? new AgentHost(createAgentAppRuntime());
+    await host.initialize();
+    service = new AgentService(host.runtime(), host as AgentHost);
+  }
   const reader = new StdioFrameReader();
   let chain = Promise.resolve();
 

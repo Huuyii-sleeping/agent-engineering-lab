@@ -6,6 +6,7 @@ import type OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { AgentService } from "../service-api/index.js";
 import { createAgentAppRuntime, type AgentAppRuntimeDeps } from "../bootstrap/app-runtime.js";
+import { AgentHost } from "../host/agent-host.js";
 import { dispatchCliCommand } from "../cli/commands.js";
 import { completeCliLine } from "../cli/completion.js";
 import { CliComposerStore } from "../cli/composer.js";
@@ -790,26 +791,32 @@ export type TerminalTuiOptions = {
   service?: TerminalTuiServiceLike;
   input?: NodeJS.ReadableStream;
   output?: NodeJS.WritableStream;
+  host?: Pick<AgentHost, "initialize" | "runtime">;
 };
 
 export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<void> {
   let service = opts.service;
   let startupIssue: Error | null = null;
   if (!service) {
-    try {
-      service = new AgentService(createAgentAppRuntime());
-    } catch (error) {
-      if (error instanceof Error && error.message.includes("Missing environment variable: MODEL_ID")) {
-        startupIssue = error;
-        service = new AgentService(
-          createAgentAppRuntime({
-            client: {} as OpenAI,
-            model: "unset-model",
-            promptSource: getStaticPromptSource(),
-          }),
-        );
-      } else {
-        throw error;
+    if (opts.host) {
+      await opts.host.initialize();
+      service = new AgentService(opts.host.runtime(), opts.host as AgentHost);
+    } else {
+      try {
+        service = new AgentService(createAgentAppRuntime());
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("Missing environment variable: MODEL_ID")) {
+          startupIssue = error;
+          service = new AgentService(
+            createAgentAppRuntime({
+              client: {} as OpenAI,
+              model: "unset-model",
+              promptSource: getStaticPromptSource(),
+            }),
+          );
+        } else {
+          throw error;
+        }
       }
     }
   }

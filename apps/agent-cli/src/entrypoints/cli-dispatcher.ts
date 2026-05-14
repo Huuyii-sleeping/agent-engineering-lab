@@ -6,6 +6,7 @@ type CliMode =
   | "help"
   | "version"
   | "server"
+  | "daemon"
   | "print"
   | "mcp-server"
   | "tui"
@@ -17,6 +18,7 @@ export type CliInvocation =
   | { mode: "help" }
   | { mode: "version" }
   | { mode: "server" }
+  | { mode: "daemon" }
   | { mode: "print"; prompt: string }
   | { mode: "mcp-server" }
   | { mode: "tui" }
@@ -48,6 +50,7 @@ export function renderCliHelp(): string {
     "  agent-cli --print <prompt>      Run one headless query",
     "  agent-cli print <prompt>        Run one headless query",
     "  agent-cli server                Start HTTP service",
+    "  agent-cli daemon                Start background daemon host",
     "  agent-cli mcp-server            Start stdio MCP server",
     "  agent-cli tui                   Start terminal TUI console",
     "  agent-cli architecture          Print the local architecture overview",
@@ -73,6 +76,9 @@ export function parseCliInvocation(argv: string[]): CliInvocation {
   }
   if (normalized === "--server" || normalized === "server") {
     return { mode: "server" };
+  }
+  if (normalized === "--daemon" || normalized === "daemon") {
+    return { mode: "daemon" };
   }
   if (normalized === "--mcp-server" || normalized === "mcp-server") {
     return { mode: "mcp-server" };
@@ -128,6 +134,11 @@ export async function dispatchCli(
   if (invocation.mode === "server") {
     const { runServer } = await import("../service-api/server.js");
     await runServer();
+    return 0;
+  }
+  if (invocation.mode === "daemon") {
+    const { runDaemon } = await import("./daemon.js");
+    await runDaemon({ output: io.stdout, errorOutput: io.stderr });
     return 0;
   }
   if (invocation.mode === "mcp-server") {
