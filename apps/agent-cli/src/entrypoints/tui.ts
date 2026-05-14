@@ -181,13 +181,30 @@ export function getTerminalTuiSelectedPaletteCandidate(
   return state.view.candidates[state.selectedIndex] ?? null;
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function highlightTerminalTuiPaletteQuery(value: string, query: string): string {
+  const tokens = query.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) {
+    return value;
+  }
+  let next = value;
+  for (const token of tokens) {
+    next = next.replace(new RegExp(escapeRegExp(token), "gi"), (match) => `<<${match}>>`);
+  }
+  return next;
+}
+
 function renderTerminalTuiPaletteCandidateLine(
   candidate: CliPaletteCandidate,
   index: number,
   selectedIndex: number,
+  query: string,
 ): string {
   const marker = index === selectedIndex ? ">" : " ";
-  return `${marker} [${index + 1}] ${candidate.group.padEnd(8)} ${candidate.title} -> ${candidate.command}`;
+  return `${marker} [${index + 1}] ${candidate.group.padEnd(8)} ${highlightTerminalTuiPaletteQuery(candidate.title, query)} -> ${highlightTerminalTuiPaletteQuery(candidate.command, query)}`;
 }
 
 export function renderTerminalTuiPaletteLines(
@@ -202,12 +219,12 @@ export function renderTerminalTuiPaletteLines(
       selected ? `[${state.selectedIndex + 1}] ${selected.command}` : "(none)"
     }`,
     "actions   Enter open | Up/Down move | Esc close",
-    "search    Type a query and press Enter",
+    "search    Type to filter locally",
     "",
     ...(state.view.candidates.length > 0
       ? state.view.candidates
           .slice(0, maxEntries)
-          .map((candidate, index) => renderTerminalTuiPaletteCandidateLine(candidate, index, state.selectedIndex))
+          .map((candidate, index) => renderTerminalTuiPaletteCandidateLine(candidate, index, state.selectedIndex, state.query))
       : ["No palette candidates found."]),
   ];
 }
@@ -270,6 +287,7 @@ export function renderTerminalTuiPaletteBarLines(state: TerminalTuiPaletteState)
   return [
     `input     ${state.query || "(top actions)"}`,
     `selected  ${selected ? `[${state.selectedIndex + 1}/${state.view.candidates.length}] ${selected.command}` : "(none)"}`,
+    `preview   ${selected ? highlightTerminalTuiPaletteQuery(selected.summary, state.query) : "no candidate selected"}`,
     "mode      live filter active | Enter open | Up/Down move | Esc close",
   ];
 }

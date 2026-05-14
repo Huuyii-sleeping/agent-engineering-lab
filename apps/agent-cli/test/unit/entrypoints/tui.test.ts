@@ -6,8 +6,10 @@ import {
   createTerminalTuiPaletteState,
   getTerminalTuiSelectedPaletteCandidate,
   handleTerminalTuiCommand,
+  highlightTerminalTuiPaletteQuery,
   moveTerminalTuiPaletteSelection,
   renderTerminalTuiDashboard,
+  renderTerminalTuiPaletteBarLines,
   renderTerminalTuiPaletteLines,
   resolveTerminalTuiPaletteLiveQuery,
   resolveTerminalTuiShortcut,
@@ -97,6 +99,7 @@ describe("entrypoints/tui", () => {
       paletteBarLines: [
         "input     review",
         "selected  [1/2] /use 2",
+        "preview   review session",
         "mode      live filter active | Enter open | Up/Down move | Esc close",
       ],
       paletteLines: [
@@ -126,6 +129,7 @@ describe("entrypoints/tui", () => {
     expect(dashboard).toContain("palette-live");
     expect(dashboard).toContain("live filter active");
     expect(dashboard).toContain("Enter open | Up/Down move | Esc close");
+    expect(dashboard).toContain("preview review session");
     expect(dashboard).toContain("actions /preview /send");
     expect(dashboard).toContain("/pop /cancel");
   });
@@ -170,6 +174,32 @@ describe("entrypoints/tui", () => {
     expect(resolveTerminalTuiPaletteLiveQuery("review", { name: "backspace" })).toBe("revie");
     expect(resolveTerminalTuiPaletteLiveQuery("review", { ctrl: true, name: "n" })).toBeNull();
     expect(resolveTerminalTuiPaletteLiveQuery("review", { name: "enter", sequence: "\r" })).toBeNull();
+  });
+
+  it("highlights palette matches and renders preview text for the selected candidate", () => {
+    expect(highlightTerminalTuiPaletteQuery("review session", "review")).toBe("<<review>> session");
+    const state = updateTerminalTuiPaletteState({
+      state: createTerminalTuiPaletteState(),
+      open: true,
+      view: {
+        query: "review",
+        total: 1,
+        candidates: [
+          {
+            id: "review",
+            group: "session",
+            title: "Switch to session [2] s02-review",
+            summary: "review session",
+            command: "/use 2",
+            keywords: ["review"],
+          },
+        ],
+      },
+    });
+
+    expect(renderTerminalTuiPaletteBarLines(state)).toContain("preview   <<review>> session");
+    expect(renderTerminalTuiPaletteLines(state).join("\n")).toContain("s02-<<review>>");
+    expect(renderTerminalTuiPaletteLines(state)).toContain("search    Type to filter locally");
   });
 
   it("resolves supported keyboard shortcuts only when the prompt buffer is empty", () => {

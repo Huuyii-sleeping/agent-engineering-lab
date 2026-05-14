@@ -538,6 +538,11 @@ TUI 本地 command palette MUST 提供独立的选择面，而不是只输出静
 - **THEN** 用户可以通过 `Up` / `Down` 或 `Ctrl+N` / `Ctrl+P` 切换当前选中候选
 - **AND** 不进入模型请求链路
 
+#### Scenario: User scans compact palette results
+- **WHEN** palette 已打开且本地 query 非空
+- **THEN** TUI 在结果中明确标记 query 命中
+- **AND** command bar 展示当前选中候选的 preview summary
+
 ### Requirement: TUI local command palette MUST support query submission and direct execution
 TUI 本地 command palette MUST 支持本地 query 刷新与当前选中项直接执行。
 
