@@ -157,6 +157,23 @@ export function moveTerminalTuiPaletteSelection(
   };
 }
 
+export function resolveTerminalTuiPaletteLiveQuery(
+  currentLine: string,
+  key: TerminalTuiShortcutKey,
+): string | null {
+  const current = currentLine ?? "";
+  if (key.name === "backspace" || key.name === "delete") {
+    return current.slice(0, -1);
+  }
+  if (key.ctrl || !key.sequence || key.sequence.length !== 1) {
+    return null;
+  }
+  if (key.name === "return" || key.name === "enter" || key.name === "tab" || key.name === "escape") {
+    return null;
+  }
+  return `${current}${key.sequence}`;
+}
+
 export function getTerminalTuiSelectedPaletteCandidate(
   state: TerminalTuiPaletteState,
 ): CliPaletteCandidate | null {
@@ -872,7 +889,7 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
       if (!waitingForInput || shortcutBusy) {
         return;
       }
-      if (paletteState.open && String(lineEditor.line ?? "").length === 0) {
+      if (paletteState.open) {
         if (key.name === "up" || (key.ctrl && key.name === "p")) {
           paletteState = moveTerminalTuiPaletteSelection(paletteState, -1);
           shortcutBusy = true;
@@ -895,6 +912,21 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
           void redraw(true, lineEditor).finally(() => {
             shortcutBusy = false;
           });
+          return;
+        }
+        const nextQuery = resolveTerminalTuiPaletteLiveQuery(String(lineEditor.line ?? ""), key);
+        if (nextQuery !== null) {
+          shortcutBusy = true;
+          setTimeout(() => {
+            void (async () => {
+              try {
+                await syncPaletteState(nextQuery, 0);
+                await redraw(true, lineEditor);
+              } finally {
+                shortcutBusy = false;
+              }
+            })();
+          }, 0);
           return;
         }
       }
@@ -948,37 +980,34 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
       waitingForInput = false;
       const trimmedLine = line.trim();
       if (paletteState.open && !trimmedLine.startsWith("/")) {
-        if (!trimmedLine) {
-          const selected = getTerminalTuiSelectedPaletteCandidate(paletteState);
-          if (!selected) {
-            lastOutput = renderCliError("palette empty", "there is no palette candidate to open");
-            await redraw();
-            continue;
-          }
-          const result = await handleTerminalTuiCommand({
-            line: selected.command,
-            service,
-            activeSessionId,
-            model: currentModel,
-            startupIssue,
-            setModel,
-            composer,
-            paletteStore,
-            transcriptBrowser,
-          });
-          activeSessionId = result.activeSessionId;
-          lastOutput = [`palette [${paletteState.selectedIndex + 1}] -> ${selected.command}`, result.output]
-            .filter(Boolean)
-            .join("\n");
-          closePaletteState();
-          if (result.exit) {
-            break;
-          }
+        const selected = getTerminalTuiSelectedPaletteCandidate(paletteState);
+        if (!selected) {
+          lastOutput = renderCliError("palette empty", "there is no palette candidate to open");
           await redraw();
           continue;
         }
-        await openPaletteState(trimmedLine);
-        lastOutput = `palette query: ${trimmedLine}`;
+        const result = await handleTerminalTuiCommand({
+          line: selected.command,
+          service,
+          activeSessionId,
+          model: currentModel,
+          startupIssue,
+          setModel,
+          composer,
+          paletteStore,
+          transcriptBrowser,
+        });
+        activeSessionId = result.activeSessionId;
+        lastOutput = [
+          `palette query '${paletteState.query || "(top actions)"}' [${paletteState.selectedIndex + 1}] -> ${selected.command}`,
+          result.output,
+        ]
+          .filter(Boolean)
+          .join("\n");
+        closePaletteState();
+        if (result.exit) {
+          break;
+        }
         await redraw();
         continue;
       }

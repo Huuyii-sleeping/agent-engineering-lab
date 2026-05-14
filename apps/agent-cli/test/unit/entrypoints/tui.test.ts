@@ -9,6 +9,7 @@ import {
   moveTerminalTuiPaletteSelection,
   renderTerminalTuiDashboard,
   renderTerminalTuiPaletteLines,
+  resolveTerminalTuiPaletteLiveQuery,
   resolveTerminalTuiShortcut,
   updateTerminalTuiPaletteState,
   type TerminalTuiServiceLike,
@@ -154,6 +155,14 @@ describe("entrypoints/tui", () => {
     expect(getTerminalTuiSelectedPaletteCandidate(opened)?.command).toBe("/use 2");
     expect(getTerminalTuiSelectedPaletteCandidate(moved)?.command).toBe("/history");
     expect(renderTerminalTuiPaletteLines(moved)).toContain("selected  [2] /history");
+  });
+
+  it("derives live palette queries from local key input", () => {
+    expect(resolveTerminalTuiPaletteLiveQuery("", { sequence: "r", name: "r" })).toBe("r");
+    expect(resolveTerminalTuiPaletteLiveQuery("re", { sequence: "v", name: "v" })).toBe("rev");
+    expect(resolveTerminalTuiPaletteLiveQuery("review", { name: "backspace" })).toBe("revie");
+    expect(resolveTerminalTuiPaletteLiveQuery("review", { ctrl: true, name: "n" })).toBeNull();
+    expect(resolveTerminalTuiPaletteLiveQuery("review", { name: "enter", sequence: "\r" })).toBeNull();
   });
 
   it("resolves supported keyboard shortcuts only when the prompt buffer is empty", () => {
