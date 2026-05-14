@@ -1,6 +1,8 @@
 import * as process from "node:process";
+import type { CliPaletteCandidate, CliPaletteView } from "./cli-palette.js";
 import type { CliComposePreview } from "./cli-composer.js";
 import type { CliPermissionMode } from "./cli-permissions.js";
+import type { CliTranscriptEntry, CliTranscriptView } from "./cli-transcript.js";
 
 export type CliThemeName = "atlas" | "plain";
 
@@ -121,6 +123,8 @@ export type CliComposerSnapshot = {
   charCount: number;
 };
 
+export type CliHelpTopicId = "overview" | "draft" | "sessions" | "runtime" | "approvals" | "transcript" | "palette" | "all";
+
 export type CliCloseoutInput = {
   sessionId: string | null;
   changedPaths: string[];
@@ -134,6 +138,100 @@ export type CliPanelTone = "neutral" | "accent" | "success" | "warning" | "dange
 let CURRENT_THEME: CliThemeName = process.env.AGENT_THEME?.trim() === "plain" ? "plain" : "atlas";
 let COLOR_ENABLED =
   !process.env.NO_COLOR && process.env.TERM !== "dumb" && Boolean(process.stdout.isTTY ?? false);
+
+const CLI_HELP_TOPICS = [
+  {
+    id: "draft",
+    title: "Draft",
+    summary: "Compose longer prompts locally before they enter the model request path.",
+    commands: [
+      "/compose    start or resume multi-line draft mode",
+      "/preview    inspect the current draft with numbered lines",
+      "/pop [n]    remove the latest 1 or N draft line(s)",
+      "/send       submit the current draft",
+      "/cancel     discard the current draft",
+    ],
+    examples: ["/compose", "/preview", "/pop 2", "/send"],
+  },
+  {
+    id: "sessions",
+    title: "Sessions",
+    summary: "Navigate local sessions without memorizing full session ids.",
+    commands: [
+      "/sessions   list local sessions with index and status",
+      "/use <x>    switch by id, prefix, index, or latest",
+      "/next       move to the next session",
+      "/prev       move to the previous session",
+      "/clear      start a fresh session",
+      "/new        alias for /clear",
+    ],
+    examples: ["/sessions", "/use 2", "/use latest", "/next"],
+  },
+  {
+    id: "runtime",
+    title: "Runtime",
+    summary: "Inspect and control the local runtime surface without asking the model.",
+    commands: [
+      "/status     show runtime status",
+      "/config     show config paths and current theme",
+      "/model      show or set model: /model gpt-5-mini",
+      "/permissions show or set permission mode",
+      "/cost       show token and cost summary",
+      "/compact    compact current session history",
+      "/redraw     clear screen and redraw banner",
+    ],
+    examples: ["/status", "/model gpt-5-mini", "/permissions plan", "/compact 5"],
+  },
+  {
+    id: "approvals",
+    title: "Approvals",
+    summary: "Inspect approval queues and resolve requests from the local control surface.",
+    commands: [
+      "/approvals  list approval requests",
+      "/approve    approve a request: /approve <id>",
+      "/reject     reject a request: /reject <id>",
+      "/doctor     run local readiness checks",
+      "/add-dir    allow another workspace root",
+      "/tools      list available tools",
+      "/theme      show or set theme: /theme atlas|plain",
+      "!<cmd>      run a direct shell command",
+      "/exit       leave the shell",
+    ],
+    examples: ["/approvals", "/approve apr_1", "/doctor", "!pnpm test"],
+  },
+  {
+    id: "transcript",
+    title: "Transcript",
+    summary: "Browse, search, and expand the local session transcript without leaving the shell.",
+    commands: [
+      "/history    browse the current transcript window",
+      "/history prev move to the previous transcript page",
+      "/history next move to the next transcript page",
+      "/search <q> search the current transcript",
+      "/peek <n>   expand one transcript entry",
+      "/tail       return to the live tail view",
+    ],
+    examples: ["/history", "/search bug", "/peek 12", "/tail"],
+  },
+  {
+    id: "palette",
+    title: "Palette",
+    summary: "Launch high-frequency local actions from one fuzzy-searchable control surface.",
+    commands: [
+      "/palette       show top local action candidates",
+      "/palette <q>   fuzzy-search local action candidates",
+      "/palette open <n> execute one palette result by index",
+      "Ctrl+K         open the local command palette in TUI",
+    ],
+    examples: ["/palette", "/palette review", "/palette open 2"],
+  },
+] as const satisfies ReadonlyArray<{
+  id: Exclude<CliHelpTopicId, "overview" | "all">;
+  title: string;
+  summary: string;
+  commands: readonly string[];
+  examples: readonly string[];
+}>;
 
 function color(code: string, value: string): string {
   if (!COLOR_ENABLED || CURRENT_THEME === "plain") {
@@ -265,6 +363,82 @@ export function renderCliPrompt(sessionId: string | null, composer?: CliComposer
   return `${accent(`agent:${suffix}`)} ${muted(">>")} `;
 }
 
+export function listCliHelpTopics(): Array<Exclude<CliHelpTopicId, "overview">> {
+  return [...CLI_HELP_TOPICS.map((topic) => topic.id), "all"];
+}
+
+export function resolveCliHelpTopic(input?: string | null): CliHelpTopicId | null {
+  const normalized = input?.trim().toLowerCase();
+  if (!normalized) {
+    return "overview";
+  }
+  if (normalized === "all") {
+    return "all";
+  }
+  return (CLI_HELP_TOPICS.find((topic) => topic.id === normalized)?.id as CliHelpTopicId | undefined) ?? null;
+}
+
+function renderCliHelpTopic(topicId: Exclude<CliHelpTopicId, "overview" | "all">): string {
+  const topic = CLI_HELP_TOPICS.find((entry) => entry.id === topicId);
+  if (!topic) {
+    return "";
+  }
+  return [
+    strong(`Help: ${topic.title}`),
+    topic.summary,
+    "",
+    strong("Commands"),
+    ...topic.commands,
+    "",
+    strong("Examples"),
+    ...topic.examples.map((example) => `- ${example}`),
+  ].join("\n");
+}
+
+export function renderCliGuideLines(input: {
+  composerActive: boolean;
+  sessionCount: number;
+  pendingApprovals: number;
+  startupIssue?: boolean;
+}): string[] {
+  if (input.composerActive) {
+    return [
+      "help      /help draft or Ctrl+G",
+      "palette   /palette or Ctrl+K launches local actions",
+      "draft     plain text appends to the current draft",
+      "review    /preview shows numbered draft lines",
+      "edit      /pop or /pop 3 removes recent lines",
+      "send      /send submits the current draft",
+      "cancel    Esc or /cancel discards the draft",
+      "browse    /history /search <q> /peek <n> /tail",
+      "session   /next /prev keeps local navigation nearby",
+    ];
+  }
+  return [
+    "help      /help /help sessions /help palette",
+    "palette   /palette review /palette open 2",
+    input.sessionCount > 0 ? "session   /sessions /use 2 /next /prev" : "session   /clear creates the first local session",
+    "browse    /history /search bug /peek 12 /tail",
+    input.startupIssue ? "startup   /model <id> reactivates local chat" : "runtime   /status /model /permissions /cost",
+    input.pendingApprovals > 0
+      ? "approvals /approvals /approve <id> /reject <id>"
+      : "workspace /doctor /add-dir /theme",
+    "compose   /compose starts a multi-line draft",
+    "shell     !<cmd> runs a direct shell command",
+  ];
+}
+
+export function renderCliShortcutLines(input: { composerActive: boolean }): string[] {
+  return [
+    "ctrl+g    help",
+    "ctrl+k    palette",
+    "ctrl+n    next session",
+    "ctrl+p    previous session",
+    "ctrl+l    redraw screen",
+    input.composerActive ? "esc       cancel draft" : "esc       draft cancel only",
+  ];
+}
+
 export function renderCliBadge(label: string, tone: CliPanelTone = "accent"): string {
   return toneColor(tone, `[${label}]`);
 }
@@ -327,36 +501,109 @@ export function renderCliConfig(snapshot: CliConfigSnapshot): string {
   ].join("\n");
 }
 
-export function renderCliHelp(): string {
-  const commands = [
-    "/help       show commands and examples",
-    "/compose    start or resume multi-line draft mode",
-    "/preview    inspect the current draft",
-    "/pop [n]    remove the latest 1 or N draft line(s)",
-    "/send       submit the current draft",
-    "/cancel     discard the current draft",
-    "/status     show runtime status",
-    "/config     show config paths and current theme",
-    "/model      show or set model: /model gpt-5-mini",
-    "/permissions show or set permission mode",
-    "/approvals  list approval requests",
-    "/approve    approve a request: /approve <id>",
-    "/reject     reject a request: /reject <id>",
-    "/cost       show token and cost summary",
-    "/compact    compact current session history",
-    "/add-dir    allow another workspace root",
-    "/tools      list available tools",
-    "/sessions   list sessions",
-    "/doctor     run local readiness checks",
-    "/theme      show or set theme: /theme atlas|plain",
-    "/clear      start a fresh session",
-    "/new        alias for /clear",
-    "/redraw     clear screen and redraw banner",
-    "/use <id>   switch active session",
-    "/exit       leave the shell",
-    "!<cmd>      run a direct shell command",
+export function renderCliHelp(topic: CliHelpTopicId = "overview"): string {
+  if (topic === "all") {
+    return [
+      renderCliHelp("overview"),
+      "",
+      ...CLI_HELP_TOPICS.map((entry) => renderCliHelp(entry.id)),
+    ].join("\n\n");
+  }
+  if (topic !== "overview") {
+    return renderCliHelpTopic(topic);
+  }
+  return [
+    strong("Commands"),
+    "topics     /help draft | /help sessions | /help runtime | /help approvals | /help transcript | /help palette | /help all",
+    "palette    /palette /palette <query> /palette open <index>",
+    "draft      /compose /preview /pop /send /cancel",
+    "sessions   /sessions /use /next /prev /clear",
+    "browse     /history /search /peek /tail",
+    "runtime    /status /config /model /permissions /cost /compact /redraw",
+    "approvals  /approvals /approve /reject /doctor /add-dir /tools /theme",
+    "shell      !<cmd> | /exit",
+    "TUI keys    Ctrl+G help | Ctrl+K palette | Ctrl+N next | Ctrl+P prev | Ctrl+L redraw | Esc cancel draft",
+    "",
+    strong("Examples"),
+    "- /help draft",
+    "- /palette review",
+    "- /help sessions",
+    "- /search hook blocked",
+    "- /model gpt-5-mini",
+    "- /permissions plan",
+  ].join("\n");
+}
+
+function renderPaletteCandidateLine(candidate: CliPaletteCandidate, index: number): string {
+  return `[${index + 1}] ${candidate.group.padEnd(8)} ${truncate(candidate.title, 40)} -> ${candidate.command}`;
+}
+
+export function renderCliPaletteLines(view: CliPaletteView, maxEntries = 8): string[] {
+  return [
+    `query     ${view.query || "(top actions)"}`,
+    `results   ${view.candidates.length} shown / ${view.total} total`,
+    "open      /palette open <index>",
+    "",
+    ...(view.candidates.length > 0
+      ? view.candidates.slice(0, maxEntries).map((candidate, index) => renderPaletteCandidateLine(candidate, index))
+      : ["No palette candidates found."]),
   ];
-  return [strong("Commands"), ...commands].join("\n");
+}
+
+export function renderCliPalette(view: CliPaletteView): string {
+  return [strong("Palette"), ...renderCliPaletteLines(view, 8)].join("\n");
+}
+
+function formatTranscriptIndex(index: number): string {
+  return `#${String(index).padStart(2, "0")}`;
+}
+
+function renderTranscriptEntrySummary(entry: CliTranscriptEntry): string {
+  return `[${formatTranscriptIndex(entry.index)}] ${entry.role.padEnd(9)} ${truncate(entry.preview, 88)}`;
+}
+
+function renderTranscriptContentLines(entry: CliTranscriptEntry, limit?: number): string[] {
+  const lines = entry.content ? entry.content.split("\n") : ["(empty)"];
+  const total = lines.length;
+  const max = limit && limit > 0 ? Math.min(limit, total) : total;
+  const rendered = lines.slice(0, max).map((line, index) => `${String(index + 1).padStart(2, "0")}| ${line}`.trimEnd());
+  if (max < total) {
+    rendered.push(`... ${total - max} more line(s)`);
+  }
+  return rendered;
+}
+
+export function renderCliTranscriptLines(view: CliTranscriptView, maxEntries = 10): string[] {
+  if (view.mode === "peek") {
+    return [
+      `entry     ${formatTranscriptIndex(view.entry.index)} ${view.entry.role} ${view.entry.lineCount} lines / ${view.entry.charCount} chars`,
+      `browse    /tail | /history | /search <query>`,
+      `summary   ${truncate(view.entry.preview, 96)}`,
+      "",
+      ...renderTranscriptContentLines(view.entry, maxEntries),
+    ];
+  }
+  if (view.mode === "search") {
+    const matches = view.matches.slice(0, maxEntries);
+    return [
+      `query     ${view.query}`,
+      `matches   ${view.matches.length} / ${view.total}`,
+      `browse    /peek <n> | /tail | /history`,
+      "",
+      ...(matches.length > 0 ? matches.map(renderTranscriptEntrySummary) : ["No transcript matches found."]),
+      ...(view.matches.length > matches.length ? [`... ${view.matches.length - matches.length} more match(es)`] : []),
+    ];
+  }
+  return [
+    `${view.mode === "tail" ? "tail" : "window"}      ${view.total === 0 ? "0/0" : `${view.start}-${view.end} / ${view.total}`}`,
+    `browse    /history prev | /history next | /search <query> | /peek <n> | /tail`,
+    "",
+    ...(view.entries.length > 0 ? view.entries.slice(0, maxEntries).map(renderTranscriptEntrySummary) : ["No transcript yet. Type a prompt or run /help."]),
+  ];
+}
+
+export function renderCliTranscript(view: CliTranscriptView): string {
+  return [strong("Transcript"), ...renderCliTranscriptLines(view, 12)].join("\n");
 }
 
 export function renderCliError(title: string, message: string, suggestion?: string): string {
@@ -385,10 +632,10 @@ export function renderCliSessions(sessions: CliSessionSummary[]): string {
   }
   return [
     strong("Sessions"),
-    ...sessions.map((session) => {
+    ...sessions.map((session, index) => {
       const marker = session.active ? "*" : " ";
       const busy = session.busy ? warning("busy") : success("idle");
-      return `${marker} ${accent(session.id)} messages=${session.messageCount} status=${busy}`;
+      return `${marker} [${index + 1}] ${accent(session.id)} messages=${session.messageCount} status=${busy}`;
     }),
   ].join("\n");
 }

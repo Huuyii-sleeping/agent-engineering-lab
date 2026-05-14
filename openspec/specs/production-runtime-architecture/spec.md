@@ -368,3 +368,211 @@ Composer 相关交互面 MUST 提供结构化 draft 可视能力，而不只是�
 - **WHEN** 用户在 TUI 中处于 composer 模式
 - **THEN** 仪表盘展示独立 draft panel
 - **AND** 该 panel 至少显示草稿摘要与最近若干行内容
+
+### Requirement: CLI and TUI MUST provide ergonomic local session selection
+CLI / TUI MUST 提供顺手的本地 session 选择方式，避免用户只能依赖完整 session id 进行切换。
+
+#### Scenario: User switches by index or latest selector
+- **WHEN** 用户输入 `/use 2` 或 `/use latest`
+- **THEN** 系统切换到对应 session
+- **AND** 返回明确的当前会话反馈
+
+#### Scenario: User switches by unique session id prefix
+- **WHEN** 用户输入 `/use abc123`
+- **THEN** 若该前缀唯一命中某个 session id，系统切换到该 session
+- **AND** 若命中多个 session，则返回歧义错误
+
+### Requirement: CLI and TUI MUST support sequential session navigation
+CLI / TUI MUST 支持按当前 session 列表顺序前后循环切换，减少多会话场景中的跳转成本。
+
+#### Scenario: User moves to next session
+- **WHEN** 用户输入 `/next`
+- **THEN** 系统切换到当前顺序中的下一个 session
+- **AND** 若当前已在最后一个 session，则循环回第一个
+
+#### Scenario: User moves to previous session
+- **WHEN** 用户输入 `/prev`
+- **THEN** 系统切换到当前顺序中的上一个 session
+- **AND** 若当前已在第一个 session，则循环回最后一个
+
+### Requirement: Session surfaces MUST expose clear navigation affordances
+会话相关交互面 MUST 明确展示 session 序号、active 状态和切换提示，而不是只展示被动状态信息。
+
+#### Scenario: Sessions list exposes selection hints
+- **WHEN** 用户查看 `/sessions`
+- **THEN** 输出显示 session index、active marker、busy/idle 和 message count
+
+#### Scenario: TUI sessions panel exposes navigation hints
+- **WHEN** 用户查看 TUI 仪表盘
+- **THEN** Sessions panel 与 controls / footer 显示 `/use`、`/next`、`/prev` 相关提示
+
+### Requirement: TUI MUST expose lightweight keyboard shortcuts for high-frequency local actions
+TUI MUST 提供轻量键盘快捷键，让高频本地动作不再只能依赖 slash command。
+
+#### Scenario: User cycles sessions with keyboard shortcuts
+- **WHEN** 用户在 TUI 中按下 `Ctrl+N` 或 `Ctrl+P`
+- **THEN** 系统分别切换到下一个或上一个 session
+- **AND** 不进入模型请求链路
+
+#### Scenario: User redraws or cancels draft with keyboard shortcuts
+- **WHEN** 用户在 TUI 中按下 `Ctrl+L` 或在草稿模式下按下 `Esc`
+- **THEN** 系统分别执行重绘或取消草稿
+- **AND** 不进入模型请求链路
+
+### Requirement: TUI keyboard shortcuts MUST not hijack active prompt content entry
+TUI 键盘快捷键 MUST 不得在用户正在输入正文内容时劫持输入，避免破坏 prompt 编辑。
+
+#### Scenario: Prompt buffer is not empty
+- **WHEN** 用户已经在 prompt 中输入了正文内容
+- **THEN** 全局快捷键不应触发本地动作
+- **AND** 用户继续完成当前输入
+
+### Requirement: TUI surfaces MUST advertise available keyboard shortcuts
+TUI 的交互面 MUST 明确展示可用快捷键，避免功能隐藏。
+
+#### Scenario: User views TUI dashboard
+- **WHEN** 用户查看 TUI 主界面
+- **THEN** banner、controls 或 footer 至少一处展示快捷键提示
+
+### Requirement: CLI and TUI MUST provide scoped help topics for common local workflows
+CLI / TUI MUST 提供按工作流分层的帮助主题，避免所有本地命令只通过单一长列表暴露。
+
+#### Scenario: User requests draft help
+- **WHEN** 用户输入 `/help draft`
+- **THEN** 输出聚焦 composer / draft 相关命令
+- **AND** 至少包含一条可直接执行的示例
+
+#### Scenario: User requests session help
+- **WHEN** 用户输入 `/help sessions`
+- **THEN** 输出聚焦 session 选择、切换与导航命令
+- **AND** 不要求用户先阅读整份全量命令清单
+
+### Requirement: TUI guide surfaces MUST prioritize context-relevant actions
+TUI 的 guide / controls 面 MUST 优先展示和当前状态最相关的本地动作，而不是把所有命令长期平铺在同一个面板里。
+
+#### Scenario: Composer mode is active in TUI
+- **WHEN** 用户在 TUI 中处于 composer 模式
+- **THEN** guide 面优先展示 `/preview`、`/send`、`/pop`、`/cancel` 等草稿动作
+- **AND** 明确给出 help 或快捷键入口
+
+#### Scenario: Default TUI mode is active
+- **WHEN** 用户在 TUI 中未处于 composer 模式
+- **THEN** guide 面优先展示帮助入口、会话导航和状态查看类动作
+- **AND** 保持信息密度紧凑，不依赖超长静态命令墙
+
+### Requirement: TUI MUST expose a dedicated keyboard entry for local help
+TUI MUST 提供专用本地 help 快捷入口，让用户无需输入完整 slash command 即可查看帮助。
+
+#### Scenario: Prompt buffer is empty
+- **WHEN** 用户在 TUI 中按下 `Ctrl+G`
+- **THEN** 系统展示本地帮助输出
+- **AND** 不进入模型请求链路
+
+#### Scenario: Prompt buffer is not empty
+- **WHEN** 用户已经在 prompt 中输入正文内容
+- **THEN** `Ctrl+G` 不应抢占当前正文输入
+- **AND** 用户可以继续完成当前输入
+
+### Requirement: CLI and TUI MUST provide local command completion for high-frequency control commands
+交互 CLI / TUI MUST 提供本地命令补全，降低 slash command 与常见参数的输入成本。
+
+#### Scenario: User completes a help topic
+- **WHEN** 用户输入 `/help d` 并触发补全
+- **THEN** 系统补全为 `/help draft` 或给出对应候选
+- **AND** 不进入模型请求链路
+
+#### Scenario: User completes a session selector
+- **WHEN** 用户输入 `/use ` 并触发补全
+- **THEN** 系统给出可用 session index、`latest` 或已知 session id 候选
+- **AND** 只使用本地 session 状态
+
+### Requirement: CLI and TUI MUST expose a local command palette for high-frequency actions
+CLI / TUI MUST 提供本地 command palette，让用户不必先记住完整命令再输入。
+
+#### Scenario: User opens the command palette
+- **WHEN** 用户输入 `/palette` 或在 TUI 中触发 palette 快捷入口
+- **THEN** 系统展示高频本地动作候选
+- **AND** 不进入模型请求链路
+
+#### Scenario: User fuzzy-searches palette candidates
+- **WHEN** 用户输入 `/palette review`
+- **THEN** 系统返回与该查询最相关的本地候选
+- **AND** 候选可以来自 help、session、transcript 或 runtime 控制面
+
+### Requirement: Local command palette MUST support direct candidate execution
+本地 command palette MUST 支持直接执行候选，避免用户找到候选后还要再次完整输入命令。
+
+#### Scenario: User opens one palette candidate by index
+- **WHEN** 用户输入 `/palette open 2`
+- **THEN** 系统执行最近一次 palette 结果中的第 2 个候选对应的本地动作
+- **AND** 返回明确反馈，说明实际执行了哪个本地命令
+
+#### Scenario: User references an unknown palette result index
+- **WHEN** 用户输入 `/palette open 9`
+- **THEN** 系统返回稳定错误
+- **AND** 提示用户先重新运行 `/palette`
+
+### Requirement: TUI MUST provide a dedicated keyboard entry for the local command palette
+TUI MUST 提供专用 palette 快捷入口，让用户无需手动输入 `/palette`。
+
+#### Scenario: Prompt buffer is empty
+- **WHEN** 用户在 TUI 中按下 `Ctrl+K`
+- **THEN** 系统展示本地 palette
+- **AND** 不进入模型请求链路
+
+#### Scenario: Prompt buffer is not empty
+- **WHEN** 用户已经在 prompt 中输入正文内容
+- **THEN** `Ctrl+K` 不应抢占当前正文输入
+- **AND** 用户可以继续完成当前输入
+
+### Requirement: TUI local command palette MUST expose a dedicated selection surface
+TUI 本地 command palette MUST 提供独立的选择面，而不是只输出静态文本结果。
+
+#### Scenario: User opens the palette panel
+- **WHEN** 用户通过 `/palette` 或 `Ctrl+K` 打开本地 palette
+- **THEN** TUI 展示独立 Palette panel
+- **AND** 面板包含 query、结果数量、当前选中项和操作提示
+
+#### Scenario: User moves the current selection
+- **WHEN** palette panel 已打开且 prompt buffer 为空
+- **THEN** 用户可以通过 `Up` / `Down` 或 `Ctrl+N` / `Ctrl+P` 切换当前选中候选
+- **AND** 不进入模型请求链路
+
+### Requirement: TUI local command palette MUST support query submission and direct execution
+TUI 本地 command palette MUST 支持本地 query 刷新与当前选中项直接执行。
+
+#### Scenario: User submits a query while palette is open
+- **WHEN** palette 已打开且用户输入普通文本后按下回车
+- **THEN** 系统刷新本地 palette query
+- **AND** 不进入模型请求链路
+
+#### Scenario: User executes the selected palette candidate
+- **WHEN** palette 已打开且 prompt buffer 为空时按下回车
+- **THEN** 系统执行当前选中候选对应的本地动作
+- **AND** 返回明确反馈，说明实际执行了哪个本地命令
+
+### Requirement: CLI and TUI MUST provide local transcript browsing for the active session
+CLI / TUI MUST 提供当前 session 的本地 transcript 浏览能力，避免用户只能查看最近几条对话。
+
+#### Scenario: User enters transcript history mode
+- **WHEN** 用户输入 `/history`
+- **THEN** 系统展示当前 session transcript 的结构化窗口
+- **AND** 明确给出翻页、展开或返回 tail 的下一步入口
+
+#### Scenario: User returns to live tail mode
+- **WHEN** 用户输入 `/tail`
+- **THEN** 系统回到最近消息 tail 视图
+- **AND** TUI Conversation panel 恢复 live tail 展示
+
+### Requirement: Local transcript browsing MUST support search and single-entry expansion
+本地 transcript 浏览 MUST 支持搜索匹配和单条消息展开，避免长会话只能粗略翻页。
+
+#### Scenario: User searches the current transcript
+- **WHEN** 用户输入 `/search bug`
+- **THEN** 系统返回命中该查询的 transcript 条目摘要
+- **AND** 输出至少包含可用于展开单条结果的 entry index
+
+#### Scenario: User expands one transcript entry
+- **WHEN** 用户输入 `/peek 12`
+- **THEN** 系统展示第 12 条 transcript entry 的完整内容
+- **AND** 保留该条 entry 的 role、索引和基本摘要

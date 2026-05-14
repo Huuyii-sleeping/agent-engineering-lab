@@ -7,7 +7,9 @@ import type { ChatCompletionMessageParam } from "openai/resources/chat/completio
 import { createAgentSessionRecord, type AgentSessionRecord } from "./agent-service-sessions.js";
 import { createAgentAppRuntime, type AgentAppRuntimeDeps } from "./bootstrap/app-runtime.js";
 import { dispatchCliCommand } from "./cli-commands.js";
+import { completeCliLine } from "./cli-completion.js";
 import { CliComposerStore } from "./cli-composer.js";
+import { CliPaletteStore } from "./cli-palette.js";
 import {
   collectCliConfigSnapshot,
   collectCliPermissionSnapshot,
@@ -17,6 +19,7 @@ import {
 } from "./cli-doctor.js";
 import { setCliPermissionMode } from "./cli-permissions.js";
 import {
+  listCliHelpTopics,
   getCliUiTheme,
   renderClearScreen,
   renderCliBanner,
@@ -27,6 +30,7 @@ import {
   renderCliSection,
   setCliUiTheme,
 } from "./cli-ui.js";
+import { CliTranscriptBrowserStore } from "./cli-transcript.js";
 import { createClient, getStaticPromptSource } from "./config.js";
 import { summarizeDeliveryReport } from "./delivery-types.js";
 import { dropPendingApprovalReplay, popPendingApprovalReplay } from "./runtime/query-tool-approvals.js";
@@ -207,14 +211,32 @@ export async function runScheduledRound(opts: ScheduledRoundOptions): Promise<bo
 
 export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
   let { app, startupIssue } = createShellAppRuntime(overrides);
-  const rl = createInterface({ input, output });
   const sessions = new Map<string, CliSessionRecord>();
   const composer = new CliComposerStore();
+  const paletteStore = new CliPaletteStore();
+  const transcriptBrowser = new CliTranscriptBrowserStore();
   const initialSession = createCliSession();
   sessions.set(initialSession.id, initialSession);
   let activeSessionId = initialSession.id;
   let agentBusy = false;
   let waitingForInput = false;
+  const rl = createInterface({
+    input,
+    output,
+    completer: (line: string) =>
+      completeCliLine(line, {
+        sessions: [...sessions.values()].map((session) => ({
+          id: session.id,
+          messageCount: session.history.length,
+          busy: session.busy,
+          active: session.id === activeSessionId,
+        })),
+        helpTopics: listCliHelpTopics(),
+        transcriptEntryCount: sessions.get(activeSessionId)?.history.length ?? 0,
+        paletteEntryCount: paletteStore.lastCount(activeSessionId),
+        model: app.model,
+      }),
+  });
 
   const rebuildApp = (model: string): boolean => {
     try {
@@ -251,7 +273,7 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
       mode: "interactive",
       model: app.model,
       sessionId: activeSessionId,
-      commands: ["/help", "/compose", "/pop", "/send", "/status", "/permissions"],
+      commands: ["/help", "/palette", "/history", "/next", "/compose", "/status"],
     });
   const printAsyncEvent = (label: string, content: string) => {
     renderAsyncCliEvent({
@@ -432,6 +454,27 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
           setCliUiTheme(theme);
           return true;
         },
+        showPalette: async (query = "") =>
+          paletteStore.search(
+            activeSessionId,
+            {
+              sessions: [...sessions.values()].map((session) => ({
+                id: session.id,
+                messageCount: session.history.length,
+                busy: session.busy,
+                active: session.id === activeSessionId,
+              })),
+              helpTopics: listCliHelpTopics(),
+              composerActive: composer.isActive(activeSessionId),
+              pendingApprovals: (await collectCliPermissionSnapshot()).pendingApprovals,
+            },
+            query,
+          ),
+        openPalette: (index) => paletteStore.open(activeSessionId, index),
+        showTranscript: (direction = "current") => transcriptBrowser.history(activeSessionId, getActiveSession().history, direction),
+        searchTranscript: (query) => transcriptBrowser.search(activeSessionId, getActiveSession().history, query),
+        peekTranscript: (entryIndex) => transcriptBrowser.peek(activeSessionId, getActiveSession().history, entryIndex),
+        tailTranscript: () => transcriptBrowser.tail(activeSessionId, getActiveSession().history),
       });
       if (command.handled) {
         if (command.nextSessionId) {

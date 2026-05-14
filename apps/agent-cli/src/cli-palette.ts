@@ -1,0 +1,343 @@
+import type { CliSessionSummary } from "./cli-ui.js";
+
+export type CliPaletteCandidate = {
+  id: string;
+  group: "help" | "draft" | "session" | "browse" | "runtime" | "approval";
+  title: string;
+  summary: string;
+  command: string;
+  keywords: string[];
+};
+
+export type CliPaletteView = {
+  query: string;
+  candidates: CliPaletteCandidate[];
+  total: number;
+};
+
+export type CliPaletteContext = {
+  sessions: CliSessionSummary[];
+  helpTopics: string[];
+  composerActive: boolean;
+  pendingApprovals: number;
+};
+
+type CliPaletteState = {
+  query: string;
+  candidates: CliPaletteCandidate[];
+};
+
+function sessionKey(sessionId: string | null): string {
+  return sessionId ?? "__default__";
+}
+
+function uniqueById(candidates: CliPaletteCandidate[]): CliPaletteCandidate[] {
+  const seen = new Set<string>();
+  const next: CliPaletteCandidate[] = [];
+  for (const candidate of candidates) {
+    if (seen.has(candidate.id)) {
+      continue;
+    }
+    seen.add(candidate.id);
+    next.push(candidate);
+  }
+  return next;
+}
+
+function staticPaletteCandidates(context: CliPaletteContext): CliPaletteCandidate[] {
+  const base: CliPaletteCandidate[] = [
+    {
+      id: "help-overview",
+      group: "help",
+      title: "Command guide",
+      summary: "Open the top-level local help surface.",
+      command: "/help",
+      keywords: ["help", "guide", "commands", "manual"],
+    },
+    ...context.helpTopics
+      .filter((topic) => topic !== "all")
+      .map((topic) => ({
+        id: `help-${topic}`,
+        group: "help" as const,
+        title: `Help topic: ${topic}`,
+        summary: `Open the ${topic} help topic.`,
+        command: `/help ${topic}`,
+        keywords: ["help", topic, "topic", "guide"],
+      })),
+    {
+      id: "draft-compose",
+      group: "draft",
+      title: context.composerActive ? "Resume draft mode" : "Start draft mode",
+      summary: "Compose a multi-line local draft before sending it.",
+      command: "/compose",
+      keywords: ["draft", "compose", "prompt", "multiline"],
+    },
+    {
+      id: "draft-preview",
+      group: "draft",
+      title: "Preview current draft",
+      summary: "Inspect numbered draft lines and size.",
+      command: "/preview",
+      keywords: ["draft", "preview", "lines"],
+    },
+    {
+      id: "draft-send",
+      group: "draft",
+      title: "Send current draft",
+      summary: "Submit the local draft into the model request path.",
+      command: "/send",
+      keywords: ["draft", "send", "submit"],
+    },
+    {
+      id: "session-list",
+      group: "session",
+      title: "List local sessions",
+      summary: "Inspect session indexes and statuses.",
+      command: "/sessions",
+      keywords: ["sessions", "list", "local", "chat"],
+    },
+    {
+      id: "session-next",
+      group: "session",
+      title: "Next session",
+      summary: "Move to the next session in local order.",
+      command: "/next",
+      keywords: ["session", "next", "switch", "forward"],
+    },
+    {
+      id: "session-prev",
+      group: "session",
+      title: "Previous session",
+      summary: "Move to the previous session in local order.",
+      command: "/prev",
+      keywords: ["session", "prev", "previous", "switch", "back"],
+    },
+    {
+      id: "browse-history",
+      group: "browse",
+      title: "Browse transcript window",
+      summary: "Inspect the current transcript window.",
+      command: "/history",
+      keywords: ["history", "transcript", "browse", "window"],
+    },
+    {
+      id: "browse-tail",
+      group: "browse",
+      title: "Return to transcript tail",
+      summary: "Switch back to the live tail transcript view.",
+      command: "/tail",
+      keywords: ["tail", "transcript", "live", "recent"],
+    },
+    {
+      id: "runtime-status",
+      group: "runtime",
+      title: "Show runtime status",
+      summary: "Inspect model, session, usage, permissions, and roots.",
+      command: "/status",
+      keywords: ["runtime", "status", "model", "usage"],
+    },
+    {
+      id: "runtime-model",
+      group: "runtime",
+      title: "Inspect or switch model",
+      summary: "Use the local model control surface.",
+      command: "/model",
+      keywords: ["model", "runtime", "switch"],
+    },
+    {
+      id: "runtime-permissions",
+      group: "runtime",
+      title: "Inspect or change permission mode",
+      summary: "Review the current local permission mode.",
+      command: "/permissions",
+      keywords: ["permissions", "approvals", "mode", "runtime"],
+    },
+    {
+      id: "runtime-cost",
+      group: "runtime",
+      title: "Inspect usage and cost",
+      summary: "Show token and local cost summary.",
+      command: "/cost",
+      keywords: ["cost", "usage", "tokens", "runtime"],
+    },
+    {
+      id: "runtime-doctor",
+      group: "runtime",
+      title: "Run local diagnostics",
+      summary: "Check model, workspace, hooks, and local readiness.",
+      command: "/doctor",
+      keywords: ["doctor", "diagnostics", "runtime", "health"],
+    },
+    {
+      id: "approval-list",
+      group: "approval",
+      title: "List approval requests",
+      summary: context.pendingApprovals > 0 ? `${context.pendingApprovals} approval(s) pending.` : "Inspect current approval queue.",
+      command: "/approvals",
+      keywords: ["approvals", "approval", "queue", "security"],
+    },
+  ];
+  return base;
+}
+
+function dynamicSessionCandidates(context: CliPaletteContext): CliPaletteCandidate[] {
+  if (context.sessions.length === 0) {
+    return [];
+  }
+  const sessionCandidates = context.sessions.map((session, index) => ({
+    id: `session-${session.id}`,
+    group: "session" as const,
+    title: `Switch to session [${index + 1}] ${session.id}`,
+    summary: `${session.messageCount} message(s) / ${session.busy ? "busy" : "idle"}${session.active ? " / active" : ""}`,
+    command: `/use ${index + 1}`,
+    keywords: ["session", session.id, String(index + 1), session.active ? "active" : "idle", "switch"],
+  }));
+  return [
+    {
+      id: "session-latest",
+      group: "session",
+      title: "Switch to latest session",
+      summary: "Jump to the newest local session.",
+      command: "/use latest",
+      keywords: ["session", "latest", "recent", "newest"],
+    },
+    ...sessionCandidates,
+  ];
+}
+
+function candidateRank(candidate: CliPaletteCandidate): number {
+  if (candidate.group === "help") {
+    return 10;
+  }
+  if (candidate.group === "session") {
+    return 20;
+  }
+  if (candidate.group === "draft") {
+    return 30;
+  }
+  if (candidate.group === "browse") {
+    return 40;
+  }
+  if (candidate.group === "runtime") {
+    return 50;
+  }
+  return 60;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasWordMatch(haystack: string, needle: string): boolean {
+  return new RegExp(`(^|[^a-z0-9])${escapeRegExp(needle)}($|[^a-z0-9])`, "i").test(haystack);
+}
+
+function fuzzyScore(candidate: CliPaletteCandidate, query: string): number {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) {
+    return 1000 - candidateRank(candidate);
+  }
+  const haystacks = [
+    candidate.title.toLowerCase(),
+    candidate.summary.toLowerCase(),
+    candidate.command.toLowerCase(),
+    candidate.keywords.join(" ").toLowerCase(),
+  ];
+  let score = 0;
+  for (const haystack of haystacks) {
+    if (haystack === normalized) {
+      score += 300;
+    }
+    if (haystack.startsWith(normalized)) {
+      score += 180;
+    }
+    if (hasWordMatch(haystack, normalized)) {
+      score += 140;
+    } else if (haystack.includes(normalized)) {
+      score += 90;
+    }
+  }
+  const tokens = normalized.split(/\s+/).filter(Boolean);
+  for (const token of tokens) {
+    if (hasWordMatch(candidate.command.toLowerCase(), token)) {
+      score += 50;
+    } else if (candidate.command.toLowerCase().includes(token)) {
+      score += 30;
+    }
+    if (hasWordMatch(candidate.title.toLowerCase(), token)) {
+      score += 70;
+    } else if (candidate.title.toLowerCase().includes(token)) {
+      score += 40;
+    }
+    if (hasWordMatch(candidate.summary.toLowerCase(), token)) {
+      score += 45;
+    } else if (candidate.summary.toLowerCase().includes(token)) {
+      score += 20;
+    }
+    if (candidate.keywords.some((keyword) => hasWordMatch(keyword.toLowerCase(), token))) {
+      score += 55;
+    } else if (candidate.keywords.some((keyword) => keyword.toLowerCase().includes(token))) {
+      score += 25;
+    }
+  }
+  return score;
+}
+
+export function buildCliPaletteCandidates(context: CliPaletteContext): CliPaletteCandidate[] {
+  return uniqueById([
+    ...dynamicSessionCandidates(context),
+    ...staticPaletteCandidates(context),
+  ]);
+}
+
+export function searchCliPaletteCandidates(
+  context: CliPaletteContext,
+  query = "",
+  limit = 8,
+): CliPaletteView {
+  const candidates = buildCliPaletteCandidates(context)
+    .map((candidate) => ({
+      candidate,
+      score: fuzzyScore(candidate, query),
+    }))
+    .filter((entry) => entry.score > 0)
+    .sort((left, right) => {
+      if (right.score !== left.score) {
+        return right.score - left.score;
+      }
+      if (candidateRank(left.candidate) !== candidateRank(right.candidate)) {
+        return candidateRank(left.candidate) - candidateRank(right.candidate);
+      }
+      return left.candidate.title.localeCompare(right.candidate.title);
+    });
+  return {
+    query: query.trim(),
+    candidates: candidates.slice(0, limit).map((entry) => entry.candidate),
+    total: candidates.length,
+  };
+}
+
+export class CliPaletteStore {
+  private readonly states = new Map<string, CliPaletteState>();
+
+  search(sessionId: string | null, context: CliPaletteContext, query = ""): CliPaletteView {
+    const view = searchCliPaletteCandidates(context, query);
+    this.states.set(sessionKey(sessionId), {
+      query: view.query,
+      candidates: view.candidates,
+    });
+    return view;
+  }
+
+  open(sessionId: string | null, index: number): CliPaletteCandidate | null {
+    const state = this.states.get(sessionKey(sessionId));
+    if (!state) {
+      return null;
+    }
+    return state.candidates[index - 1] ?? null;
+  }
+
+  lastCount(sessionId: string | null): number {
+    return this.states.get(sessionKey(sessionId))?.candidates.length ?? 0;
+  }
+}

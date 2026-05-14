@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  listCliHelpTopics,
   renderCliApprovals,
   renderCliBanner,
   renderCliCloseout,
@@ -8,12 +9,20 @@ import {
   renderCliComposerLines,
   renderCliDoctor,
   renderCliError,
+  renderCliGuideLines,
   renderCliHelp,
+  renderCliPalette,
+  renderCliPaletteLines,
   renderCliPermissions,
   renderCliPrompt,
+  renderCliSessions,
+  renderCliShortcutLines,
   renderCliStatus,
+  renderCliTranscript,
+  renderCliTranscriptLines,
   renderCliUsage,
   resetCliUiForTest,
+  resolveCliHelpTopic,
   setCliUiColorEnabled,
 } from "../../src/cli-ui.js";
 
@@ -103,6 +112,16 @@ describe("cli-ui", () => {
       ]),
     ).toContain("pending apr_1 write_file (medium)");
     expect(
+      renderCliSessions([
+        {
+          id: "sess_1",
+          messageCount: 3,
+          busy: false,
+          active: true,
+        },
+      ]),
+    ).toContain("[1] sess_1");
+    expect(
       renderCliUsage({
         model: "gpt-test",
         sessionPromptTokens: 400,
@@ -147,12 +166,115 @@ describe("cli-ui", () => {
   it("renders help and structured errors", () => {
     setCliUiColorEnabled(false);
     expect(renderCliPrompt("sess_1", { active: true, lineCount: 2, charCount: 10 })).toContain("draft:sess_1");
+    expect(renderCliHelp()).toContain("/help draft");
     expect(renderCliHelp()).toContain("/permissions");
     expect(renderCliHelp()).toContain("/approve");
     expect(renderCliHelp()).toContain("/compose");
-    expect(renderCliHelp()).toContain("/pop");
-    expect(renderCliHelp()).toContain("/send");
-    expect(renderCliHelp()).toContain("!<cmd>");
+    expect(renderCliHelp()).toContain("/next");
+    expect(renderCliHelp()).toContain("/history");
+    expect(renderCliHelp()).toContain("/palette");
+    expect(renderCliHelp()).toContain("Ctrl+G help");
+    expect(renderCliHelp()).toContain("Ctrl+K palette");
+    expect(renderCliHelp("draft")).toContain("Help: Draft");
+    expect(renderCliHelp("draft")).toContain("/preview");
+    expect(renderCliHelp("sessions")).toContain("/use <x>");
+    expect(renderCliHelp("transcript")).toContain("/search <q>");
+    expect(renderCliHelp("palette")).toContain("/palette open <n>");
+    expect(renderCliHelp("all")).toContain("Help: Runtime");
+    expect(renderCliHelp("all")).toContain("Help: Transcript");
+    expect(renderCliHelp("all")).toContain("Help: Palette");
+    expect(listCliHelpTopics()).toContain("runtime");
+    expect(listCliHelpTopics()).toContain("transcript");
+    expect(listCliHelpTopics()).toContain("palette");
+    expect(resolveCliHelpTopic("draft")).toBe("draft");
+    expect(resolveCliHelpTopic("missing")).toBeNull();
+    expect(
+      renderCliGuideLines({
+        composerActive: true,
+        sessionCount: 2,
+        pendingApprovals: 1,
+      }),
+    ).toContain("browse    /history /search <q> /peek <n> /tail");
+    expect(
+      renderCliGuideLines({
+        composerActive: false,
+        sessionCount: 2,
+        pendingApprovals: 0,
+      }),
+    ).toContain("browse    /history /search bug /peek 12 /tail");
+    expect(
+      renderCliShortcutLines({
+        composerActive: false,
+      }),
+    ).toContain("ctrl+g    help");
+    expect(
+      renderCliShortcutLines({
+        composerActive: false,
+      }),
+    ).toContain("ctrl+k    palette");
+    expect(
+      renderCliTranscriptLines({
+        mode: "search",
+        query: "hook",
+        total: 4,
+        matches: [
+          {
+            index: 4,
+            role: "assistant",
+            content: "hook blocked during run",
+            preview: "hook blocked during run",
+            lineCount: 1,
+            charCount: 23,
+          },
+        ],
+      }),
+    ).toContain("query     hook");
+    expect(
+      renderCliTranscript({
+        mode: "peek",
+        total: 4,
+        entry: {
+          index: 4,
+          role: "assistant",
+          content: "hook blocked during run",
+          preview: "hook blocked during run",
+          lineCount: 1,
+          charCount: 23,
+        },
+      }),
+    ).toContain("entry     #04 assistant");
     expect(renderCliError("startup", "MODEL_ID missing", "run /doctor")).toContain("next  run /doctor");
+    expect(
+      renderCliPaletteLines({
+        query: "review",
+        total: 2,
+        candidates: [
+          {
+            id: "session-review",
+            group: "session",
+            title: "Switch to session [2] s02-review",
+            summary: "review session",
+            command: "/use 2",
+            keywords: ["review"],
+          },
+        ],
+      }).join("\n"),
+    ).toContain("/palette open <index>");
+    expect(
+      renderCliPalette({
+        query: "review",
+        total: 1,
+        candidates: [
+          {
+            id: "session-review",
+            group: "session",
+            title: "Switch to session [2] s02-review",
+            summary: "review session",
+            command: "/use 2",
+            keywords: ["review"],
+          },
+        ],
+      }),
+    ).toContain("Palette");
   });
 });

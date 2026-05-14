@@ -1,17 +1,50 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { dispatchCliCommand } from "../../src/cli-commands.js";
 import type { CliCommandContext } from "../../src/cli-commands.js";
+import { CliPaletteStore } from "../../src/cli-palette.js";
 import { resetCliPermissionModeForTest } from "../../src/cli-permissions.js";
+import { CliTranscriptBrowserStore } from "../../src/cli-transcript.js";
 
-function createContext(): CliCommandContext {
+function createContext(input: {
+  activeSessionId?: string;
+  sessions?: Array<{ id: string; messageCount: number; busy?: boolean }>;
+  transcriptMessages?: Array<{ role: string; content: string }>;
+} = {}): CliCommandContext {
   let theme: "atlas" | "plain" = "atlas";
   let model = "gpt-test";
   let composeLines: string[] | null = null;
+  const paletteStore = new CliPaletteStore();
+  const transcriptBrowser = new CliTranscriptBrowserStore(2);
+  const activeSessionId = input.activeSessionId ?? "s01";
+  const sessions = [
+    ...(input.sessions ?? [{ id: "s01", messageCount: 2, busy: false }]).map((session) => ({
+      id: session.id,
+      messageCount: session.messageCount,
+      busy: session.busy ?? false,
+    })),
+  ];
+  const transcriptMessages = input.transcriptMessages ?? [
+    { role: "user", content: "first prompt" },
+    { role: "assistant", content: "first answer" },
+    { role: "user", content: "second prompt" },
+    { role: "assistant", content: "hook blocked during run" },
+  ];
   return {
-    activeSessionId: "s01",
-    createSession: vi.fn(() => ({ id: "s02" })),
-    listSessions: vi.fn(() => [{ id: "s01", messageCount: 2, busy: false, active: true }]),
-    useSession: vi.fn((sessionId: string) => sessionId === "s01"),
+    activeSessionId,
+    createSession: vi.fn(() => {
+      const session = { id: `s${String(sessions.length + 1).padStart(2, "0")}`, messageCount: 0, busy: false };
+      sessions.push(session);
+      return { id: session.id };
+    }),
+    listSessions: vi.fn(() =>
+      sessions.map((session) => ({
+        id: session.id,
+        messageCount: session.messageCount,
+        busy: session.busy,
+        active: session.id === activeSessionId,
+      })),
+    ),
+    useSession: vi.fn((sessionId: string) => sessions.some((session) => session.id === sessionId)),
     listTools: vi.fn(async () => [{ name: "read_file", target: "base", description: "Read" }]),
     getStatus: vi.fn(async () => ({
       workspace: "repo",
@@ -182,6 +215,27 @@ function createContext(): CliCommandContext {
       theme = nextTheme;
       return true;
     },
+    showPalette: async (query = "") =>
+      paletteStore.search(
+        activeSessionId,
+        {
+          sessions: sessions.map((session) => ({
+            id: session.id,
+            messageCount: session.messageCount,
+            busy: session.busy,
+            active: session.id === activeSessionId,
+          })),
+          helpTopics: ["draft", "sessions", "runtime", "approvals", "transcript", "palette", "all"],
+          composerActive: Array.isArray(composeLines),
+          pendingApprovals: 1,
+        },
+        query,
+      ),
+    openPalette: (index) => paletteStore.open(activeSessionId, index),
+    showTranscript: (direction = "current") => transcriptBrowser.history(activeSessionId, transcriptMessages, direction),
+    searchTranscript: (query) => transcriptBrowser.search(activeSessionId, transcriptMessages, query),
+    peekTranscript: (entryIndex) => transcriptBrowser.peek(activeSessionId, transcriptMessages, entryIndex),
+    tailTranscript: () => transcriptBrowser.tail(activeSessionId, transcriptMessages),
   };
 }
 
@@ -197,6 +251,9 @@ describe("cli-commands", () => {
   it("renders help, status, and doctor without entering the model", async () => {
     const context = createContext();
     expect((await dispatchCliCommand("/help", context)).handled).toBe(true);
+    expect((await dispatchCliCommand("/help draft", context)).output).toContain("Help: Draft");
+    expect((await dispatchCliCommand("/help sessions", context)).output).toContain("/use <x>");
+    expect((await dispatchCliCommand("/help missing", context)).output).toContain("unknown help topic");
     expect((await dispatchCliCommand("/status", context)).output).toContain("Status");
     expect((await dispatchCliCommand("/doctor", context)).output).toContain("Doctor");
   });
@@ -231,6 +288,7 @@ describe("cli-commands", () => {
     expect((await dispatchCliCommand("/cost", context)).output).toContain("Usage");
     expect((await dispatchCliCommand("/compact 5", context)).output).toContain("Compact");
     expect((await dispatchCliCommand("/add-dir /tmp/demo", context)).output).toContain("added workspace root /tmp/demo");
+    expect((await dispatchCliCommand("/sessions", context)).output).toContain("[1]");
     expect((await dispatchCliCommand("批准", context)).output).toContain("approved apr_1");
   });
 
@@ -259,6 +317,106 @@ describe("cli-commands", () => {
     expect((await dispatchCliCommand("/pop", context)).output).toContain("start with /compose");
     await dispatchCliCommand("/compose", context);
     expect((await dispatchCliCommand("/pop nope", context)).output).toContain("invalid pop count");
+  });
+
+  it("supports session selectors and sequential session navigation", async () => {
+    const sessions = [
+      { id: "s01-home", messageCount: 2 },
+      { id: "s02-review", messageCount: 5 },
+      { id: "s03-latest", messageCount: 1 },
+    ];
+    const useByIndex = await dispatchCliCommand(
+      "/use 2",
+      createContext({ activeSessionId: "s01-home", sessions }),
+    );
+    const useByLatest = await dispatchCliCommand(
+      "/use latest",
+      createContext({ activeSessionId: "s01-home", sessions }),
+    );
+    const useByPrefix = await dispatchCliCommand(
+      "/use s03",
+      createContext({ activeSessionId: "s01-home", sessions }),
+    );
+    const next = await dispatchCliCommand(
+      "/next",
+      createContext({ activeSessionId: "s02-review", sessions }),
+    );
+    const prev = await dispatchCliCommand(
+      "/prev",
+      createContext({ activeSessionId: "s02-review", sessions }),
+    );
+
+    expect(useByIndex).toMatchObject({ handled: true, nextSessionId: "s02-review" });
+    expect(useByIndex.output).toContain("[2/3]");
+    expect(useByLatest).toMatchObject({ handled: true, nextSessionId: "s03-latest" });
+    expect(useByPrefix).toMatchObject({ handled: true, nextSessionId: "s03-latest" });
+    expect(next).toMatchObject({ handled: true, nextSessionId: "s03-latest" });
+    expect(prev).toMatchObject({ handled: true, nextSessionId: "s01-home" });
+  });
+
+  it("reports ambiguous or invalid session selectors", async () => {
+    const sessions = [
+      { id: "s02-alpha", messageCount: 2 },
+      { id: "s02-beta", messageCount: 1 },
+    ];
+    const ambiguous = await dispatchCliCommand("/use s02", createContext({ activeSessionId: "s02-alpha", sessions }));
+    const invalidIndex = await dispatchCliCommand("/use 9", createContext({ activeSessionId: "s02-alpha", sessions }));
+
+    expect(ambiguous.output).toContain("ambiguous session selector");
+    expect(invalidIndex.output).toContain("session index out of range");
+  });
+
+  it("supports transcript browsing, search, peek, and tail views", async () => {
+    const context = createContext();
+
+    const history = await dispatchCliCommand("/history", context);
+    const prev = await dispatchCliCommand("/history prev", context);
+    const search = await dispatchCliCommand("/search hook", context);
+    const peek = await dispatchCliCommand("/peek 4", context);
+    const tail = await dispatchCliCommand("/tail", context);
+
+    expect(history.output).toContain("Transcript");
+    expect(history.output).toContain("window");
+    expect(prev.output).toContain("#02");
+    expect(search.output).toContain("query     hook");
+    expect(search.output).toContain("#04");
+    expect(peek.output).toContain("entry     #04 assistant");
+    expect(tail.output).toContain("tail");
+  });
+
+  it("supports palette search and direct candidate execution", async () => {
+    const sessions = [
+      { id: "s01-home", messageCount: 2 },
+      { id: "s02-review", messageCount: 5 },
+    ];
+    const context = createContext({ activeSessionId: "s01-home", sessions });
+
+    const palette = await dispatchCliCommand("/palette review", context);
+    const open = await dispatchCliCommand("/palette open 1", context);
+
+    expect(palette.output).toContain("Palette");
+    expect(palette.output).toContain("/use 2");
+    expect(open).toMatchObject({ handled: true, nextSessionId: "s02-review", showBanner: true });
+    expect(open.output).toContain("palette [1] -> /use 2");
+    expect(open.output).toContain("using session [2/2] s02-review");
+  });
+
+  it("validates palette open requests", async () => {
+    const context = createContext();
+
+    expect((await dispatchCliCommand("/palette open 1", context)).output).toContain("run /palette again");
+    await dispatchCliCommand("/palette", context);
+    expect((await dispatchCliCommand("/palette open nope", context)).output).toContain("invalid palette entry");
+    expect((await dispatchCliCommand("/palette open 99", context)).output).toContain("palette entry not found");
+  });
+
+  it("validates transcript browse arguments", async () => {
+    const context = createContext();
+
+    expect((await dispatchCliCommand("/history nope", context)).output).toContain("unknown history action");
+    expect((await dispatchCliCommand("/search", context)).output).toContain("missing search query");
+    expect((await dispatchCliCommand("/peek nope", context)).output).toContain("invalid transcript entry");
+    expect((await dispatchCliCommand("/peek 99", context)).output).toContain("transcript entry not found");
   });
 
   it("rejects unknown commands with stable help", async () => {
