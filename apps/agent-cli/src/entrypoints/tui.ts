@@ -5,10 +5,9 @@ import { stdin, stdout } from "node:process";
 import type OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { AgentService } from "../service-api/index.js";
-import { AgentServiceClient } from "../service-api/client.js";
+import { resolveRunningDaemonServiceClient } from "../service-api/daemon-client.js";
 import { createAgentAppRuntime, type AgentAppRuntimeDeps } from "../bootstrap/app-runtime.js";
 import { AgentHost } from "../host/agent-host.js";
-import { DaemonLock } from "./daemon-lock.js";
 import { dispatchCliCommand } from "../cli/commands.js";
 import { completeCliLine } from "../cli/completion.js";
 import { CliComposerStore } from "../cli/composer.js";
@@ -71,23 +70,18 @@ export type DaemonTuiServiceResolution = {
 export async function resolveDaemonTuiService(
   runtimeRoot?: string,
 ): Promise<DaemonTuiServiceResolution | null> {
-  const lock = new DaemonLock(runtimeRoot);
-  const status = await lock.status();
-  if (status.state !== "running") {
+  const resolved = await resolveRunningDaemonServiceClient({ runtimeRoot });
+  if (!resolved) {
     return null;
   }
-
-  const client = new AgentServiceClient();
-  await client.initialize();
-
-  const sessionCount = client.listSessions().length;
+  const sessionCount = resolved.client.listSessions().length;
   const statusBits = [
-    typeof status.pid === "number" ? `pid=${status.pid}` : null,
+    typeof resolved.status.pid === "number" ? `pid=${resolved.status.pid}` : null,
     `${sessionCount} shared session${sessionCount === 1 ? "" : "s"}`,
   ].filter(Boolean);
 
   return {
-    service: client,
+    service: resolved.client,
     notice: `Connected to daemon${statusBits.length ? ` (${statusBits.join(" ")})` : ""}`,
   };
 }

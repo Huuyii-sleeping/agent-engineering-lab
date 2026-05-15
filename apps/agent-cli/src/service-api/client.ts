@@ -137,6 +137,46 @@ export class AgentServiceClient {
     return { id };
   }
 
+  async getSessionDetail(sessionId: string): Promise<Record<string, unknown> | null> {
+    const normalizedId = sessionId.trim();
+    if (!normalizedId) {
+      return null;
+    }
+    try {
+      const response = await this.requestJson(
+        "GET",
+        `/sessions/${encodeURIComponent(normalizedId)}`,
+        undefined,
+        { allowErrorStatus: true },
+      );
+      if (response.ok === false) {
+        return null;
+      }
+      const session = getObject(response.session);
+      const history = getMessages(session.messages);
+      this.upsertSession({
+        id: normalizedId,
+        createdAt: getNumber(session.createdAt),
+        updatedAt: getNumber(session.updatedAt),
+        busy: getBoolean(session.busy),
+        history,
+        messageCount: Number(session.messageCount ?? history.length),
+        rounds: getNumber(session.rounds),
+      });
+      return {
+        id: normalizedId,
+        createdAt: getNumber(session.createdAt),
+        updatedAt: getNumber(session.updatedAt),
+        busy: getBoolean(session.busy),
+        messageCount: Number(session.messageCount ?? history.length),
+        rounds: getNumber(session.rounds),
+        messages: history,
+      };
+    } catch {
+      return null;
+    }
+  }
+
   async toolsMetadata(): Promise<Array<Record<string, string>>> {
     try {
       const response = await this.requestJson("GET", "/tools");

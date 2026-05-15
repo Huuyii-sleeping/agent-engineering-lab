@@ -137,6 +137,11 @@ describe("service-api/client", () => {
     const created = await client.createSession();
     expect(created).toEqual({ id: "s02" });
     expect(client.listSessions().map((session) => session.id)).toEqual(["s01", "s02"]);
+    await expect(client.getSessionDetail("s01")).resolves.toMatchObject({
+      id: "s01",
+      messages: [{ role: "user", content: "hello daemon" }],
+    });
+    await expect(client.getSessionDetail("missing")).resolves.toBeNull();
 
     const result = await client.chat({ session_id: "s01", message: "follow up" });
     expect(result).toMatchObject({

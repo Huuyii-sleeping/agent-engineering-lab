@@ -1,5 +1,6 @@
 import { stdin, stdout } from "node:process";
 import { AgentService } from "../service-api/index.js";
+import { resolveRunningDaemonServiceClient } from "../service-api/daemon-client.js";
 import { createAgentAppRuntime } from "../bootstrap/app-runtime.js";
 import { AgentHost } from "../host/agent-host.js";
 import { writeFrame } from "../tools/mcp-protocol.js";
@@ -25,9 +26,9 @@ type JsonRpcReply = {
 };
 
 export type AgentMcpServiceLike = {
-  createSession(): { id: string };
+  createSession(): { id: string } | Promise<{ id: string }>;
   listSessions(): unknown[];
-  getSessionDetail(sessionId: string): Record<string, unknown> | null;
+  getSessionDetail(sessionId: string): Record<string, unknown> | null | Promise<Record<string, unknown> | null>;
   toolsMetadata(): Promise<Array<Record<string, string>>>;
   chat(input: { session_id?: string; message?: string }): Promise<Record<string, unknown>>;
 };
@@ -120,12 +121,12 @@ async function callAgentChat(service: AgentMcpServiceLike, params: unknown): Pro
       session_id: typeof args.session_id === "string" ? args.session_id : undefined,
     });
   } else if (toolName === "agent_create_session") {
-    result = { ok: true, session: service.createSession() };
+    result = { ok: true, session: await service.createSession() };
   } else if (toolName === "agent_list_sessions") {
     result = { ok: true, sessions: service.listSessions() };
   } else if (toolName === "agent_get_session") {
     const sessionId = String(args.session_id ?? "").trim();
-    const session = sessionId ? service.getSessionDetail(sessionId) : null;
+    const session = sessionId ? await service.getSessionDetail(sessionId) : null;
     result = session
       ? { ok: true, session }
       : {
@@ -224,6 +225,7 @@ export type AgentMcpServerOptions = {
   output?: NodeJS.WritableStream;
   service?: AgentMcpServiceLike;
   host?: Pick<AgentHost, "initialize" | "runtime">;
+  resolveDaemonService?: () => Promise<AgentMcpServiceLike | null>;
 };
 
 export async function runAgentMcpServer(opts: AgentMcpServerOptions = {}): Promise<void> {
@@ -231,9 +233,23 @@ export async function runAgentMcpServer(opts: AgentMcpServerOptions = {}): Promi
   const output = opts.output ?? stdout;
   let service = opts.service;
   if (!service) {
-    const host = opts.host ?? new AgentHost(createAgentAppRuntime());
-    await host.initialize();
-    service = new AgentService(host.runtime(), host as AgentHost);
+    if (!opts.host) {
+      try {
+        service =
+          (await (opts.resolveDaemonService ??
+            (async () => {
+              const resolved = await resolveRunningDaemonServiceClient();
+              return resolved?.client ?? null;
+            }))()) ?? undefined;
+      } catch {
+        service = undefined;
+      }
+    }
+    if (!service) {
+      const host = opts.host ?? new AgentHost(createAgentAppRuntime());
+      await host.initialize();
+      service = new AgentService(host.runtime(), host as AgentHost);
+    }
   }
   const reader = new StdioFrameReader();
   let chain = Promise.resolve();

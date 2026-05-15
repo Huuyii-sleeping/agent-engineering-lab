@@ -121,6 +121,38 @@ describe("entrypoints/mcp-server", () => {
     expect(tools?.result).toMatchObject({ structuredContent: { ok: true, tools: [{ name: "read_file" }] } });
   });
 
+  it("awaits async session creation and transcript lookup for daemon-backed services", async () => {
+    const service: AgentMcpServiceLike = {
+      createSession: vi.fn(async () => ({ id: "async-session" })),
+      listSessions: vi.fn(() => [{ id: "async-session", messageCount: 0 }]),
+      getSessionDetail: vi.fn(async (sessionId: string) =>
+        sessionId === "async-session" ? { id: sessionId, messages: [] } : null,
+      ),
+      toolsMetadata: vi.fn(async () => []),
+      chat: vi.fn(async () => ({ ok: true, assistant: "reply:async" })),
+    };
+
+    const created = await handleAgentMcpRequest(service, {
+      jsonrpc: "2.0",
+      id: 8,
+      method: "tools/call",
+      params: { name: "agent_create_session", arguments: {} },
+    });
+    const transcript = await handleAgentMcpRequest(service, {
+      jsonrpc: "2.0",
+      id: 9,
+      method: "tools/call",
+      params: { name: "agent_get_session", arguments: { session_id: "async-session" } },
+    });
+
+    expect(created?.result).toMatchObject({
+      structuredContent: { ok: true, session: { id: "async-session" } },
+    });
+    expect(transcript?.result).toMatchObject({
+      structuredContent: { ok: true, session: { id: "async-session" } },
+    });
+  });
+
   it("rejects unknown tools without calling the service", async () => {
     const service = createService();
     const response = await handleAgentMcpRequest(service, {
@@ -164,5 +196,22 @@ describe("entrypoints/mcp-server", () => {
     });
 
     expect(host.initialize).toHaveBeenCalledTimes(1);
+  });
+
+  it("prefers a resolved daemon-backed service before building an embedded runtime", async () => {
+    const resolveDaemonService = vi.fn(async () => createService());
+    const output = new Writable({
+      write(_chunk, _encoding, callback) {
+        callback();
+      },
+    });
+
+    await runAgentMcpServer({
+      input: Readable.from([]),
+      output,
+      resolveDaemonService,
+    });
+
+    expect(resolveDaemonService).toHaveBeenCalledTimes(1);
   });
 });
