@@ -4,8 +4,7 @@ import type { Server } from "node:http";
 import { AgentService, createAgentHttpServer } from "./index.js";
 import { createAgentAppRuntime } from "../bootstrap/app-runtime.js";
 import { AgentHost } from "../host/agent-host.js";
-
-const port = Number(process.env.AGENT_HTTP_PORT ?? 3181);
+import { resolveAgentHttpPort } from "./config.js";
 
 type AgentServerLike = Pick<
   Server,
@@ -28,7 +27,7 @@ export async function runServer(options: RunServerOptions = {}): Promise<void> {
     service = new AgentService(host.runtime(), host as AgentHost);
   }
   const server = (options.serverFactory ?? createAgentHttpServer)(service);
-  const targetPort = options.port ?? port;
+  const targetPort = options.port ?? resolveAgentHttpPort();
   const output = options.output ?? process.stdout;
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);

@@ -5,8 +5,10 @@ import { stdin, stdout } from "node:process";
 import type OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { AgentService } from "../service-api/index.js";
+import { AgentServiceClient } from "../service-api/client.js";
 import { createAgentAppRuntime, type AgentAppRuntimeDeps } from "../bootstrap/app-runtime.js";
 import { AgentHost } from "../host/agent-host.js";
+import { DaemonLock } from "./daemon-lock.js";
 import { dispatchCliCommand } from "../cli/commands.js";
 import { completeCliLine } from "../cli/completion.js";
 import { CliComposerStore } from "../cli/composer.js";
@@ -54,12 +56,41 @@ import { addWorkspaceRoot } from "../workspace-roots.js";
 
 export type TerminalTuiServiceLike = {
   bridgeManifest(): Record<string, unknown>;
-  createSession(): { id: string };
+  createSession(): { id: string } | Promise<{ id: string }>;
   listSessions(): Array<{ id: string; busy: boolean; history: unknown[] }>;
   toolsMetadata(): Promise<Array<Record<string, string>>>;
   chat(input: { session_id?: string; message?: string }): Promise<Record<string, unknown>>;
   runToolByName?(name: string, argumentsJson: string): Promise<string>;
 };
+
+export type DaemonTuiServiceResolution = {
+  service: TerminalTuiServiceLike;
+  notice: string;
+};
+
+export async function resolveDaemonTuiService(
+  runtimeRoot?: string,
+): Promise<DaemonTuiServiceResolution | null> {
+  const lock = new DaemonLock(runtimeRoot);
+  const status = await lock.status();
+  if (status.state !== "running") {
+    return null;
+  }
+
+  const client = new AgentServiceClient();
+  await client.initialize();
+
+  const sessionCount = client.listSessions().length;
+  const statusBits = [
+    typeof status.pid === "number" ? `pid=${status.pid}` : null,
+    `${sessionCount} shared session${sessionCount === 1 ? "" : "s"}`,
+  ].filter(Boolean);
+
+  return {
+    service: client,
+    notice: `Connected to daemon${statusBits.length ? ` (${statusBits.join(" ")})` : ""}`,
+  };
+}
 
 function getToolRunner(service: TerminalTuiServiceLike):
   | ((name: string, argumentsJson: string) => Promise<string>)
@@ -514,161 +545,171 @@ export async function handleTerminalTuiCommand(input: {
       busy: session.busy,
       active: session.id === input.activeSessionId,
     }));
-  const command = await dispatchCliCommand(input.line, {
-    activeSessionId: input.activeSessionId,
-    createSession: () => input.service.createSession(),
-    listSessions: listSessionSummaries,
-    useSession: (sessionId) => input.service.listSessions().some((session) => session.id === sessionId),
-    listTools: async () => input.service.toolsMetadata(),
-    getStatus: async () =>
-      collectCliStatusSnapshot({
-        mode: `tui/${workflow}`,
-        activeSessionId: input.activeSessionId,
-        sessionCount: input.service.listSessions().length,
-        bridgeEndpoint: String(
-          (input.service.bridgeManifest().endpoints as { events?: unknown } | undefined)?.events ?? "/events",
+  let command: Awaited<ReturnType<typeof dispatchCliCommand>>;
+  try {
+    command = await dispatchCliCommand(input.line, {
+      activeSessionId: input.activeSessionId,
+      createSession: async () => input.service.createSession(),
+      listSessions: listSessionSummaries,
+      useSession: (sessionId) => input.service.listSessions().some((session) => session.id === sessionId),
+      listTools: async () => input.service.toolsMetadata(),
+      getStatus: async () =>
+        collectCliStatusSnapshot({
+          mode: `tui/${workflow}`,
+          activeSessionId: input.activeSessionId,
+          sessionCount: input.service.listSessions().length,
+          bridgeEndpoint: String(
+            (input.service.bridgeManifest().endpoints as { events?: unknown } | undefined)?.events ?? "/events",
+          ),
+          toolMetadata: await input.service.toolsMetadata(),
+          model: input.model,
+        }),
+      getConfig: () => collectCliConfigSnapshot({ model: input.model }),
+      getPermissions: collectCliPermissionSnapshot,
+      setPermissionMode: (mode) => {
+        setCliPermissionMode(mode);
+        return true;
+      },
+      listApprovals: async (status) => {
+        if (!toolRunner) {
+          return JSON.stringify({ ok: false, error: { message: "security tools are not available for this TUI service" } });
+        }
+        return toolRunner("security_list_approvals", JSON.stringify(status ? { status } : {}));
+      },
+      approveRequest: async (requestId) => {
+        if (!toolRunner) {
+          return JSON.stringify({ ok: false, error: { message: "security tools are not available for this TUI service" } });
+        }
+        return toolRunner("security_approve", JSON.stringify({ request_id: requestId }));
+      },
+      rejectRequest: async (requestId) => {
+        if (!toolRunner) {
+          return JSON.stringify({ ok: false, error: { message: "security tools are not available for this TUI service" } });
+        }
+        return toolRunner("security_reject", JSON.stringify({ request_id: requestId }));
+      },
+      listSkills: async () => {
+        const catalog = getSkillCatalog();
+        return {
+          skills: catalog.available,
+          loadedNames: catalog.loadedNames,
+          missingNames: catalog.missingNames,
+        };
+      },
+      getSkill: async (name) => {
+        const skill = loadSkill(name);
+        if (!skill) {
+          return null;
+        }
+        const catalog = getSkillCatalog();
+        return {
+          name: skill.name,
+          description: skill.description,
+          path: skill.path,
+          root: skill.root,
+          metadata: skill.metadata,
+          content: skill.content,
+          loaded: catalog.loadedNames.some(
+            (loadedName) => loadedName.toLowerCase() === skill.name.toLowerCase(),
+          ),
+        };
+      },
+      dumpSystemPrompt: async () => {
+        const catalog = getSkillCatalog();
+        return {
+          dump: inspectPromptSource(getStaticPromptSource()),
+          loadedNames: catalog.loadedNames,
+          missingNames: catalog.missingNames,
+        };
+      },
+      getUsage: () => collectCliUsageSnapshot(input.model),
+      compactSession: async (keepRecent) => {
+        const session = input.service
+          .listSessions()
+          .find((item) => item.id === input.activeSessionId) ?? input.service.listSessions().at(-1);
+        return compactMessages({ messages: (session?.history ?? []) as ChatCompletionMessageParam[] }, "manual", keepRecent);
+      },
+      isComposing: () => input.composer.isActive(input.activeSessionId),
+      getComposeLineCount: () => input.composer.lineCount(input.activeSessionId),
+      getComposeCharCount: () => input.composer.preview(input.activeSessionId)?.charCount ?? 0,
+      startCompose: () => input.composer.start(input.activeSessionId),
+      appendComposeLine: (line) => input.composer.append(input.activeSessionId, line),
+      previewCompose: () => input.composer.preview(input.activeSessionId),
+      popCompose: (count) => input.composer.pop(input.activeSessionId, count),
+      sendCompose: () => input.composer.consume(input.activeSessionId),
+      cancelCompose: () => input.composer.cancel(input.activeSessionId),
+      getModel: () => input.model,
+      setModel: input.setModel,
+      addWorkspaceRoot,
+      runDoctor: runCliDoctor,
+      getTheme: () => getCliUiTheme(),
+      setTheme: (theme) => {
+        setCliUiTheme(theme);
+        return true;
+      },
+      getWorkflow: () => workflow,
+      setWorkflow: (nextWorkflow) => {
+        workflow = nextWorkflow;
+        return input.setWorkflow ? input.setWorkflow(nextWorkflow) : true;
+      },
+      showPalette: async (query = "") =>
+        paletteStore.search(
+          input.activeSessionId,
+          {
+            sessions: listSessionSummaries(),
+            helpTopics: listCliHelpTopics(),
+            composerActive: input.composer.isActive(input.activeSessionId),
+            pendingApprovals: (await collectCliPermissionSnapshot()).pendingApprovals,
+            workflow,
+          },
+          query,
         ),
-        toolMetadata: await input.service.toolsMetadata(),
-        model: input.model,
-      }),
-    getConfig: () => collectCliConfigSnapshot({ model: input.model }),
-    getPermissions: collectCliPermissionSnapshot,
-    setPermissionMode: (mode) => {
-      setCliPermissionMode(mode);
-      return true;
-    },
-    listApprovals: async (status) => {
-      if (!toolRunner) {
-        return JSON.stringify({ ok: false, error: { message: "security tools are not available for this TUI service" } });
-      }
-      return toolRunner("security_list_approvals", JSON.stringify(status ? { status } : {}));
-    },
-    approveRequest: async (requestId) => {
-      if (!toolRunner) {
-        return JSON.stringify({ ok: false, error: { message: "security tools are not available for this TUI service" } });
-      }
-      return toolRunner("security_approve", JSON.stringify({ request_id: requestId }));
-    },
-    rejectRequest: async (requestId) => {
-      if (!toolRunner) {
-        return JSON.stringify({ ok: false, error: { message: "security tools are not available for this TUI service" } });
-      }
-      return toolRunner("security_reject", JSON.stringify({ request_id: requestId }));
-    },
-    listSkills: async () => {
-      const catalog = getSkillCatalog();
-      return {
-        skills: catalog.available,
-        loadedNames: catalog.loadedNames,
-        missingNames: catalog.missingNames,
-      };
-    },
-    getSkill: async (name) => {
-      const skill = loadSkill(name);
-      if (!skill) {
-        return null;
-      }
-      const catalog = getSkillCatalog();
-      return {
-        name: skill.name,
-        description: skill.description,
-        path: skill.path,
-        root: skill.root,
-        metadata: skill.metadata,
-        content: skill.content,
-        loaded: catalog.loadedNames.some(
-          (loadedName) => loadedName.toLowerCase() === skill.name.toLowerCase(),
-        ),
-      };
-    },
-    dumpSystemPrompt: async () => {
-      const catalog = getSkillCatalog();
-      return {
-        dump: inspectPromptSource(getStaticPromptSource()),
-        loadedNames: catalog.loadedNames,
-        missingNames: catalog.missingNames,
-      };
-    },
-    getUsage: () => collectCliUsageSnapshot(input.model),
-    compactSession: async (keepRecent) => {
-      const session = input.service
-        .listSessions()
-        .find((item) => item.id === input.activeSessionId) ?? input.service.listSessions().at(-1);
-      return compactMessages({ messages: (session?.history ?? []) as ChatCompletionMessageParam[] }, "manual", keepRecent);
-    },
-    isComposing: () => input.composer.isActive(input.activeSessionId),
-    getComposeLineCount: () => input.composer.lineCount(input.activeSessionId),
-    getComposeCharCount: () => input.composer.preview(input.activeSessionId)?.charCount ?? 0,
-    startCompose: () => input.composer.start(input.activeSessionId),
-    appendComposeLine: (line) => input.composer.append(input.activeSessionId, line),
-    previewCompose: () => input.composer.preview(input.activeSessionId),
-    popCompose: (count) => input.composer.pop(input.activeSessionId, count),
-    sendCompose: () => input.composer.consume(input.activeSessionId),
-    cancelCompose: () => input.composer.cancel(input.activeSessionId),
-    getModel: () => input.model,
-    setModel: input.setModel,
-    addWorkspaceRoot,
-    runDoctor: runCliDoctor,
-    getTheme: () => getCliUiTheme(),
-    setTheme: (theme) => {
-      setCliUiTheme(theme);
-      return true;
-    },
-    getWorkflow: () => workflow,
-    setWorkflow: (nextWorkflow) => {
-      workflow = nextWorkflow;
-      return input.setWorkflow ? input.setWorkflow(nextWorkflow) : true;
-    },
-    showPalette: async (query = "") =>
-      paletteStore.search(
-        input.activeSessionId,
-        {
-          sessions: listSessionSummaries(),
-          helpTopics: listCliHelpTopics(),
-          composerActive: input.composer.isActive(input.activeSessionId),
-          pendingApprovals: (await collectCliPermissionSnapshot()).pendingApprovals,
-          workflow,
-        },
-        query,
-      ),
-    openPalette: (index) => paletteStore.open(input.activeSessionId, index),
-    showTranscript: (direction = "current") => {
-      const session = input.service
-        .listSessions()
-        .find((item) => item.id === input.activeSessionId) ?? input.service.listSessions().at(-1);
-      return transcriptBrowser.history(input.activeSessionId, session?.history ?? [], direction);
-    },
-    searchTranscript: (query) => {
-      const session = input.service
-        .listSessions()
-        .find((item) => item.id === input.activeSessionId) ?? input.service.listSessions().at(-1);
-      return transcriptBrowser.search(input.activeSessionId, session?.history ?? [], query);
-    },
-    moveTranscriptSearch: (direction) => {
-      const session = input.service
-        .listSessions()
-        .find((item) => item.id === input.activeSessionId) ?? input.service.listSessions().at(-1);
-      return transcriptBrowser.moveSearch(input.activeSessionId, session?.history ?? [], direction);
-    },
-    peekTranscript: (entryIndex) => {
-      const session = input.service
-        .listSessions()
-        .find((item) => item.id === input.activeSessionId) ?? input.service.listSessions().at(-1);
-      return transcriptBrowser.peek(input.activeSessionId, session?.history ?? [], entryIndex);
-    },
-    moveTranscriptPeek: (direction) => {
-      const session = input.service
-        .listSessions()
-        .find((item) => item.id === input.activeSessionId) ?? input.service.listSessions().at(-1);
-      return transcriptBrowser.peekRelative(input.activeSessionId, session?.history ?? [], direction);
-    },
-    tailTranscript: () => {
-      const session = input.service
-        .listSessions()
-        .find((item) => item.id === input.activeSessionId) ?? input.service.listSessions().at(-1);
-      return transcriptBrowser.tail(input.activeSessionId, session?.history ?? []);
-    },
-  });
+      openPalette: (index) => paletteStore.open(input.activeSessionId, index),
+      showTranscript: (direction = "current") => {
+        const session = input.service
+          .listSessions()
+          .find((item) => item.id === input.activeSessionId) ?? input.service.listSessions().at(-1);
+        return transcriptBrowser.history(input.activeSessionId, session?.history ?? [], direction);
+      },
+      searchTranscript: (query) => {
+        const session = input.service
+          .listSessions()
+          .find((item) => item.id === input.activeSessionId) ?? input.service.listSessions().at(-1);
+        return transcriptBrowser.search(input.activeSessionId, session?.history ?? [], query);
+      },
+      moveTranscriptSearch: (direction) => {
+        const session = input.service
+          .listSessions()
+          .find((item) => item.id === input.activeSessionId) ?? input.service.listSessions().at(-1);
+        return transcriptBrowser.moveSearch(input.activeSessionId, session?.history ?? [], direction);
+      },
+      peekTranscript: (entryIndex) => {
+        const session = input.service
+          .listSessions()
+          .find((item) => item.id === input.activeSessionId) ?? input.service.listSessions().at(-1);
+        return transcriptBrowser.peek(input.activeSessionId, session?.history ?? [], entryIndex);
+      },
+      moveTranscriptPeek: (direction) => {
+        const session = input.service
+          .listSessions()
+          .find((item) => item.id === input.activeSessionId) ?? input.service.listSessions().at(-1);
+        return transcriptBrowser.peekRelative(input.activeSessionId, session?.history ?? [], direction);
+      },
+      tailTranscript: () => {
+        const session = input.service
+          .listSessions()
+          .find((item) => item.id === input.activeSessionId) ?? input.service.listSessions().at(-1);
+        return transcriptBrowser.tail(input.activeSessionId, session?.history ?? []);
+      },
+    });
+  } catch (error) {
+    return {
+      activeSessionId: input.activeSessionId,
+      workflow,
+      output: renderCliError("command failed", error instanceof Error ? error.message : String(error)),
+      exit: false,
+    };
+  }
   if (command.handled) {
     if (!command.submitPrompt) {
       return {
@@ -687,21 +728,30 @@ export async function handleTerminalTuiCommand(input: {
       return {
         activeSessionId: nextSessionId,
         workflow,
-        output: [
-          ...prefixOutput,
-          renderCliError("model not ready", input.startupIssue.message, "set /model <id> before sending prompts"),
-        ].join("\n"),
+        output: [...prefixOutput, renderCliError("model not ready", input.startupIssue.message, "set /model <id> before sending prompts")].join("\n"),
         exit: false,
         clearScreen: command.clearScreen,
         showBanner: command.showBanner,
       };
     }
-    const sessionResult = await captureConsoleOutput(() =>
-      input.service.chat({
-        session_id: nextSessionId ?? undefined,
-        message: prompt,
-      }),
-    );
+    let sessionResult;
+    try {
+      sessionResult = await captureConsoleOutput(() =>
+        input.service.chat({
+          session_id: nextSessionId ?? undefined,
+          message: prompt,
+        }),
+      );
+    } catch (error) {
+      return {
+        activeSessionId: nextSessionId,
+        workflow,
+        output: [...prefixOutput, renderCliError("chat failed", error instanceof Error ? error.message : String(error))].join("\n"),
+        exit: false,
+        clearScreen: command.clearScreen,
+        showBanner: command.showBanner,
+      };
+    }
     const session = sessionResult.result.session as { id?: unknown } | undefined;
     const resolvedSessionId = typeof session?.id === "string" ? session.id : nextSessionId;
     if (sessionResult.result.ok === false) {
@@ -792,16 +842,34 @@ export type TerminalTuiOptions = {
   input?: NodeJS.ReadableStream;
   output?: NodeJS.WritableStream;
   host?: Pick<AgentHost, "initialize" | "runtime">;
+  resolveDaemonService?: () => Promise<DaemonTuiServiceResolution | null>;
 };
 
 export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<void> {
   let service = opts.service;
   let startupIssue: Error | null = null;
+  let attachNotice: string | null = null;
   if (!service) {
-    if (opts.host) {
+    if (!opts.host) {
+      const resolveDaemonService = opts.resolveDaemonService ?? (() => resolveDaemonTuiService());
+      try {
+        const resolved = await resolveDaemonService();
+        if (resolved) {
+          service = resolved.service;
+          attachNotice = resolved.notice;
+        }
+      } catch (error) {
+        attachNotice = renderCliError(
+          "daemon attach failed",
+          error instanceof Error ? error.message : String(error),
+          "falling back to embedded host",
+        );
+      }
+    }
+    if (opts.host && !service) {
       await opts.host.initialize();
       service = new AgentService(opts.host.runtime(), opts.host as AgentHost);
-    } else {
+    } else if (!service) {
       try {
         service = new AgentService(createAgentAppRuntime());
       } catch (error) {
@@ -830,30 +898,36 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
   const transcriptBrowser = new CliTranscriptBrowserStore();
   let paletteState = createTerminalTuiPaletteState();
   let activeSessionId: string | null = null;
-  let currentModel = process.env.MODEL_ID?.trim() || "unset-model";
+  let currentModel = service instanceof AgentService ? process.env.MODEL_ID?.trim() || "unset-model" : "daemon-host";
   let currentWorkflow: CliWorkflowMode = "agent";
   let lastOutput =
     startupIssue?.message
       ? renderCliError("startup", startupIssue.message, "use /model <id> to activate the TUI")
-      : "Ready. Use natural language to run the agent, or /help for local controls.";
+      : attachNotice
+        ? `${attachNotice}\n\nReady. Use natural language to run the agent, or /help for local controls.`
+        : "Ready. Use natural language to run the agent, or /help for local controls.";
+  if (attachNotice && startupIssue?.message) {
+    lastOutput = `${attachNotice}\n\n${lastOutput}`;
+  }
   let waitingForInput = false;
   let shortcutBusy = false;
 
   const setModel = async (model: string): Promise<boolean> => {
+    if (!(service instanceof AgentService)) {
+      return false;
+    }
     try {
       process.env.MODEL_ID = model;
       currentModel = model;
       startupIssue = null;
-      if (service instanceof AgentService) {
-        replaceAgentServiceRuntime(
-          service,
-          createAgentAppRuntime({
-            client: createClient(),
-            model,
-            promptSource: getStaticPromptSource(),
-          }),
-        );
-      }
+      replaceAgentServiceRuntime(
+        service,
+        createAgentAppRuntime({
+          client: createClient(),
+          model,
+          promptSource: getStaticPromptSource(),
+        }),
+      );
       return true;
     } catch {
       return false;

@@ -109,6 +109,10 @@ export class AgentService {
     return this.toolService.listToolMetadata();
   }
 
+  async runToolByName(name: string, argumentsJson: string): Promise<string> {
+    return this.toolService.runToolByName(name, argumentsJson);
+  }
+
   getSessionDetail(sessionId: string): Record<string, unknown> | null {
     const session = this.getSession(sessionId);
     return session ? summarizeSessionTranscript(session) : null;
@@ -129,6 +133,7 @@ export class AgentService {
         health: "/health",
         chat: "/chat",
         tools: "/tools",
+        toolCall: "/tools/call",
         sessions: "/sessions",
         sessionDetail: "/sessions/:id",
         events: "/events",
@@ -263,6 +268,23 @@ export function createAgentHttpServer(service: AgentService): Server {
       }
       if (method === "GET" && pathname === "/tools") {
         json(res, 200, { ok: true, tools: await service.toolsMetadata() });
+        return;
+      }
+      if (method === "POST" && pathname === "/tools/call") {
+        const body = await parseBody<{ name?: string; arguments_json?: string }>(req);
+        const toolName = String(body.name ?? "").trim();
+        if (!toolName) {
+          json(res, 400, {
+            ok: false,
+            error: {
+              code: "INVALID_REQUEST",
+              message: "tool name is required",
+            },
+          });
+          return;
+        }
+        const output = await service.runToolByName(toolName, String(body.arguments_json ?? ""));
+        json(res, 200, { ok: true, output });
         return;
       }
       if (method === "GET" && pathname === "/events") {

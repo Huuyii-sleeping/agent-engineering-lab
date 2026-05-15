@@ -349,7 +349,7 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
 
       const command = await dispatchCliCommand(query, {
         activeSessionId,
-        createSession: () => {
+        createSession: async () => {
           const session = createCliSession();
           sessions.set(session.id, session);
           activeSessionId = session.id;

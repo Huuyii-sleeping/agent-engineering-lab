@@ -137,6 +137,24 @@ describe("entrypoints/tui", () => {
     expect(dashboard).toContain("/pop /cancel");
   });
 
+  it("awaits async session creation for daemon-backed TUI services", async () => {
+    const service = createService();
+    const result = await handleTerminalTuiCommand({
+      line: "/new",
+      service: {
+        ...service,
+        createSession: vi.fn(async () => service.createSession()),
+      },
+      activeSessionId: "s01",
+      model: "daemon-host",
+      setModel: async () => false,
+      composer: new CliComposerStore(),
+    });
+
+    expect(result.activeSessionId).toBe("s02");
+    expect(result.output).toContain("started fresh session s02");
+  });
+
   it("tracks palette selection state locally for the TUI", () => {
     const opened = updateTerminalTuiPaletteState({
       state: createTerminalTuiPaletteState(),
@@ -653,5 +671,27 @@ describe("entrypoints/tui", () => {
     });
 
     expect(host.initialize).toHaveBeenCalledTimes(1);
+  });
+
+  it("prefers a resolved daemon-backed service before building an embedded runtime", async () => {
+    const resolveDaemonService = vi.fn(async () => ({
+      service: createService(),
+      notice: "Connected to daemon (pid=4242 1 shared session)",
+    }));
+    const chunks: string[] = [];
+
+    await runTerminalTui({
+      input: Readable.from(["/exit\n"]),
+      output: new Writable({
+        write(chunk, _encoding, callback) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk));
+          callback();
+        },
+      }),
+      resolveDaemonService,
+    });
+
+    expect(resolveDaemonService).toHaveBeenCalledTimes(1);
+    expect(chunks.join("")).toContain("Connected to daemon");
   });
 });

@@ -117,12 +117,25 @@ function createObservabilityService(): ObservabilityServiceLike {
   };
 }
 
-async function requestServer(server: ReturnType<typeof createAgentHttpServer>, method: string, url: string): Promise<{
+async function requestServer(
+  server: ReturnType<typeof createAgentHttpServer>,
+  method: string,
+  url: string,
+  body?: unknown,
+): Promise<{
   statusCode: number;
   body: Record<string, unknown>;
 }> {
+  let sent = false;
   const req = new Readable({
     read() {
+      if (sent) {
+        return;
+      }
+      sent = true;
+      if (body !== undefined) {
+        this.push(JSON.stringify(body));
+      }
       this.push(null);
     },
   }) as Readable & { method?: string; url?: string };
@@ -313,7 +326,7 @@ describe("agent service", () => {
     expect(service.bridgeManifest()).toMatchObject({
       ok: true,
       capabilities: { events: true, sessions: true },
-      endpoints: { events: "/events", sessionDetail: "/sessions/:id" },
+      endpoints: { events: "/events", sessionDetail: "/sessions/:id", toolCall: "/tools/call" },
     });
     expect(transcript).toMatchObject({
       id: session.id,
@@ -351,6 +364,35 @@ describe("agent service", () => {
     expect(missing.body).toMatchObject({
       ok: false,
       error: { code: "SESSION_NOT_FOUND" },
+    });
+  });
+
+  it("serves remote tool call requests through the shared tool service", async () => {
+    const service = new AgentService({
+      client: {} as OpenAI,
+      model: "fake-model",
+      promptSource: PROMPT_SOURCE,
+      toolService: createToolService({
+        runToolByName: async (name: string, argumentsJson: string) => `tool:${name}:${argumentsJson}`,
+      }),
+      deliveryService: createDeliveryService(),
+      hookService: createHookService(),
+      memoryService: createMemoryService(),
+      modelPolicyService: createModelPolicyService(),
+      observabilityService: createObservabilityService(),
+      queryEngine: createLoopRunner(),
+    });
+    const server = createAgentHttpServer(service);
+
+    const called = await requestServer(server, "POST", "/tools/call", {
+      name: "bash",
+      arguments_json: "{\"command\":\"pwd\"}",
+    });
+
+    expect(called.statusCode).toBe(200);
+    expect(called.body).toMatchObject({
+      ok: true,
+      output: "tool:bash:{\"command\":\"pwd\"}",
     });
   });
 });

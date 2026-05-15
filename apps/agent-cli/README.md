@@ -81,6 +81,7 @@ pnpm --filter agent-web-console dev
 - Hooks：`.codex/hooks.json`
 - MCP：`src/entrypoints/mcp-server.ts`、`src/tools/mcp-*.ts`
 - Daemon 控制面：`src/entrypoints/daemon.ts`、`src/entrypoints/daemon-status.ts`、`src/host/agent-host.ts`
+- TUI 复用语义：`agent-cli tui` 在本地 daemon 已运行且 HTTP service ready 时优先 attach 到共享宿主；不可复用时回退 embedded host
 
 ## 继续扩展时的顺序
 

@@ -49,9 +49,11 @@ export type CliCommandResult =
       submitPrompt?: string;
     };
 
+type Awaitable<T> = T | Promise<T>;
+
 export type CliCommandContext = {
   activeSessionId: string | null;
-  createSession(): { id: string };
+  createSession(): Awaitable<{ id: string }>;
   listSessions(): CliSessionSummary[];
   useSession(sessionId: string): boolean;
   listTools(): Promise<Array<Record<string, string>>>;
@@ -869,7 +871,7 @@ export async function dispatchCliCommand(
     };
   }
   if (parsed.command === "clear" || parsed.command === "new") {
-    const session = context.createSession();
+    const session = await context.createSession();
     return {
       handled: true,
       output: `started fresh session ${session.id}`,
