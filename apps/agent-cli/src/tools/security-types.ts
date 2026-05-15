@@ -8,6 +8,7 @@ export type ApprovalRequest = {
   risk: RiskLevel;
   reason: string;
   scope: string;
+  scopeHash?: string;
   status: ApprovalStatus;
   createdAt: number;
   expiresAt: number;
@@ -23,6 +24,7 @@ export type PolicyRule = {
   risk: RiskLevel;
   reason: string;
   commandIncludes?: string[];
+  commandPrefixes?: string[];
   pathPrefixes?: string[];
 };
 
@@ -42,6 +44,7 @@ export type PolicyDecision = {
   reason: string;
   matchedRule: string;
   scope: string;
+  scopeHash: string;
 };
 
 export type SecurityGateResult =

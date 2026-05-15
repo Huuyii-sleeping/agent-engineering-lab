@@ -13,6 +13,7 @@ export function normalizeApprovalRequest(item: Partial<ApprovalRequest>): Approv
         : "medium",
     reason: String(item.reason ?? ""),
     scope: String(item.scope ?? ""),
+    scopeHash: typeof item.scopeHash === "string" && item.scopeHash.trim() ? item.scopeHash : undefined,
     status:
       item.status === "pending" ||
       item.status === "approved" ||
