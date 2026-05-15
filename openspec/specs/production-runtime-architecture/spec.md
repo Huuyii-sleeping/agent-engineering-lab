@@ -25,6 +25,34 @@ Query / conversation runtime MUST 作为可复用核心存在，能够被 CLI、
 - **WHEN** 两个不同表面各自创建会话
 - **THEN** 它们共享应用装配与服务定义，但保有独立的会话历史与执行状态
 
+### Requirement: Production runtime SHALL define a shared host layer above interaction surfaces
+生产运行时 SHALL 在 entrypoints 与 query runtime 之上定义共享宿主层，用于承载长期 session、事件流与运行时生命周期，而不是仅由各交互表面直接拼装 runtime。
+
+#### Scenario: 新入口接入共享宿主
+- **WHEN** 系统新增一个 CLI、TUI、HTTP 或 MCP 入口
+- **THEN** 该入口优先通过共享宿主接入运行时能力，而不是重新装配独立的 session 与 runtime 状态
+
+#### Scenario: 共享宿主也共享事件流
+- **WHEN** 多个 `AgentService` 或前台入口复用同一个 `AgentHost`
+- **THEN** 它们通过同一宿主级事件流观察会话创建与 chat 生命周期
+- **AND** 事件编号和订阅语义不再按 service instance 分裂
+
+### Requirement: Production runtime SHALL support embedded and daemon-backed host deployment
+生产运行时 SHALL 同时支持嵌入式宿主部署与 daemon-backed 长期宿主部署，以兼容当前本地前台执行流程并支持长期运行模式。
+
+#### Scenario: 嵌入式模式运行
+- **WHEN** 用户以前台方式启动 `agent-cli`
+- **THEN** 系统仍可在当前进程内创建宿主并正常执行
+
+#### Scenario: daemon 模式运行
+- **WHEN** 用户以后台 daemon 模式启动 `agent-cli`
+- **THEN** 系统创建长期宿主并允许其他交互表面复用其运行时能力
+
+#### Scenario: 前台入口通过共享 daemon client 复用宿主
+- **WHEN** TUI、MCP 或其他前台入口检测到本地 daemon-backed host 可用
+- **THEN** 它们通过稳定的 service API client 与统一的 daemon client resolver 复用现有宿主
+- **AND** 不在各入口内部重复实现 lock/status/health probe 与会话同步逻辑
+
 ### Requirement: Tool runtime MUST expose stable contracts and execution context
 工具运行时 MUST 形成稳定契约，至少明确工具注册、工具匹配、执行上下文、权限门禁与观测链路的职责归属，支持 native、subagent 与 MCP 工具统一接入。
 
@@ -50,6 +78,19 @@ Query / conversation runtime MUST 作为可复用核心存在，能够被 CLI、
 #### Scenario: 工具协议层 service 保持所属层边界
 - **WHEN** 某个 service 主要属于工具协议、注册或执行子系统内部
 - **THEN** 该 service 可以保留在 `tools/` 等所属层目录中，并由设计文档说明不迁移原因
+
+### Requirement: CLI local interaction internals MUST live under a dedicated module subtree
+CLI 本地交互模块 MUST 具备独立目录边界，避免交互表面内部实现继续散落在应用根层源码目录。
+
+#### Scenario: 维护者阅读源码根目录
+- **WHEN** 维护者阅读 `apps/agent-cli/src/`
+- **THEN** 应能明确区分应用级入口/组合根文件与 CLI 本地交互模块
+- **AND** CLI 命令、renderer、palette、completion、workflow、permissions 等本地交互实现位于专门的 `cli/` 子目录，而不是持续平铺在 `src/` 根层
+
+#### Scenario: 入口表面复用统一 CLI 子树
+- **WHEN** CLI 或 TUI 入口需要复用本地交互能力
+- **THEN** 它们通过 `cli/` 子目录中的稳定模块引用命令、UI、palette、completion 等能力
+- **AND** 不要求调用方继续依赖散落在 `src/` 根层的 `cli-*` 文件路径
 
 ### Requirement: Service API and HTTP surface internals MUST live under a dedicated module subtree
 会话管理与 HTTP service surface MUST 具备独立目录边界，避免这类对外 API 相关实现继续散落在应用根层源码目录，或与 runtime `services/` 依赖包混在一起。

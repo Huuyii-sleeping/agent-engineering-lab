@@ -31,15 +31,15 @@
 
 - 是什么：承载 runtime 的长期对象，负责 session、事件流、生命周期和统一服务出口。
 - 为什么需要：让多个入口共用同一个大脑，而不是每个入口自己起一套 runtime。
-- 在本仓库里对应什么：部分能力散在 `AgentService`、CLI/TUI 入口和 runtime services 中，还没有独立 host 抽象。
-- 当前状态：`部分具备`
+- 在本仓库里对应什么：`apps/agent-cli/src/host/agent-host.ts`，由 `agent-cli daemon`、HTTP service、TUI 和 MCP server 复用。
+- 当前状态：`已有`
 
 ### daemon
 
 - 是什么：长期驻留后台的宿主进程。CLI、TUI、Web 或其他客户端连接它，而不是各自启动一套 Agent。
 - 为什么需要：支撑长会话、跨终端恢复、远程接入和统一事件流。
-- 在本仓库里对应什么：当前没有独立 daemon 入口，HTTP service 和 MCP server 仍更像直接暴露当前进程能力。
-- 当前状态：`未实现`
+- 在本仓库里对应什么：`apps/agent-cli/src/entrypoints/daemon.ts`、`daemon-lock.ts`、`daemon-status.ts` 以及复用同一 host 的 HTTP service。
+- 当前状态：`已有`
 
 ### session
 
@@ -52,8 +52,8 @@
 
 - 是什么：把 session 写入磁盘或数据库，而不是只放在进程内存里。
 - 为什么需要：进程重启、终端关闭或客户端重连后还能恢复会话。
-- 在本仓库里对应什么：当前持久化重点在 `.memory`、`.tasks`、`.schedule` 等运行时副作用，session 本身还不是长期持久化对象。
-- 当前状态：`部分具备`
+- 在本仓库里对应什么：`apps/agent-cli/src/service-api/session-store.ts` 会把 session 索引和单 session 状态落到 `.sessions/`，由 `AgentHost` 启动时恢复。
+- 当前状态：`已有`
 
 ## 通信与入口
 
