@@ -204,4 +204,28 @@ describe("host/agent-host", () => {
     expect(restored?.id).toBe(session.id);
     expect(host.listSessions().map((item) => item.id)).toEqual([session.id]);
   });
+
+  it("owns a shared session-created event stream with monotonic ids", async () => {
+    tempDir = await mkdtemp(path.join(tmpdir(), "agent-host-test-"));
+    const host = new AgentHost(createDeps(), new SessionStore(path.join(tempDir, ".sessions")));
+    await host.initialize();
+
+    const seen: Array<{ id: number; type: string; sessionId: string }> = [];
+    const unsubscribe = host.subscribeEvents((event) => {
+      seen.push({
+        id: event.id,
+        type: event.type,
+        sessionId: String((event.payload.session as { id?: unknown } | undefined)?.id ?? ""),
+      });
+    });
+
+    const first = host.createSessionSync();
+    const second = host.createSessionSync();
+    unsubscribe();
+
+    expect(seen).toEqual([
+      { id: 0, type: "session.created", sessionId: first.id },
+      { id: 1, type: "session.created", sessionId: second.id },
+    ]);
+  });
 });

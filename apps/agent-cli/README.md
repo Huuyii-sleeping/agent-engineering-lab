@@ -81,6 +81,7 @@ pnpm --filter agent-web-console dev
 - Hooks：`.codex/hooks.json`
 - MCP：`src/entrypoints/mcp-server.ts`、`src/tools/mcp-*.ts`
 - Daemon 控制面：`src/entrypoints/daemon.ts`、`src/entrypoints/daemon-status.ts`、`src/host/agent-host.ts`
+- Host 事件语义：共享同一 `AgentHost` 的多个入口复用同一条宿主级事件流，而不是各自维护独立 event bus
 - TUI 复用语义：`agent-cli tui` 在本地 daemon 已运行且 HTTP service ready 时优先 attach 到共享宿主；不可复用时回退 embedded host
 
 ## 继续扩展时的顺序

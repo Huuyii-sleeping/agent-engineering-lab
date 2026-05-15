@@ -223,6 +223,47 @@ describe("agent service", () => {
     expect(second.listSessions().map((item) => item.id)).toEqual([session.id]);
   });
 
+  it("shares one host-owned event stream across services using the same host", async () => {
+    const sharedDeps = {
+      client: {} as OpenAI,
+      model: "fake-model",
+      promptSource: PROMPT_SOURCE,
+      toolService: createToolService(),
+      deliveryService: createDeliveryService(),
+      hookService: createHookService(),
+      memoryService: createMemoryService(),
+      notificationService: {
+        add: async () => undefined,
+        drain: async () => [],
+      },
+      modelPolicyService: createModelPolicyService(),
+      observabilityService: createObservabilityService(),
+      runtimeCoordinationService: {
+        runAutonomyTick: async () => ({ ok: true, action: "idle" }),
+        tickScheduler: async () => undefined,
+      },
+      runtimeServices: undefined,
+      queryEngine: createLoopRunner(),
+    } as unknown as ConstructorParameters<typeof AgentHost>[0];
+    const host = new AgentHost(sharedDeps);
+    const first = new AgentService(sharedDeps, host);
+    const second = new AgentService(sharedDeps, host);
+    const firstEvents: Array<{ id: number; type: string }> = [];
+    const secondEvents: Array<{ id: number; type: string }> = [];
+    first.subscribeEvents((event) => firstEvents.push({ id: event.id, type: event.type }));
+    second.subscribeEvents((event) => secondEvents.push({ id: event.id, type: event.type }));
+
+    const session = first.createSession();
+    await second.chat({ session_id: session.id, message: "shared-host" });
+
+    expect(firstEvents).toEqual([
+      { id: 0, type: "session.created" },
+      { id: 1, type: "chat.started" },
+      { id: 2, type: "chat.completed" },
+    ]);
+    expect(secondEvents).toEqual(firstEvents);
+  });
+
   it("keeps chat history isolated per session", async () => {
     const service = new AgentService({
       client: {} as OpenAI,

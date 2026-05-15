@@ -1,8 +1,9 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AgentAppRuntimeDeps } from "../bootstrap/app-runtime.js";
 import { AgentHost } from "../host/agent-host.js";
+import type { AgentHostEvent } from "../host/events.js";
+import type { AgentHostEventSubscriber } from "../host/events.js";
 import {
-  nowMs,
   summarizeSession,
   summarizeSessionTranscript,
   type AgentSessionRecord,
@@ -17,14 +18,9 @@ type ChatRequest = {
   message?: string;
 };
 
-export type AgentServiceEvent = {
-  id: number;
-  at: number;
-  type: "session.created" | "chat.started" | "chat.completed" | "chat.failed";
-  payload: Record<string, unknown>;
-};
+export type AgentServiceEvent = AgentHostEvent;
 
-export type AgentServiceEventSubscriber = (event: AgentServiceEvent) => void;
+export type AgentServiceEventSubscriber = AgentHostEventSubscriber;
 
 function json(res: ServerResponse, statusCode: number, payload: unknown): void {
   res.statusCode = statusCode;
@@ -56,8 +52,6 @@ function parseBody<T>(req: IncomingMessage): Promise<T> {
 }
 
 export class AgentService {
-  private readonly eventSubscribers = new Set<AgentServiceEventSubscriber>();
-  private eventCounter = 0;
   private readonly host: AgentHost;
   private readonly client: AgentServiceDeps["client"];
   private readonly model: AgentServiceDeps["model"];
@@ -93,7 +87,6 @@ export class AgentService {
   createSession(): AgentSessionRecord {
     const record = this.host.createSessionSync();
     void this.host.persistSession(record);
-    this.emitEvent("session.created", { session: summarizeSession(record) });
     return record;
   }
 
@@ -142,23 +135,7 @@ export class AgentService {
   }
 
   subscribeEvents(subscriber: AgentServiceEventSubscriber): () => void {
-    this.eventSubscribers.add(subscriber);
-    return () => {
-      this.eventSubscribers.delete(subscriber);
-    };
-  }
-
-  private emitEvent(type: AgentServiceEvent["type"], payload: Record<string, unknown>): void {
-    const event: AgentServiceEvent = {
-      id: this.eventCounter,
-      at: nowMs(),
-      type,
-      payload,
-    };
-    this.eventCounter += 1;
-    for (const subscriber of this.eventSubscribers) {
-      subscriber(event);
-    }
+    return this.host.subscribeEvents(subscriber);
   }
 
   async chat(input: ChatRequest): Promise<Record<string, unknown>> {
@@ -196,8 +173,8 @@ export class AgentService {
     }
 
     session.busy = true;
-    session.updatedAt = nowMs();
-    this.emitEvent("chat.started", {
+    session.updatedAt = Date.now();
+    this.host.emitEvent("chat.started", {
       session: summarizeSession(session),
       message: prompt,
     });
@@ -223,7 +200,7 @@ export class AgentService {
         prompt,
       });
       if (!result.ok) {
-        this.emitEvent("chat.failed", {
+        this.host.emitEvent("chat.failed", {
           session: summarizeSession(session),
           error: result.error,
         });
@@ -233,8 +210,8 @@ export class AgentService {
           session: summarizeSession(session),
         };
       }
-      session.updatedAt = nowMs();
-      this.emitEvent("chat.completed", {
+      session.updatedAt = Date.now();
+      this.host.emitEvent("chat.completed", {
         session: summarizeSession(session),
         assistant: result.assistant,
       });
@@ -245,7 +222,7 @@ export class AgentService {
       };
     } finally {
       session.busy = false;
-      session.updatedAt = nowMs();
+      session.updatedAt = Date.now();
       await this.host.persistSession(session);
     }
   }
