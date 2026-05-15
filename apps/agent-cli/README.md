@@ -80,6 +80,7 @@ pnpm --filter agent-web-console dev
 - 观测与回放：`.observability`、`replay:trace`
 - Hooks：`.codex/hooks.json`
 - MCP：`src/entrypoints/mcp-server.ts`、`src/tools/mcp-*.ts`
+- Daemon 控制面：`src/entrypoints/daemon.ts`、`src/entrypoints/daemon-status.ts`、`src/host/agent-host.ts`
 
 ## 继续扩展时的顺序
 

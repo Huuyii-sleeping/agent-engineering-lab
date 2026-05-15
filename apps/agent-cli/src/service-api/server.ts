@@ -1,5 +1,6 @@
 import * as process from "node:process";
 import { pathToFileURL } from "node:url";
+import type { Server } from "node:http";
 import { AgentService, createAgentHttpServer } from "./index.js";
 import { createAgentAppRuntime } from "../bootstrap/app-runtime.js";
 import { AgentHost } from "../host/agent-host.js";

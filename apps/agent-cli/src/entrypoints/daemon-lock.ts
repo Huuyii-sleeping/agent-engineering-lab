@@ -2,10 +2,19 @@ import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
 
-type DaemonLockRecord = {
+export type DaemonLockRecord = {
   pid: number;
   cwd: string;
   startedAt: number;
+};
+
+export type DaemonLockStatus = {
+  state: "running" | "not_running" | "stale";
+  filePath: string;
+  pid: number | null;
+  cwd: string | null;
+  startedAt: number | null;
+  detail: string | null;
 };
 
 type DaemonLockDeps = {
@@ -31,6 +40,14 @@ export class DaemonLock {
 
   private filePath(): string {
     return path.join(this.runtimeRoot, "daemon.lock");
+  }
+
+  private summarizeRecord(record: Partial<DaemonLockRecord>): Omit<DaemonLockStatus, "state" | "filePath" | "detail"> {
+    return {
+      pid: typeof record.pid === "number" ? record.pid : null,
+      cwd: typeof record.cwd === "string" ? record.cwd : null,
+      startedAt: typeof record.startedAt === "number" ? record.startedAt : null,
+    };
   }
 
   private buildRecord(): DaemonLockRecord {
@@ -91,6 +108,67 @@ export class DaemonLock {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  async status(): Promise<DaemonLockStatus> {
+    const filePath = this.filePath();
+    const raw = await readFile(filePath, "utf8").catch((error) => {
+      if ((error as NodeJS.ErrnoException | undefined)?.code === "ENOENT") {
+        return null;
+      }
+      throw error;
+    });
+    if (raw === null) {
+      return {
+        state: "not_running",
+        filePath,
+        pid: null,
+        cwd: null,
+        startedAt: null,
+        detail: null,
+      };
+    }
+    const text = raw.trim();
+    if (!text) {
+      return {
+        state: "stale",
+        filePath,
+        pid: null,
+        cwd: null,
+        startedAt: null,
+        detail: "empty lock file",
+      };
+    }
+    try {
+      const parsed = JSON.parse(text) as Partial<DaemonLockRecord>;
+      const record = this.summarizeRecord(parsed);
+      if (typeof parsed.pid === "number" && this.isProcessAlive(parsed.pid)) {
+        return {
+          state: "running",
+          filePath,
+          ...record,
+          detail: null,
+        };
+      }
+      return {
+        state: "stale",
+        filePath,
+        ...record,
+        detail:
+          typeof parsed.pid === "number"
+            ? "recorded process is not running"
+            : "lock file does not contain a valid pid",
+      };
+    } catch {
+      return {
+        state: "stale",
+        filePath,
+        pid: null,
+        cwd: null,
+        startedAt: null,
+        detail: "invalid lock file contents",
+      };
     }
   }
 

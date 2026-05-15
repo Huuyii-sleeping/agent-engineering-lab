@@ -69,4 +69,49 @@ describe("entrypoints/daemon-lock", () => {
     await expect(lock.acquire()).rejects.toThrow(/pid=101/);
     expect(processExists).toHaveBeenCalledWith(101);
   });
+
+  it("reports running status for an active daemon lock", async () => {
+    tempDir = await mkdtemp(path.join(tmpdir(), "agent-daemon-lock-test-"));
+    const runtimeRoot = path.join(tempDir, ".runtime");
+    const lockPath = path.join(runtimeRoot, "daemon.lock");
+    await mkdir(runtimeRoot, { recursive: true });
+    await writeFile(
+      lockPath,
+      `${JSON.stringify({ pid: 101, cwd: "D:/active", startedAt: 1 }, null, 2)}\n`,
+      "utf8",
+    );
+    const lock = new DaemonLock(runtimeRoot, {
+      processExists: (pid) => pid === 101,
+    });
+
+    await expect(lock.status()).resolves.toMatchObject({
+      state: "running",
+      pid: 101,
+      cwd: "D:/active",
+      startedAt: 1,
+    });
+  });
+
+  it("reports stale status when the lock file points to a dead process", async () => {
+    tempDir = await mkdtemp(path.join(tmpdir(), "agent-daemon-lock-test-"));
+    const runtimeRoot = path.join(tempDir, ".runtime");
+    const lockPath = path.join(runtimeRoot, "daemon.lock");
+    await mkdir(runtimeRoot, { recursive: true });
+    await writeFile(
+      lockPath,
+      `${JSON.stringify({ pid: 101, cwd: "D:/stale", startedAt: 1 }, null, 2)}\n`,
+      "utf8",
+    );
+    const lock = new DaemonLock(runtimeRoot, {
+      processExists: () => false,
+    });
+
+    await expect(lock.status()).resolves.toMatchObject({
+      state: "stale",
+      pid: 101,
+      cwd: "D:/stale",
+      startedAt: 1,
+    });
+    await expect(readFile(lockPath, "utf8")).resolves.toContain("\"pid\": 101");
+  });
 });
