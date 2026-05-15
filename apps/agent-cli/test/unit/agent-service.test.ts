@@ -166,6 +166,91 @@ async function requestServer(
   };
 }
 
+function parseSseBlock(block: string): { id: number | null; event: string; data: unknown } {
+  let id: number | null = null;
+  let event = "message";
+  let data = "";
+  for (const line of block.split("\n")) {
+    const normalized = line.replace(/\r$/, "");
+    if (normalized.startsWith("id:")) {
+      const parsed = Number(normalized.slice("id:".length).trim());
+      id = Number.isInteger(parsed) ? parsed : null;
+      continue;
+    }
+    if (normalized.startsWith("event:")) {
+      event = normalized.slice("event:".length).trim() || "message";
+      continue;
+    }
+    if (normalized.startsWith("data:")) {
+      data += normalized.slice("data:".length).trim();
+    }
+  }
+  return {
+    id,
+    event,
+    data: data ? (JSON.parse(data) as unknown) : null,
+  };
+}
+
+function openEventStream(
+  server: ReturnType<typeof createAgentHttpServer>,
+  url: string,
+  headers: Record<string, string> = {},
+) {
+  let sent = false;
+  let output = "";
+  let consumed = 0;
+  const req = new Readable({
+    read() {
+      if (sent) {
+        return;
+      }
+      sent = true;
+      this.push(null);
+    },
+  }) as Readable & {
+    method?: string;
+    url?: string;
+    headers?: Record<string, string>;
+  };
+  req.method = "GET";
+  req.url = url;
+  req.headers = headers;
+  const res = new Writable({
+    write(chunk, _encoding, callback) {
+      output += Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk);
+      callback();
+    },
+  }) as Writable & {
+    statusCode: number;
+    setHeader(name: string, value: string): void;
+  };
+  res.statusCode = 200;
+  res.setHeader = () => {};
+  server.emit("request", req, res);
+
+  return {
+    statusCode(): number {
+      return res.statusCode;
+    },
+    readEvents(): Array<{ id: number | null; event: string; data: unknown }> {
+      const events: Array<{ id: number | null; event: string; data: unknown }> = [];
+      while (true) {
+        const boundary = output.indexOf("\n\n", consumed);
+        if (boundary === -1) {
+          return events;
+        }
+        const block = output.slice(consumed, boundary);
+        consumed = boundary + 2;
+        events.push(parseSseBlock(block));
+      }
+    },
+    close(): void {
+      req.emit("close");
+    },
+  };
+}
+
 afterEach(() => {
   delete process.env.MODEL_ID;
 });
@@ -366,8 +451,13 @@ describe("agent service", () => {
 
     expect(service.bridgeManifest()).toMatchObject({
       ok: true,
-      capabilities: { events: true, sessions: true },
-      endpoints: { events: "/events", sessionDetail: "/sessions/:id", toolCall: "/tools/call" },
+      capabilities: { events: true, sessions: true, bridgeState: true, eventReplay: true },
+      endpoints: {
+        bridgeState: "/bridge/state",
+        events: "/events",
+        sessionDetail: "/sessions/:id",
+        toolCall: "/tools/call",
+      },
     });
     expect(transcript).toMatchObject({
       id: session.id,
@@ -377,6 +467,37 @@ describe("agent service", () => {
       ],
     });
     expect(events).toEqual(["session.created", "chat.started", "chat.completed"]);
+  });
+
+  it("reports bridge state with session and event cursor metadata", async () => {
+    const service = new AgentService({
+      client: {} as OpenAI,
+      model: "fake-model",
+      promptSource: PROMPT_SOURCE,
+      toolService: createToolService(),
+      deliveryService: createDeliveryService(),
+      hookService: createHookService(),
+      memoryService: createMemoryService(),
+      modelPolicyService: createModelPolicyService(),
+      observabilityService: createObservabilityService(),
+      queryEngine: createLoopRunner(),
+    });
+    const session = service.createSession();
+    await service.chat({ session_id: session.id, message: "state" });
+
+    expect(service.bridgeState()).toMatchObject({
+      ok: true,
+      ready: true,
+      session_count: 1,
+      sessions: [{ id: session.id, messageCount: 2 }],
+      latest_event_id: 2,
+      oldest_event_id: 0,
+      buffered_event_count: 3,
+      capabilities: {
+        bridgeState: true,
+        eventReplay: true,
+      },
+    });
   });
 
   it("serves bridge and session detail endpoints", async () => {
@@ -396,16 +517,131 @@ describe("agent service", () => {
     const server = createAgentHttpServer(service);
 
     const bridge = await requestServer(server, "GET", "/bridge");
+    const state = await requestServer(server, "GET", "/bridge/state");
     const detail = await requestServer(server, "GET", `/sessions/${session.id}`);
     const missing = await requestServer(server, "GET", "/sessions/missing");
 
-    expect(bridge.body).toMatchObject({ ok: true, name: "agent-cli-bridge" });
+    expect(bridge.body).toMatchObject({
+      ok: true,
+      name: "agent-cli-bridge",
+      endpoints: { bridgeState: "/bridge/state" },
+    });
+    expect(state.body).toMatchObject({
+      ok: true,
+      ready: true,
+      session_count: 1,
+      latest_event_id: 0,
+      oldest_event_id: 0,
+      buffered_event_count: 1,
+      sessions: [{ id: session.id }],
+    });
     expect(detail.body).toMatchObject({ ok: true, session: { id: session.id, messages: [] } });
     expect(missing.statusCode).toBe(404);
     expect(missing.body).toMatchObject({
       ok: false,
       error: { code: "SESSION_NOT_FOUND" },
     });
+  });
+
+  it("replays buffered events before continuing live /events delivery", async () => {
+    const service = new AgentService({
+      client: {} as OpenAI,
+      model: "fake-model",
+      promptSource: PROMPT_SOURCE,
+      toolService: createToolService(),
+      deliveryService: createDeliveryService(),
+      hookService: createHookService(),
+      memoryService: createMemoryService(),
+      modelPolicyService: createModelPolicyService(),
+      observabilityService: createObservabilityService(),
+      queryEngine: createLoopRunner(),
+    });
+    const first = service.createSession();
+    const server = createAgentHttpServer(service);
+    const stream = openEventStream(server, "/events?since_id=-1");
+
+    expect(stream.statusCode()).toBe(200);
+    expect(stream.readEvents()).toMatchObject([
+      {
+        id: null,
+        event: "bridge.ready",
+        data: {
+          ok: true,
+          replay_from: -1,
+          bridge: {
+            latest_event_id: 0,
+            buffered_event_count: 1,
+          },
+        },
+      },
+      {
+        id: 0,
+        event: "session.created",
+        data: {
+          id: 0,
+          type: "session.created",
+          payload: { session: { id: first.id } },
+        },
+      },
+    ]);
+
+    const second = service.createSession();
+
+    expect(stream.readEvents()).toMatchObject([
+      {
+        id: 1,
+        event: "session.created",
+        data: {
+          id: 1,
+          type: "session.created",
+          payload: { session: { id: second.id } },
+        },
+      },
+    ]);
+
+    stream.close();
+  });
+
+  it("replays buffered events from Last-Event-ID headers", async () => {
+    const service = new AgentService({
+      client: {} as OpenAI,
+      model: "fake-model",
+      promptSource: PROMPT_SOURCE,
+      toolService: createToolService(),
+      deliveryService: createDeliveryService(),
+      hookService: createHookService(),
+      memoryService: createMemoryService(),
+      modelPolicyService: createModelPolicyService(),
+      observabilityService: createObservabilityService(),
+      queryEngine: createLoopRunner(),
+    });
+    service.createSession();
+    const second = service.createSession();
+    const server = createAgentHttpServer(service);
+    const stream = openEventStream(server, "/events", { "last-event-id": "0" });
+
+    expect(stream.statusCode()).toBe(200);
+    expect(stream.readEvents()).toMatchObject([
+      {
+        id: null,
+        event: "bridge.ready",
+        data: {
+          ok: true,
+          replay_from: 0,
+        },
+      },
+      {
+        id: 1,
+        event: "session.created",
+        data: {
+          id: 1,
+          type: "session.created",
+          payload: { session: { id: second.id } },
+        },
+      },
+    ]);
+
+    stream.close();
   });
 
   it("serves remote tool call requests through the shared tool service", async () => {

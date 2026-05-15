@@ -91,6 +91,62 @@ async function waitForChildExit(child) {
   return exitCode;
 }
 
+function parseSseBlock(block) {
+  let id = null;
+  let event = "message";
+  let data = null;
+  for (const line of block.split("\n")) {
+    const normalized = line.replace(/\r$/, "");
+    if (normalized.startsWith("id:")) {
+      const parsed = Number(normalized.slice("id:".length).trim());
+      id = Number.isInteger(parsed) ? parsed : null;
+      continue;
+    }
+    if (normalized.startsWith("event:")) {
+      event = normalized.slice("event:".length).trim() || "message";
+      continue;
+    }
+    if (normalized.startsWith("data:")) {
+      data = JSON.parse(normalized.slice("data:".length).trim());
+    }
+  }
+  return { id, event, data };
+}
+
+async function readSseEvents(url, expectedCount, init = {}) {
+  const response = await fetch(url, init);
+  assert(response.ok, `SSE endpoint should be reachable: ${response.status}`);
+  assert(response.body, "SSE response should have a body");
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const events = [];
+  let buffer = "";
+
+  try {
+    while (events.length < expectedCount) {
+      const chunk = await reader.read();
+      if (chunk.done) {
+        break;
+      }
+      buffer += decoder.decode(chunk.value, { stream: true });
+      while (events.length < expectedCount) {
+        const boundary = buffer.indexOf("\n\n");
+        if (boundary === -1) {
+          break;
+        }
+        const block = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        events.push(parseSseBlock(block));
+      }
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+
+  return events;
+}
+
 async function main() {
   await access(MAIN_PATH);
   const workspace = await mkdtemp(path.join(tmpdir(), "prd20-daemon-control-smoke-"));
@@ -122,6 +178,50 @@ async function main() {
     const ready = await waitForReadyStatus(workspace, env, 10_000, daemonState);
     assert(ready.stdout.includes("daemon running"), "daemon status should report running");
     assert(ready.stdout.includes("ready"), "daemon status should report ready");
+
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const initialBridgeState = await fetch(`${baseUrl}/bridge/state`).then((res) => res.json());
+    assert(initialBridgeState.ok === true, "bridge state should return ok");
+    assert(initialBridgeState.ready === true, "bridge state should report ready");
+    assert(initialBridgeState.session_count === 0, "bridge state should start empty");
+    assert(initialBridgeState.latest_event_id === null, "bridge state should start without events");
+
+    const firstSession = await fetch(`${baseUrl}/sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    }).then((res) => res.json());
+    assert(firstSession.ok === true, "daemon bridge should create a shared session");
+    assert(firstSession.session?.id, "daemon bridge should return a session id");
+
+    const bridgeStateAfterCreate = await fetch(`${baseUrl}/bridge/state`).then((res) => res.json());
+    assert(bridgeStateAfterCreate.session_count === 1, "bridge state should expose shared session count");
+    assert(bridgeStateAfterCreate.latest_event_id === 0, "bridge state should expose latest event cursor");
+
+    const replayedEvents = await readSseEvents(`${baseUrl}/events?since_id=-1`, 2);
+    assert(replayedEvents[0]?.event === "bridge.ready", "events stream should emit bridge.ready first");
+    assert(replayedEvents[1]?.event === "session.created", "events stream should replay buffered host events");
+    assert(
+      replayedEvents[1]?.data?.payload?.session?.id === firstSession.session.id,
+      "replayed event should point at the created daemon session",
+    );
+
+    const secondSession = await fetch(`${baseUrl}/sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    }).then((res) => res.json());
+    assert(secondSession.ok === true, "daemon bridge should create a second session");
+    const replayedFromHeader = await readSseEvents(`${baseUrl}/events`, 2, {
+      headers: { "Last-Event-ID": "0" },
+    });
+    assert(replayedFromHeader[0]?.event === "bridge.ready", "header replay should still emit bridge.ready");
+    assert(replayedFromHeader[0]?.data?.replay_from === 0, "bridge ready should reflect Last-Event-ID");
+    assert(replayedFromHeader[1]?.id === 1, "header replay should resume from the next buffered cursor");
+    assert(
+      replayedFromHeader[1]?.data?.payload?.session?.id === secondSession.session.id,
+      "header replay should return the second shared session event",
+    );
 
     const attached = await runAgentCli(workspace, env, [], "exit\n");
     assert(attached.exitCode === 0, `interactive CLI should exit cleanly\n${attached.stderr}`);

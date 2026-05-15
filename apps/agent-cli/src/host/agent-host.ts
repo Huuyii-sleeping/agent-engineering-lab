@@ -8,15 +8,29 @@ import { SessionStore } from "../service-api/session-store.js";
 import type { AgentHostEvent } from "./events.js";
 import type { AgentHostEventSubscriber } from "./events.js";
 
+const DEFAULT_EVENT_BUFFER_LIMIT = 128;
+
+export type AgentHostEventWindow = {
+  oldestEventId: number | null;
+  latestEventId: number | null;
+  bufferedEventCount: number;
+};
+
 export class AgentHost {
   private readonly sessions = new Map<string, AgentSessionRecord>();
   private readonly eventSubscribers = new Set<AgentHostEventSubscriber>();
+  private readonly eventBuffer: AgentHostEvent[] = [];
+  private readonly eventBufferLimit: number;
   private eventCounter = 0;
 
   constructor(
     private readonly deps: AgentAppRuntimeDeps,
     private readonly sessionStore: SessionStore = new SessionStore(),
-  ) {}
+    options: { eventBufferLimit?: number } = {},
+  ) {
+    const configuredLimit = Math.trunc(options.eventBufferLimit ?? DEFAULT_EVENT_BUFFER_LIMIT);
+    this.eventBufferLimit = configuredLimit > 0 ? configuredLimit : DEFAULT_EVENT_BUFFER_LIMIT;
+  }
 
   runtime(): AgentAppRuntimeDeps {
     return this.deps;
@@ -45,6 +59,18 @@ export class AgentHost {
     };
   }
 
+  listEventsSince(cursor: number | null = null): AgentHostEvent[] {
+    return this.eventBuffer.filter((event) => cursor === null || event.id > cursor);
+  }
+
+  eventWindow(): AgentHostEventWindow {
+    return {
+      oldestEventId: this.eventBuffer[0]?.id ?? null,
+      latestEventId: this.eventBuffer.at(-1)?.id ?? null,
+      bufferedEventCount: this.eventBuffer.length,
+    };
+  }
+
   emitEvent(type: AgentHostEvent["type"], payload: Record<string, unknown>): AgentHostEvent {
     const event: AgentHostEvent = {
       id: this.eventCounter,
@@ -53,6 +79,10 @@ export class AgentHost {
       payload,
     };
     this.eventCounter += 1;
+    this.eventBuffer.push(event);
+    if (this.eventBuffer.length > this.eventBufferLimit) {
+      this.eventBuffer.splice(0, this.eventBuffer.length - this.eventBufferLimit);
+    }
     for (const subscriber of this.eventSubscribers) {
       subscriber(event);
     }

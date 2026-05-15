@@ -81,13 +81,14 @@ pnpm --filter agent-web-console dev
 - Hooks：`.codex/hooks.json`
 - MCP：`src/entrypoints/mcp-server.ts`、`src/tools/mcp-*.ts`
 - Daemon 控制面：`src/entrypoints/daemon.ts`、`src/entrypoints/daemon-status.ts`、`src/entrypoints/daemon-stop.ts`、`src/host/agent-host.ts`
+- Bridge 控制面：`src/service-api/bridge.ts`、`GET /bridge/state`、支持 `since_id` / `Last-Event-ID` replay 的 `GET /events`
 - Host 事件语义：共享同一 `AgentHost` 的多个入口复用同一条宿主级事件流，而不是各自维护独立 event bus
 - Interactive CLI 复用语义：默认 `agent-cli` 在本地 daemon 已运行且 HTTP service ready 时优先 attach 到共享宿主；不可复用时回退 embedded CLI
 - TUI 复用语义：`agent-cli tui` 在本地 daemon 已运行且 HTTP service ready 时优先 attach 到共享宿主；不可复用时回退 embedded host
 - MCP 复用语义：`agent-cli mcp-server` 在本地 daemon 已运行且 HTTP service ready 时优先 attach 到共享宿主；不可复用时回退 embedded host
 - Daemon 生命周期语义：daemon 锁会跟随后台进程存活期保持持有，`agent-cli daemon stop` 会通过本机 PID 信号触发优雅关闭
 - Daemon 状态语义：`agent-cli daemon status` 不只读取 lock，还会继续探测共享 service readiness，避免“进程活着但不可复用”被误判成健康运行
-- Daemon 验证链路：`pnpm --filter agent-cli test:daemon` 会跑一条真实的 `start -> status -> attach -> stop` smoke
+- Daemon 验证链路：`pnpm --filter agent-cli test:daemon` 会跑一条真实的 `start -> status -> bridge/state -> event replay -> attach -> stop` smoke
 
 ## 继续扩展时的顺序
 

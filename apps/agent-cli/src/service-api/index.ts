@@ -3,6 +3,7 @@ import type { AgentAppRuntimeDeps } from "../bootstrap/app-runtime.js";
 import { AgentHost } from "../host/agent-host.js";
 import type { AgentHostEvent } from "../host/events.js";
 import type { AgentHostEventSubscriber } from "../host/events.js";
+import { createAgentBridgeManifest, type AgentBridgeState } from "./bridge.js";
 import {
   summarizeSession,
   summarizeSessionTranscript,
@@ -21,6 +22,10 @@ type ChatRequest = {
 export type AgentServiceEvent = AgentHostEvent;
 
 export type AgentServiceEventSubscriber = AgentHostEventSubscriber;
+
+type ParsedEventCursor =
+  | { ok: true; value: number | null }
+  | { ok: false; source: "since_id" | "Last-Event-ID"; raw: string };
 
 function json(res: ServerResponse, statusCode: number, payload: unknown): void {
   res.statusCode = statusCode;
@@ -49,6 +54,51 @@ function parseBody<T>(req: IncomingMessage): Promise<T> {
       }
     });
   });
+}
+
+function parseEventCursor(raw: string | null): number | null | undefined {
+  if (raw === null) {
+    return null;
+  }
+  const normalized = raw.trim();
+  if (!normalized) {
+    return null;
+  }
+  const parsed = Number(normalized);
+  return Number.isInteger(parsed) ? parsed : undefined;
+}
+
+function getHeaderValue(headers: IncomingMessage["headers"], name: string): string | null {
+  const value = headers[name.toLowerCase()];
+  if (Array.isArray(value)) {
+    return typeof value[0] === "string" ? value[0] : null;
+  }
+  return typeof value === "string" ? value : null;
+}
+
+function resolveReplayCursor(url: URL | null, req: IncomingMessage): ParsedEventCursor {
+  const queryValue = url?.searchParams.get("since_id") ?? null;
+  const parsedQuery = parseEventCursor(queryValue);
+  if (parsedQuery === undefined) {
+    return { ok: false, source: "since_id", raw: queryValue ?? "" };
+  }
+  const headerValue = getHeaderValue(req.headers, "last-event-id");
+  const parsedHeader = parseEventCursor(headerValue);
+  if (parsedHeader === undefined) {
+    return { ok: false, source: "Last-Event-ID", raw: headerValue ?? "" };
+  }
+  return { ok: true, value: parsedHeader ?? parsedQuery };
+}
+
+function writeSseEvent(
+  res: ServerResponse,
+  input: { event: string; data: unknown; id?: number },
+): void {
+  if (typeof input.id === "number") {
+    res.write(`id: ${input.id}\n`);
+  }
+  res.write(`event: ${input.event}\n`);
+  res.write(`data: ${JSON.stringify(input.data)}\n\n`);
 }
 
 export class AgentService {
@@ -112,26 +162,29 @@ export class AgentService {
   }
 
   bridgeManifest(): Record<string, unknown> {
+    return createAgentBridgeManifest();
+  }
+
+  bridgeState(): AgentBridgeState {
+    const manifest = createAgentBridgeManifest();
+    const sessions = this.listSessions().map((item) => summarizeSession(item));
+    const eventWindow = this.host.eventWindow();
     return {
       ok: true,
-      name: "agent-cli-bridge",
-      version: "0.1.0",
-      capabilities: {
-        chat: true,
-        sessions: true,
-        tools: true,
-        events: true,
-      },
-      endpoints: {
-        health: "/health",
-        chat: "/chat",
-        tools: "/tools",
-        toolCall: "/tools/call",
-        sessions: "/sessions",
-        sessionDetail: "/sessions/:id",
-        events: "/events",
-      },
+      ready: true,
+      name: manifest.name,
+      version: manifest.version,
+      capabilities: manifest.capabilities,
+      session_count: sessions.length,
+      sessions,
+      latest_event_id: eventWindow.latestEventId,
+      oldest_event_id: eventWindow.oldestEventId,
+      buffered_event_count: eventWindow.bufferedEventCount,
     };
+  }
+
+  replayEventsSince(cursor: number | null): AgentServiceEvent[] {
+    return this.host.listEventsSince(cursor);
   }
 
   subscribeEvents(subscriber: AgentServiceEventSubscriber): () => void {
@@ -243,6 +296,10 @@ export function createAgentHttpServer(service: AgentService): Server {
         json(res, 200, service.bridgeManifest());
         return;
       }
+      if (method === "GET" && pathname === "/bridge/state") {
+        json(res, 200, service.bridgeState());
+        return;
+      }
       if (method === "GET" && pathname === "/tools") {
         json(res, 200, { ok: true, tools: await service.toolsMetadata() });
         return;
@@ -265,16 +322,43 @@ export function createAgentHttpServer(service: AgentService): Server {
         return;
       }
       if (method === "GET" && pathname === "/events") {
+        const cursor = resolveReplayCursor(url, req);
+        if (!cursor.ok) {
+          json(res, 400, {
+            ok: false,
+            error: {
+              code: "INVALID_CURSOR",
+              message: `${cursor.source} must be an integer cursor`,
+              value: cursor.raw,
+            },
+          });
+          return;
+        }
         res.statusCode = 200;
         res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
         res.setHeader("Cache-Control", "no-store");
         res.setHeader("Connection", "keep-alive");
-        res.write("event: bridge.ready\n");
-        res.write(`data: ${JSON.stringify({ ok: true })}\n\n`);
+        writeSseEvent(res, {
+          event: "bridge.ready",
+          data: {
+            ok: true,
+            replay_from: cursor.value,
+            bridge: service.bridgeState(),
+          },
+        });
+        for (const event of service.replayEventsSince(cursor.value)) {
+          writeSseEvent(res, {
+            id: event.id,
+            event: event.type,
+            data: event,
+          });
+        }
         const unsubscribe = service.subscribeEvents((event) => {
-          res.write(`id: ${event.id}\n`);
-          res.write(`event: ${event.type}\n`);
-          res.write(`data: ${JSON.stringify(event)}\n\n`);
+          writeSseEvent(res, {
+            id: event.id,
+            event: event.type,
+            data: event,
+          });
         });
         req.on("close", unsubscribe);
         return;

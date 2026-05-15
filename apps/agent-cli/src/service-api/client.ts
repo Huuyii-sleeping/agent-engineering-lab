@@ -1,5 +1,6 @@
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { resolveAgentServiceBaseUrl } from "./config.js";
+import { createAgentBridgeManifest } from "./bridge.js";
 
 type JsonObject = Record<string, unknown>;
 
@@ -55,6 +56,10 @@ function normalizeManifest(baseUrl: string, manifest: JsonObject): JsonObject {
   };
 }
 
+function cloneJsonObject(value: JsonObject): JsonObject {
+  return JSON.parse(JSON.stringify(value)) as JsonObject;
+}
+
 function cloneSession(session: RemoteSessionRecord): RemoteSessionRecord {
   return {
     id: session.id,
@@ -71,42 +76,45 @@ export class AgentServiceClient {
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
   private manifest: JsonObject;
+  private bridgeStateSnapshot: JsonObject | null = null;
   private readonly sessions = new Map<string, RemoteSessionRecord>();
   private sessionOrder: string[] = [];
 
   constructor(options: AgentServiceClientOptions = {}) {
     this.baseUrl = options.baseUrl ?? resolveAgentServiceBaseUrl();
     this.fetchImpl = options.fetchImpl ?? fetch;
-    this.manifest = normalizeManifest(this.baseUrl, {
-      ok: true,
-      name: "agent-cli-bridge",
-      version: "0.1.0",
-      capabilities: {
-        chat: true,
-        sessions: true,
-        tools: true,
-        events: true,
-      },
-      endpoints: {
-        health: "/health",
-        chat: "/chat",
-        tools: "/tools",
-        toolCall: "/tools/call",
-        sessions: "/sessions",
-        sessionDetail: "/sessions/:id",
-        events: "/events",
-      },
-    });
+    this.manifest = normalizeManifest(this.baseUrl, createAgentBridgeManifest() as JsonObject);
   }
 
   async initialize(): Promise<void> {
     await this.requestJson("GET", "/health");
     this.manifest = normalizeManifest(this.baseUrl, await this.requestJson("GET", "/bridge"));
+    await this.refreshBridgeState();
     await this.refreshSessions();
   }
 
   bridgeManifest(): JsonObject {
-    return this.manifest;
+    return cloneJsonObject(this.manifest);
+  }
+
+  bridgeState(): JsonObject | null {
+    return this.bridgeStateSnapshot ? cloneJsonObject(this.bridgeStateSnapshot) : null;
+  }
+
+  async refreshBridgeState(): Promise<JsonObject | null> {
+    const response = await this.requestJson(
+      "GET",
+      this.resolveEndpoint("bridgeState", "/bridge/state"),
+      undefined,
+      { allowErrorStatus: true },
+    );
+    if (response.ok === false) {
+      this.bridgeStateSnapshot = null;
+      return null;
+    }
+    this.bridgeStateSnapshot = response;
+    this.hydrateSessionSummariesFromBridgeState(response);
+    return this.bridgeState();
   }
 
   listSessions(): RemoteSessionRecord[] {
@@ -297,6 +305,12 @@ export class AgentServiceClient {
     this.upsertSession(session);
   }
 
+  private resolveEndpoint(key: string, fallbackPath: string): string {
+    const endpoints = getObject(this.manifest.endpoints);
+    const endpoint = endpoints[key];
+    return typeof endpoint === "string" ? endpoint : fallbackPath;
+  }
+
   private async readSession(id: string, fallbackSummary?: JsonObject): Promise<RemoteSessionRecord> {
     const response = await this.requestJson("GET", `/sessions/${encodeURIComponent(id)}`);
     const session = getObject(response.session);
@@ -317,6 +331,35 @@ export class AgentServiceClient {
     this.sessions.set(session.id, session);
     if (!this.sessionOrder.includes(session.id)) {
       this.sessionOrder = [...this.sessionOrder, session.id];
+    }
+  }
+
+  private hydrateSessionSummariesFromBridgeState(state: JsonObject): void {
+    const summaries = Array.isArray(state.sessions) ? state.sessions : [];
+    const order: string[] = [];
+    const nextSessions = new Map<string, RemoteSessionRecord>();
+    for (const item of summaries) {
+      const summary = getObject(item);
+      const id = getString(summary.id);
+      if (!id) {
+        continue;
+      }
+      order.push(id);
+      const existing = this.sessions.get(id);
+      nextSessions.set(id, {
+        id,
+        createdAt: getNumber(summary.createdAt ?? existing?.createdAt),
+        updatedAt: getNumber(summary.updatedAt ?? existing?.updatedAt),
+        busy: getBoolean(summary.busy ?? existing?.busy),
+        history: existing?.history ? [...existing.history] : [],
+        messageCount: Number(summary.messageCount ?? existing?.messageCount ?? 0),
+        rounds: getNumber(summary.rounds ?? existing?.rounds),
+      });
+    }
+    this.sessionOrder = order;
+    this.sessions.clear();
+    for (const [id, session] of nextSessions) {
+      this.sessions.set(id, session);
     }
   }
 }

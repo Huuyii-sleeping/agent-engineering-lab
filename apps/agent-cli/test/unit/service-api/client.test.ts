@@ -27,9 +27,25 @@ describe("service-api/client", () => {
           ok: true,
           name: "agent-cli-bridge",
           endpoints: {
+            bridgeState: "/bridge/state",
             events: "/events",
             toolCall: "/tools/call",
           },
+        });
+      }
+      if (method === "GET" && url.pathname === "/bridge/state") {
+        return jsonResponse({
+          ok: true,
+          ready: true,
+          session_count: sessions.size,
+          latest_event_id: 7,
+          oldest_event_id: 3,
+          buffered_event_count: 5,
+          sessions: [...sessions.entries()].map(([id, session]) => ({
+            id,
+            busy: session.busy,
+            messageCount: session.messages.length,
+          })),
         });
       }
       if (method === "GET" && url.pathname === "/sessions") {
@@ -122,9 +138,19 @@ describe("service-api/client", () => {
 
     expect(client.bridgeManifest()).toMatchObject({
       endpoints: {
+        bridgeState: "http://127.0.0.1:4318/bridge/state",
         events: "http://127.0.0.1:4318/events",
         toolCall: "http://127.0.0.1:4318/tools/call",
       },
+    });
+    expect(client.bridgeState()).toMatchObject({
+      ok: true,
+      ready: true,
+      session_count: 1,
+      latest_event_id: 7,
+      oldest_event_id: 3,
+      buffered_event_count: 5,
+      sessions: [{ id: "s01", messageCount: 1 }],
     });
     expect(client.listSessions()).toMatchObject([
       {
@@ -156,6 +182,71 @@ describe("service-api/client", () => {
     expect(await client.runToolByName("bash", "{\"command\":\"pwd\"}")).toBe(
       "tool:bash:{\"command\":\"pwd\"}",
     );
+  });
+
+  it("keeps attach initialization working when bridge state is unavailable", async () => {
+    const sessions = new Map<string, { busy: boolean; messages: ChatCompletionMessageParam[] }>([
+      ["s01", { busy: false, messages: [{ role: "user", content: "still works" }] }],
+    ]);
+    const client = new AgentServiceClient({
+      baseUrl: "http://127.0.0.1:4318",
+      fetchImpl: vi.fn<typeof fetch>(async (input, init) => {
+        const url = new URL(String(input));
+        const method = init?.method ?? "GET";
+
+        if (method === "GET" && url.pathname === "/health") {
+          return jsonResponse({ ok: true, status: "ok" });
+        }
+        if (method === "GET" && url.pathname === "/bridge") {
+          return jsonResponse({
+            ok: true,
+            name: "agent-cli-bridge",
+            endpoints: {
+              bridgeState: "/bridge/state",
+              sessions: "/sessions",
+            },
+          });
+        }
+        if (method === "GET" && url.pathname === "/bridge/state") {
+          return jsonResponse(
+            {
+              ok: false,
+              error: { code: "NOT_FOUND", message: "GET /bridge/state is not implemented" },
+            },
+            404,
+          );
+        }
+        if (method === "GET" && url.pathname === "/sessions") {
+          return jsonResponse({
+            ok: true,
+            sessions: [{ id: "s01", busy: false, messageCount: 1 }],
+          });
+        }
+        if (method === "GET" && url.pathname === "/sessions/s01") {
+          return jsonResponse({
+            ok: true,
+            session: {
+              id: "s01",
+              busy: false,
+              messageCount: 1,
+              messages: sessions.get("s01")?.messages ?? [],
+            },
+          });
+        }
+
+        throw new Error(`unexpected request: ${method} ${url.pathname}`);
+      }),
+    });
+
+    await client.initialize();
+
+    expect(client.bridgeState()).toBeNull();
+    expect(client.listSessions()).toMatchObject([
+      {
+        id: "s01",
+        history: [{ role: "user", content: "still works" }],
+      },
+    ]);
   });
 
   it("returns a daemon unavailable error result when chat transport fails", async () => {

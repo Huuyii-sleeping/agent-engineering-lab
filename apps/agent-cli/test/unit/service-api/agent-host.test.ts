@@ -228,4 +228,37 @@ describe("host/agent-host", () => {
       { id: 1, type: "session.created", sessionId: second.id },
     ]);
   });
+
+  it("replays buffered host events after a cursor and trims to the configured limit", async () => {
+    tempDir = await mkdtemp(path.join(tmpdir(), "agent-host-test-"));
+    const host = new AgentHost(
+      createDeps(),
+      new SessionStore(path.join(tempDir, ".sessions")),
+      { eventBufferLimit: 2 },
+    );
+    await host.initialize();
+
+    const first = host.createSessionSync();
+    const second = host.createSessionSync();
+    const third = host.createSessionSync();
+
+    expect(host.listEventsSince(null).map((event) => event.id)).toEqual([1, 2]);
+    expect(host.listEventsSince(1).map((event) => event.id)).toEqual([2]);
+    expect(host.eventWindow()).toEqual({
+      oldestEventId: 1,
+      latestEventId: 2,
+      bufferedEventCount: 2,
+    });
+    expect(
+      host.listEventsSince(null).map((event) =>
+        String((event.payload.session as { id?: unknown } | undefined)?.id ?? ""),
+      ),
+    ).toEqual([second.id, third.id]);
+    expect(
+      host.listEventsSince(0).map((event) =>
+        String((event.payload.session as { id?: unknown } | undefined)?.id ?? ""),
+      ),
+    ).toEqual([second.id, third.id]);
+    expect(first.id).not.toBe(second.id);
+  });
 });
