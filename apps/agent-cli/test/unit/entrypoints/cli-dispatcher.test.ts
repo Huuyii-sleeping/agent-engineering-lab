@@ -15,6 +15,7 @@ describe("entrypoints/cli-dispatcher", () => {
     expect(parseCliInvocation(["server"])).toEqual({ mode: "server" });
     expect(parseCliInvocation(["daemon"])).toEqual({ mode: "daemon" });
     expect(parseCliInvocation(["daemon", "status"])).toEqual({ mode: "daemon-status" });
+    expect(parseCliInvocation(["daemon", "stop"])).toEqual({ mode: "daemon-stop" });
     expect(parseCliInvocation(["--mcp-server"])).toEqual({ mode: "mcp-server" });
     expect(parseCliInvocation(["tui"])).toEqual({ mode: "tui" });
     expect(parseCliInvocation(["architecture"])).toEqual({ mode: "architecture" });
@@ -36,6 +37,7 @@ describe("entrypoints/cli-dispatcher", () => {
     expect(help).toContain("Start stdio MCP server");
     expect(help).toContain("Start background daemon host");
     expect(help).toContain("Check daemon host status");
+    expect(help).toContain("Stop the running daemon host");
     expect(help).toContain("Start terminal TUI console");
     expect(help).toContain("Print the local architecture overview");
     expect(help).toContain("Print the current stable system prompt");

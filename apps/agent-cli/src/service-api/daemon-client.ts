@@ -7,22 +7,50 @@ export type RunningDaemonServiceClient = {
   status: DaemonLockStatus;
 };
 
+export type DaemonServiceProbe = {
+  status: DaemonLockStatus;
+  client: AgentServiceClient | null;
+  ready: boolean;
+  error: Error | null;
+};
+
 type ResolveRunningDaemonServiceClientOptions = {
   runtimeRoot?: string;
   lock?: Pick<DaemonLock, "status">;
   clientFactory?: () => AgentServiceClient;
 };
 
-export async function resolveRunningDaemonServiceClient(
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+export async function probeDaemonServiceClient(
   options: ResolveRunningDaemonServiceClientOptions = {},
-): Promise<RunningDaemonServiceClient | null> {
+): Promise<DaemonServiceProbe> {
   const lock = options.lock ?? new DaemonLock(options.runtimeRoot);
   const status = await lock.status();
   if (status.state !== "running") {
-    return null;
+    return { status, client: null, ready: false, error: null };
   }
 
   const client = (options.clientFactory ?? (() => new AgentServiceClient()))();
-  await client.initialize();
-  return { client, status };
+  try {
+    await client.initialize();
+    return { status, client, ready: true, error: null };
+  } catch (error) {
+    return { status, client: null, ready: false, error: toError(error) };
+  }
+}
+
+export async function resolveRunningDaemonServiceClient(
+  options: ResolveRunningDaemonServiceClientOptions = {},
+): Promise<RunningDaemonServiceClient | null> {
+  const probed = await probeDaemonServiceClient(options);
+  if (probed.error) {
+    throw probed.error;
+  }
+  if (!probed.ready || !probed.client || probed.status.state !== "running") {
+    return null;
+  }
+  return { client: probed.client, status: probed.status };
 }

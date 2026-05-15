@@ -6,10 +6,11 @@ import { createAgentAppRuntime } from "../bootstrap/app-runtime.js";
 import { AgentHost } from "../host/agent-host.js";
 import { resolveAgentHttpPort } from "./config.js";
 
-type AgentServerLike = Pick<
+export type AgentServerLike = Pick<
   Server,
-  "once" | "listen"
->;
+  "once" | "listen" | "close"
+> &
+  Partial<Pick<Server, "closeAllConnections" | "closeIdleConnections">>;
 
 export type RunServerOptions = {
   service?: AgentService;
@@ -19,7 +20,7 @@ export type RunServerOptions = {
   output?: NodeJS.WritableStream;
 };
 
-export async function runServer(options: RunServerOptions = {}): Promise<void> {
+export async function runServer(options: RunServerOptions = {}): Promise<AgentServerLike> {
   let service = options.service;
   if (!service) {
     const host = options.host ?? new AgentHost(createAgentAppRuntime());
@@ -34,6 +35,7 @@ export async function runServer(options: RunServerOptions = {}): Promise<void> {
     server.listen(targetPort, "0.0.0.0", () => resolve());
   });
   output.write(`agent service listening on http://0.0.0.0:${targetPort}\n`);
+  return server;
 }
 
 function isDirectRun(): boolean {

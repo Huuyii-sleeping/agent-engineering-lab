@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { resolveRunningDaemonServiceClient } from "../../../src/service-api/daemon-client.js";
+import { probeDaemonServiceClient, resolveRunningDaemonServiceClient } from "../../../src/service-api/daemon-client.js";
 
 describe("service-api/daemon-client", () => {
   it("returns null when the daemon lock is not running", async () => {
@@ -50,5 +50,58 @@ describe("service-api/daemon-client", () => {
       status: { state: "running", pid: 4242 },
       client,
     });
+  });
+
+  it("reports running-but-unready daemon probes without hiding the error", async () => {
+    const initialize = vi.fn(async () => {
+      throw new Error("connect ECONNREFUSED");
+    });
+
+    const probed = await probeDaemonServiceClient({
+      lock: {
+        status: async () => ({
+          state: "running",
+          filePath: "/tmp/.runtime/daemon.lock",
+          pid: 4242,
+          cwd: "/workspace",
+          startedAt: 123,
+          detail: null,
+        }),
+      },
+      clientFactory: () =>
+        ({
+          initialize,
+        }) as never,
+    });
+
+    expect(probed).toMatchObject({
+      ready: false,
+      client: null,
+      status: { state: "running", pid: 4242 },
+    });
+    expect(probed.error?.message).toContain("ECONNREFUSED");
+  });
+
+  it("keeps attach failure explicit when the daemon process exists but service init fails", async () => {
+    await expect(
+      resolveRunningDaemonServiceClient({
+        lock: {
+          status: async () => ({
+            state: "running",
+            filePath: "/tmp/.runtime/daemon.lock",
+            pid: 4242,
+            cwd: "/workspace",
+            startedAt: 123,
+            detail: null,
+          }),
+        },
+        clientFactory: () =>
+          ({
+            initialize: async () => {
+              throw new Error("bridge unavailable");
+            },
+          }) as never,
+      }),
+    ).rejects.toThrow(/bridge unavailable/);
   });
 });

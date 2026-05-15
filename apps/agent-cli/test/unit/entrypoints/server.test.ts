@@ -33,9 +33,14 @@ describe("entrypoints/server", () => {
           once() {
             return this;
           },
+          close(callback?: (error?: Error) => void) {
+            callback?.();
+            return this;
+          },
           listen,
         } as {
           once(event: string, listener: (error: Error) => void): unknown;
+          close(callback?: (error?: Error) => void): unknown;
           listen(port: number, host: string, callback: () => void): void;
         };
       },

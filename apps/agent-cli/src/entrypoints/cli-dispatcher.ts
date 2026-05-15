@@ -8,6 +8,7 @@ type CliMode =
   | "server"
   | "daemon"
   | "daemon-status"
+  | "daemon-stop"
   | "print"
   | "mcp-server"
   | "tui"
@@ -21,6 +22,7 @@ export type CliInvocation =
   | { mode: "server" }
   | { mode: "daemon" }
   | { mode: "daemon-status" }
+  | { mode: "daemon-stop" }
   | { mode: "print"; prompt: string }
   | { mode: "mcp-server" }
   | { mode: "tui" }
@@ -54,6 +56,7 @@ export function renderCliHelp(): string {
     "  agent-cli server                Start HTTP service",
     "  agent-cli daemon                Start background daemon host",
     "  agent-cli daemon status         Check daemon host status",
+    "  agent-cli daemon stop           Stop the running daemon host",
     "  agent-cli mcp-server            Start stdio MCP server",
     "  agent-cli tui                   Start terminal TUI console",
     "  agent-cli architecture          Print the local architecture overview",
@@ -83,6 +86,9 @@ export function parseCliInvocation(argv: string[]): CliInvocation {
   if (normalized === "--daemon" || normalized === "daemon") {
     if (rest[0]?.trim() === "status") {
       return { mode: "daemon-status" };
+    }
+    if (rest[0]?.trim() === "stop") {
+      return { mode: "daemon-stop" };
     }
     return { mode: "daemon" };
   }
@@ -150,6 +156,10 @@ export async function dispatchCli(
   if (invocation.mode === "daemon-status") {
     const { runDaemonStatus } = await import("./daemon-status.js");
     return runDaemonStatus({ output: io.stdout });
+  }
+  if (invocation.mode === "daemon-stop") {
+    const { runDaemonStop } = await import("./daemon-stop.js");
+    return runDaemonStop({ output: io.stdout });
   }
   if (invocation.mode === "mcp-server") {
     const { runAgentMcpServer } = await import("./mcp-server.js");

@@ -15,22 +15,27 @@ function createOutput() {
 describe("entrypoints/daemon-status", () => {
   it("prints running status and returns success", async () => {
     const output = createOutput();
-    const status: DaemonLockStatus = {
-      state: "running",
-      filePath: "/tmp/.runtime/daemon.lock",
-      pid: 101,
-      cwd: "/repo",
-      startedAt: 1,
-      detail: null,
-    };
 
     await expect(
       runDaemonStatus({
         output: output as unknown as NodeJS.WritableStream,
-        lock: { status: async () => status },
+        probe: async () => ({
+          status: {
+            state: "running",
+            filePath: "/tmp/.runtime/daemon.lock",
+            pid: 101,
+            cwd: "/repo",
+            startedAt: 1,
+            detail: null,
+          },
+          client: null,
+          ready: true,
+          error: null,
+        }),
       }),
     ).resolves.toBe(0);
     expect(output.chunks.join("")).toContain("daemon running");
+    expect(output.chunks.join("")).toContain("ready");
     expect(output.chunks.join("")).toContain("pid=101");
   });
 
@@ -52,6 +57,32 @@ describe("entrypoints/daemon-status", () => {
       }),
     ).resolves.toBe(1);
     expect(output.chunks.join("")).toContain("daemon stale");
+  });
+
+  it("prints running-but-unready status and returns non-zero", async () => {
+    const output = createOutput();
+
+    await expect(
+      runDaemonStatus({
+        output: output as unknown as NodeJS.WritableStream,
+        probe: async () => ({
+          status: {
+            state: "running",
+            filePath: "/tmp/.runtime/daemon.lock",
+            pid: 101,
+            cwd: "/repo",
+            startedAt: 1,
+            detail: null,
+          },
+          client: null,
+          ready: false,
+          error: new Error("connect ECONNREFUSED"),
+        }),
+      }),
+    ).resolves.toBe(1);
+    expect(output.chunks.join("")).toContain("daemon running");
+    expect(output.chunks.join("")).toContain("service_unavailable");
+    expect(output.chunks.join("")).toContain("ECONNREFUSED");
   });
 
   it("formats not-running status compactly", () => {

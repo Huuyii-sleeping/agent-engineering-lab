@@ -25,12 +25,13 @@
     "test:delivery": "tsx test/smoke/prd10-delivery-smoke.ts",
     "test:model-policy": "tsx test/smoke/prd11-model-policy-smoke.ts",
     "test:service-api": "tsx test/smoke/prd12-service-api-smoke.ts",
+    "test:daemon": "node test/smoke/prd20-daemon-control-smoke.mjs",
     "replay:trace": "tsx src/observability/replay-cli.ts",
     "test": "vitest run --no-cache",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"*.json\" \"*.md\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" \"*.json\" \"*.md\"",
-    "release:check": "pnpm lint && pnpm test && pnpm build && pnpm test:security && pnpm test:memory && pnpm test:observability && pnpm test:delivery && pnpm test:model-policy && pnpm test:service-api && pnpm test:regression && pnpm test:hooks && pnpm test:recovery && pnpm test:scheduler && pnpm test:worktree-closeout && pnpm test:mcp"
+    "release:check": "pnpm lint && pnpm test && pnpm build && pnpm test:security && pnpm test:memory && pnpm test:observability && pnpm test:delivery && pnpm test:model-policy && pnpm test:service-api && pnpm test:daemon && pnpm test:regression && pnpm test:hooks && pnpm test:recovery && pnpm test:scheduler && pnpm test:worktree-closeout && pnpm test:mcp"
   },
   "dependencies": {
     "dotenv": "^17.2.0",
