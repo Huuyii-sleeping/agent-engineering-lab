@@ -68,6 +68,7 @@ export type CliCommandContext = {
   getSkill(name: string): Promise<CliSkillDetail | null>;
   dumpSystemPrompt(): Promise<{ dump: PromptDump; loadedNames: string[]; missingNames: string[] }>;
   getUsage(): Promise<CliUsageSnapshot>;
+  canCompactSession(): boolean;
   compactSession(keepRecent?: number): Promise<CliCompactSummary>;
   isComposing(): boolean;
   getComposeLineCount(): number;
@@ -578,6 +579,16 @@ export async function dispatchCliCommand(
     return { handled: true, output: renderCliUsage(await context.getUsage()) };
   }
   if (parsed.command === "compact") {
+    if (!context.canCompactSession()) {
+      return {
+        handled: true,
+        output: renderCliError(
+          "compact unavailable",
+          "/compact requires an embedded session runtime",
+          "disconnect from daemon-backed interactive CLI before compacting locally",
+        ),
+      };
+    }
     const keepRecent = parsed.args[0] ? Number(parsed.args[0]) : undefined;
     if (parsed.args[0] && (!Number.isInteger(keepRecent) || Number(keepRecent) <= 0)) {
       return {

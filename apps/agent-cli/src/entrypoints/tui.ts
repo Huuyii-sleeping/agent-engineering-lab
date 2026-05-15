@@ -617,6 +617,7 @@ export async function handleTerminalTuiCommand(input: {
         };
       },
       getUsage: () => collectCliUsageSnapshot(input.model),
+      canCompactSession: () => true,
       compactSession: async (keepRecent) => {
         const session = input.service
           .listSessions()

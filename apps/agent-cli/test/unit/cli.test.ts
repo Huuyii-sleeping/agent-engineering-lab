@@ -1,7 +1,9 @@
+import { Readable, Writable } from "node:stream";
 import type OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { describe, expect, it, vi } from "vitest";
-import { renderAsyncCliEvent, runScheduledRound } from "../../src/cli/index.js";
+import { renderAsyncCliEvent, runCli, runScheduledRound } from "../../src/cli/index.js";
+import type { InteractiveCliServiceLike } from "../../src/cli/service-adapter.js";
 import { resetCliUiForTest, setCliUiColorEnabled } from "../../src/cli/ui.js";
 import type { AgentRuntimeState } from "../../src/agent-loop.js";
 import type { StaticPromptSource } from "../../src/prompt/types.js";
@@ -22,6 +24,63 @@ function createRuntimeState(): AgentRuntimeState {
     roundCounter: 0,
     touchedPaths: new Set<string>(),
     wroteWorkspaceFiles: false,
+  };
+}
+
+function createOutputCapture(chunks: string[]): Writable {
+  return new Writable({
+    write(chunk, _encoding, callback) {
+      chunks.push(String(chunk));
+      callback();
+    },
+  });
+}
+
+function createDaemonCliService(initialSessions: Array<{ id: string; history: ChatCompletionMessageParam[] }> = []): InteractiveCliServiceLike {
+  const sessions = initialSessions.map((session) => ({
+    id: session.id,
+    busy: false,
+    history: [...session.history],
+    messageCount: session.history.length,
+  }));
+
+  return {
+    bridgeManifest: () => ({ endpoints: { events: "http://127.0.0.1:4317/events" } }),
+    createSession: vi.fn(async () => {
+      const session = {
+        id: `s${String(sessions.length + 1).padStart(2, "0")}`,
+        busy: false,
+        history: [] as ChatCompletionMessageParam[],
+        messageCount: 0,
+      };
+      sessions.push(session);
+      return { id: session.id };
+    }),
+    listSessions: vi.fn(() => sessions.map((session) => ({ ...session, history: [...session.history] }))),
+    toolsMetadata: vi.fn(async () => [{ name: "shell", target: "base", description: "Run shell" }]),
+    chat: vi.fn(async (input) => {
+      let session = sessions.find((item) => item.id === input.session_id);
+      if (!session) {
+        session = {
+          id: input.session_id ?? `s${String(sessions.length + 1).padStart(2, "0")}`,
+          busy: false,
+          history: [],
+          messageCount: 0,
+        };
+        sessions.push(session);
+      }
+      if (input.message) {
+        session.history.push({ role: "user", content: input.message });
+        session.history.push({ role: "assistant", content: `reply:${input.message}` });
+        session.messageCount = session.history.length;
+      }
+      return {
+        ok: true,
+        session: { id: session.id },
+        assistant: `reply:${input.message ?? ""}`,
+      };
+    }),
+    runToolByName: vi.fn(async () => "ok"),
   };
 }
 
@@ -180,5 +239,48 @@ describe("runScheduledRound", () => {
       "scheduled due:1 scheduled prompt due now.",
       "scheduled error:scheduler loop failed",
     ]);
+  });
+});
+
+describe("runCli", () => {
+  it("prefers a resolved daemon-backed interactive CLI service", async () => {
+    const chunks: string[] = [];
+    const service = createDaemonCliService();
+
+    await runCli({
+      input: Readable.from(["hello daemon\n", "exit\n"]),
+      output: createOutputCapture(chunks),
+      resolveDaemonService: async () => ({
+        service,
+        notice: "Connected to daemon (pid=4242 0 shared sessions)",
+      }),
+    });
+
+    expect(chunks.join("")).toContain("Connected to daemon");
+    expect(chunks.join("")).toContain("reply:hello daemon");
+    expect(service.createSession).toHaveBeenCalledTimes(1);
+    expect(service.chat).toHaveBeenCalledWith({
+      session_id: "s01",
+      message: "hello daemon",
+    });
+  });
+
+  it("falls back to the embedded interactive CLI when daemon attach fails", async () => {
+    const chunks: string[] = [];
+
+    await runCli({
+      input: Readable.from(["/sessions\n", "exit\n"]),
+      output: createOutputCapture(chunks),
+      resolveDaemonService: async () => {
+        throw new Error("boom");
+      },
+      client: {} as OpenAI,
+      model: "test-model",
+      promptSource: PROMPT_SOURCE,
+    });
+
+    expect(chunks.join("")).toContain("daemon attach failed");
+    expect(chunks.join("")).toContain("falling back to embedded runtime");
+    expect(chunks.join("")).toContain("Sessions");
   });
 });

@@ -1,10 +1,17 @@
 import path from "node:path";
 import * as process from "node:process";
 import { createInterface } from "node:readline/promises";
-import { stdin as input, stdout as output } from "node:process";
+import { stdin, stdout } from "node:process";
 import type OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { createAgentSessionRecord, type AgentSessionRecord } from "../service-api/sessions.js";
+import {
+  getInteractiveCliBridgeEndpoint,
+  getInteractiveCliToolRunner,
+  resolveDaemonCliService,
+  type DaemonCliServiceResolution,
+  type InteractiveCliServiceLike,
+} from "./service-adapter.js";
 import { createAgentAppRuntime, type AgentAppRuntimeDeps } from "../bootstrap/app-runtime.js";
 import { dispatchCliCommand } from "./commands.js";
 import { completeCliLine } from "./completion.js";
@@ -71,6 +78,13 @@ type ScheduledRoundOptions = {
 
 type RunCliOverrides = Partial<AgentAppRuntimeDeps>;
 
+export type RunCliOptions = RunCliOverrides & {
+  input?: NodeJS.ReadableStream;
+  output?: NodeJS.WritableStream;
+  service?: InteractiveCliServiceLike;
+  resolveDaemonService?: () => Promise<DaemonCliServiceResolution | null>;
+};
+
 type CliSessionRecord = AgentSessionRecord & {
   changedPaths: Set<string>;
 };
@@ -99,6 +113,18 @@ function createShellAppRuntime(
     }
     throw error;
   }
+}
+
+function toCliSessionSummary(
+  session: { id: string; busy: boolean; history: ChatCompletionMessageParam[]; messageCount?: number },
+  activeSessionId: string | null,
+): { id: string; messageCount: number; busy: boolean; active: boolean } {
+  return {
+    id: session.id,
+    messageCount: session.messageCount ?? session.history.length,
+    busy: session.busy,
+    active: session.id === activeSessionId,
+  };
 }
 
 function formatError(error: unknown): string {
@@ -212,8 +238,357 @@ export async function runScheduledRound(opts: ScheduledRoundOptions): Promise<bo
   }
 }
 
-export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
-  let { app, startupIssue } = createShellAppRuntime(overrides);
+async function runDaemonCli(opts: {
+  service: InteractiveCliServiceLike;
+  input: NodeJS.ReadableStream;
+  output: NodeJS.WritableStream;
+  attachNotice: string | null;
+}): Promise<void> {
+  const composer = new CliComposerStore();
+  const paletteStore = new CliPaletteStore();
+  const transcriptBrowser = new CliTranscriptBrowserStore();
+  const changedPathsBySessionId = new Map<string, Set<string>>();
+  let activeSessionId = opts.service.listSessions().at(-1)?.id ?? null;
+  let workflow: CliWorkflowMode = "agent";
+  let waitingForInput = false;
+  const currentModel = "daemon-host";
+  const toolRunner = getInteractiveCliToolRunner(opts.service);
+
+  const getSessionSummaries = () =>
+    opts.service.listSessions().map((session) => toCliSessionSummary(session, activeSessionId));
+  const getSessionHistory = (sessionId: string | null = activeSessionId): ChatCompletionMessageParam[] => {
+    if (!sessionId) {
+      return [];
+    }
+    return (
+      opts.service.listSessions().find((session) => session.id === sessionId)?.history ?? []
+    );
+  };
+  const getActiveSessionChangedPaths = (): string[] =>
+    [...(changedPathsBySessionId.get(activeSessionId ?? "__shell__") ?? new Set<string>())];
+  const getComposeSessionId = (): string => activeSessionId ?? "__shell__";
+  const ensureActiveSession = async (): Promise<string> => {
+    if (activeSessionId) {
+      const exists = opts.service.listSessions().some((session) => session.id === activeSessionId);
+      if (exists) {
+        return activeSessionId;
+      }
+    }
+    const created = await opts.service.createSession();
+    activeSessionId = created.id;
+    return created.id;
+  };
+  const renderBanner = () =>
+    renderCliBanner({
+      title: "Agent CLI",
+      workspace: path.basename(process.cwd()),
+      mode: `interactive/${workflow}/daemon`,
+      model: currentModel,
+      sessionId: activeSessionId,
+      commands: ["/help", "/workflow", "/palette", "/history", "/next", "/compose", "/status"],
+    });
+  const getComposerSnapshot = (sessionId: string | null) => ({
+    active: composer.isActive(sessionId),
+    lineCount: composer.lineCount(sessionId),
+    charCount: composer.preview(sessionId)?.charCount ?? 0,
+  });
+  const rl = createInterface({
+    input: opts.input,
+    output: opts.output,
+    completer: (line: string) =>
+      completeCliLine(line, {
+        sessions: getSessionSummaries(),
+        helpTopics: listCliHelpTopics(),
+        transcriptEntryCount: getSessionHistory(activeSessionId).length,
+        paletteEntryCount: paletteStore.lastCount(activeSessionId),
+        model: currentModel,
+      }),
+  });
+
+  opts.output.write(`${renderBanner()}\n`);
+  if (opts.attachNotice) {
+    opts.output.write(`${opts.attachNotice}\n\n`);
+  }
+
+  try {
+    while (true) {
+      let query = "";
+      try {
+        waitingForInput = true;
+        query = await rl.question(
+          renderCliPrompt(activeSessionId, getComposerSnapshot(getComposeSessionId()), workflow),
+        );
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ERR_USE_AFTER_CLOSE") {
+          break;
+        }
+        throw error;
+      } finally {
+        waitingForInput = false;
+      }
+
+      const normalized = query.trim().toLowerCase();
+      if (!query.trim() && !composer.isActive(getComposeSessionId())) {
+        continue;
+      }
+      if (!composer.isActive(getComposeSessionId()) && (normalized === "q" || normalized === "exit")) {
+        opts.output.write(
+          `${renderCliCloseout({
+            sessionId: activeSessionId,
+            changedPaths: getActiveSessionChangedPaths(),
+          })}\n`,
+        );
+        break;
+      }
+
+      const command = await dispatchCliCommand(query, {
+        activeSessionId,
+        createSession: async () => {
+          const session = await opts.service.createSession();
+          activeSessionId = session.id;
+          return { id: session.id };
+        },
+        listSessions: getSessionSummaries,
+        useSession: (sessionId) => {
+          if (!opts.service.listSessions().some((session) => session.id === sessionId)) {
+            return false;
+          }
+          activeSessionId = sessionId;
+          return true;
+        },
+        listTools: async () => opts.service.toolsMetadata(),
+        getStatus: async () =>
+          collectCliStatusSnapshot({
+            mode: `interactive/${workflow}/daemon`,
+            activeSessionId,
+            sessionCount: getSessionSummaries().length,
+            bridgeEndpoint: getInteractiveCliBridgeEndpoint(opts.service),
+            toolMetadata: await opts.service.toolsMetadata(),
+            model: currentModel,
+          }),
+        getConfig: () => collectCliConfigSnapshot({ model: process.env.MODEL_ID?.trim() }),
+        getPermissions: collectCliPermissionSnapshot,
+        setPermissionMode: (mode) => {
+          setCliPermissionMode(mode);
+          return true;
+        },
+        listApprovals: async (status) => {
+          if (!toolRunner) {
+            return JSON.stringify(
+              {
+                ok: false,
+                error: { message: "daemon tool surface is unavailable" },
+              },
+              null,
+              2,
+            );
+          }
+          return toolRunner("security_list_approvals", JSON.stringify(status ? { status } : {}));
+        },
+        approveRequest: async (requestId) => {
+          if (!toolRunner) {
+            return JSON.stringify(
+              {
+                ok: false,
+                error: { message: "daemon tool surface is unavailable" },
+              },
+              null,
+              2,
+            );
+          }
+          return toolRunner("security_approve", JSON.stringify({ request_id: requestId }));
+        },
+        rejectRequest: async (requestId) => {
+          if (!toolRunner) {
+            return JSON.stringify(
+              {
+                ok: false,
+                error: { message: "daemon tool surface is unavailable" },
+              },
+              null,
+              2,
+            );
+          }
+          return toolRunner("security_reject", JSON.stringify({ request_id: requestId }));
+        },
+        listSkills: async () => {
+          const catalog = getSkillCatalog();
+          return {
+            skills: catalog.available,
+            loadedNames: catalog.loadedNames,
+            missingNames: catalog.missingNames,
+          };
+        },
+        getSkill: async (name) => {
+          const skill = loadSkill(name);
+          if (!skill) {
+            return null;
+          }
+          const catalog = getSkillCatalog();
+          return {
+            name: skill.name,
+            description: skill.description,
+            path: skill.path,
+            root: skill.root,
+            metadata: skill.metadata,
+            content: skill.content,
+            loaded: catalog.loadedNames.some(
+              (loadedName) => loadedName.toLowerCase() === skill.name.toLowerCase(),
+            ),
+          };
+        },
+        dumpSystemPrompt: async () => {
+          const catalog = getSkillCatalog();
+          return {
+            dump: inspectPromptSource(getStaticPromptSource()),
+            loadedNames: catalog.loadedNames,
+            missingNames: catalog.missingNames,
+          };
+        },
+        getUsage: () => collectCliUsageSnapshot(currentModel),
+        compactSession: async () => ({
+          keptRecent: 0,
+          oldMessageCount: 0,
+          newMessageCount: 0,
+          estimatedBefore: 0,
+          estimatedAfter: 0,
+          reducedBy: 0,
+          transcriptBeforePath: "",
+          transcriptAfterPath: "",
+        }),
+        isComposing: () => composer.isActive(getComposeSessionId()),
+        getComposeLineCount: () => composer.lineCount(getComposeSessionId()),
+        getComposeCharCount: () => composer.preview(getComposeSessionId())?.charCount ?? 0,
+        startCompose: () => composer.start(getComposeSessionId()),
+        appendComposeLine: (line) => composer.append(getComposeSessionId(), line),
+        previewCompose: () => composer.preview(getComposeSessionId()),
+        popCompose: (count) => composer.pop(getComposeSessionId(), count),
+        sendCompose: () => composer.consume(getComposeSessionId()),
+        cancelCompose: () => composer.cancel(getComposeSessionId()),
+        getModel: () => currentModel,
+        setModel: async () => false,
+        addWorkspaceRoot,
+        runDoctor: runCliDoctor,
+        getTheme: () => getCliUiTheme(),
+        setTheme: (theme) => {
+          setCliUiTheme(theme);
+          return true;
+        },
+        getWorkflow: () => workflow,
+        setWorkflow: (nextWorkflow) => {
+          workflow = nextWorkflow;
+          return true;
+        },
+        showPalette: async (query = "") =>
+          paletteStore.search(
+            activeSessionId,
+            {
+              sessions: getSessionSummaries(),
+              helpTopics: listCliHelpTopics(),
+              composerActive: composer.isActive(getComposeSessionId()),
+              pendingApprovals: (await collectCliPermissionSnapshot()).pendingApprovals,
+              workflow,
+            },
+            query,
+          ),
+        openPalette: (index) => paletteStore.open(activeSessionId, index),
+        showTranscript: (direction = "current") => transcriptBrowser.history(activeSessionId, getSessionHistory(activeSessionId), direction),
+        searchTranscript: (query) => transcriptBrowser.search(activeSessionId, getSessionHistory(activeSessionId), query),
+        moveTranscriptSearch: (direction) => transcriptBrowser.moveSearch(activeSessionId, getSessionHistory(activeSessionId), direction),
+        peekTranscript: (entryIndex) => transcriptBrowser.peek(activeSessionId, getSessionHistory(activeSessionId), entryIndex),
+        moveTranscriptPeek: (direction) => transcriptBrowser.peekRelative(activeSessionId, getSessionHistory(activeSessionId), direction),
+        tailTranscript: () => transcriptBrowser.tail(activeSessionId, getSessionHistory(activeSessionId)),
+        canCompactSession: () => false,
+      });
+      if (command.handled) {
+        if (command.nextSessionId) {
+          activeSessionId = command.nextSessionId;
+        }
+        if (command.clearScreen) {
+          opts.output.write(renderClearScreen());
+        }
+        if (command.showBanner) {
+          opts.output.write(`${renderBanner()}\n`);
+        }
+        if (command.output) {
+          opts.output.write(`${command.output}\n\n`);
+        }
+        if (command.exit) {
+          opts.output.write(
+            `${renderCliCloseout({
+              sessionId: activeSessionId,
+              changedPaths: getActiveSessionChangedPaths(),
+            })}\n`,
+          );
+          break;
+        }
+        if (!command.submitPrompt) {
+          continue;
+        }
+        query = command.submitPrompt;
+      }
+
+      if (query.trim().startsWith("!")) {
+        if (!toolRunner) {
+          opts.output.write(`${renderCliError("shell unavailable", "daemon tool surface is unavailable")}\n\n`);
+          continue;
+        }
+        opts.output.write(`${await runCliShellShortcut(query.trim().slice(1), toolRunner)}\n\n`);
+        continue;
+      }
+
+      const sessionId = await ensureActiveSession();
+      const result = await opts.service.chat({
+        session_id: sessionId,
+        message: query,
+      });
+      if (result.ok === false) {
+        opts.output.write(
+          `${renderCliError("chat failed", String((result.error as { message?: string } | undefined)?.message ?? "chat failed"))}\n\n`,
+        );
+        continue;
+      }
+      const nextSessionId = String((result.session as { id?: unknown } | undefined)?.id ?? sessionId);
+      activeSessionId = nextSessionId || sessionId;
+      if (typeof result.assistant === "string" && result.assistant.trim()) {
+        opts.output.write(`${renderCliSection("Assistant", result.assistant)}\n\n`);
+      }
+    }
+  } finally {
+    rl.close();
+  }
+}
+
+export async function runCli(options: RunCliOptions = {}): Promise<void> {
+  const { input: providedInput, output: providedOutput, service, resolveDaemonService, ...runtimeOverrides } = options;
+  const input = providedInput ?? stdin;
+  const output = providedOutput ?? stdout;
+  let daemonService = service ?? null;
+  let attachNotice: string | null = null;
+  if (!daemonService) {
+    try {
+      const resolved = await (resolveDaemonService ?? (() => resolveDaemonCliService()))();
+      daemonService = resolved?.service ?? null;
+      attachNotice = resolved?.notice ?? null;
+    } catch (error) {
+      attachNotice = renderCliError(
+        "daemon attach failed",
+        error instanceof Error ? error.message : String(error),
+        "falling back to embedded runtime",
+      );
+    }
+  }
+  if (daemonService) {
+    await runDaemonCli({
+      service: daemonService,
+      input,
+      output,
+      attachNotice,
+    });
+    return;
+  }
+
+  let { app, startupIssue } = createShellAppRuntime(runtimeOverrides);
   const sessions = new Map<string, CliSessionRecord>();
   const composer = new CliComposerStore();
   const paletteStore = new CliPaletteStore();
@@ -228,7 +603,7 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
     input,
     output,
     completer: (line: string) =>
-      completeCliLine(line, {
+        completeCliLine(line, {
         sessions: [...sessions.values()].map((session) => ({
           id: session.id,
           messageCount: session.history.length,
@@ -246,10 +621,10 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
     try {
       process.env.MODEL_ID = model;
       app = createAgentAppRuntime({
-        ...overrides,
-        client: overrides.client ?? createClient(),
+        ...runtimeOverrides,
+        client: runtimeOverrides.client ?? createClient(),
         model,
-        promptSource: overrides.promptSource ?? getStaticPromptSource(),
+        promptSource: runtimeOverrides.promptSource ?? getStaticPromptSource(),
       });
       startupIssue = null;
       return true;
@@ -291,6 +666,9 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
   };
 
   output.write(`${renderBanner()}\n`);
+  if (attachNotice) {
+    output.write(`${attachNotice}\n\n`);
+  }
   if (startupIssue) {
     output.write(
       `${renderCliError("startup", startupIssue.message, "run /doctor before sending model queries")}\n\n`,
@@ -472,6 +850,7 @@ export async function runCli(overrides: RunCliOverrides = {}): Promise<void> {
           };
         },
         getUsage: () => collectCliUsageSnapshot(app.model),
+        canCompactSession: () => true,
         compactSession: async (keepRecent) =>
           compactMessages({ messages: getActiveSession().history }, "manual", keepRecent),
         isComposing: () => composer.isActive(activeSessionId),

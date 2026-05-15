@@ -10,6 +10,7 @@ function createContext(input: {
   activeSessionId?: string;
   sessions?: Array<{ id: string; messageCount: number; busy?: boolean }>;
   transcriptMessages?: Array<{ role: string; content: string }>;
+  canCompactSession?: boolean;
 } = {}): CliCommandContext {
   let theme: "atlas" | "plain" = "atlas";
   let model = "gpt-test";
@@ -179,6 +180,7 @@ function createContext(input: {
       dailyTokenBudget: 2000,
       dayKey: "2026-05-13",
     })),
+    canCompactSession: () => input.canCompactSession ?? true,
     compactSession: vi.fn(async () => ({
       keptRecent: 5,
       oldMessageCount: 10,
@@ -343,6 +345,13 @@ describe("cli-commands", () => {
     expect((await dispatchCliCommand("/add-dir /tmp/demo", context)).output).toContain("added workspace root /tmp/demo");
     expect((await dispatchCliCommand("/sessions", context)).output).toContain("[1]");
     expect((await dispatchCliCommand("批准", context)).output).toContain("approved apr_1");
+  });
+
+  it("surfaces a clear error when compact is unavailable for a daemon-backed shell", async () => {
+    const result = await dispatchCliCommand("/compact", createContext({ canCompactSession: false }));
+
+    expect(result.output).toContain("compact unavailable");
+    expect(result.output).toContain("embedded session runtime");
   });
 
   it("supports composer lifecycle and suppresses approval shortcuts while drafting", async () => {
