@@ -55,7 +55,11 @@ describe("delivery validation", () => {
       });
 
       expect(report.summary.status).toBe("passed");
-      expect(report.summary.passedStages).toBe(3);
+      expect(report.summary.passedStages).toBe(4);
+      expect(report.stages[0]).toMatchObject({
+        stage: "security",
+        status: "passed",
+      });
       const persisted = await loadLatestDeliveryReport();
       expect(persisted?.summary.status).toBe("passed");
       const raw = await readFile(path.join(workspace, ".delivery", "delivery_report.json"), "utf8");
@@ -95,8 +99,58 @@ describe("delivery validation", () => {
       expect(report.summary.status).toBe("failed");
       expect(report.latestFailure?.stage).toBe("lint");
       expect(report.latestFailure?.code).toBe("LINT_FAILED");
-      expect(report.stages[0]?.status).toBe("failed");
-      expect(report.stages.slice(1).every((stage) => stage.status !== "passed")).toBe(true);
+      expect(report.stages[0]).toMatchObject({
+        stage: "security",
+        status: "passed",
+      });
+      expect(report.stages[1]).toMatchObject({
+        stage: "lint",
+        status: "failed",
+      });
+      expect(report.stages.slice(2).every((stage) => stage.status !== "passed")).toBe(true);
+    } finally {
+      process.chdir(previousCwd);
+    }
+  });
+
+  it("fails delivery validation when changed files still contain unresolved secret findings", async () => {
+    const workspace = await createWorkspace("delivery-secret");
+    const previousCwd = process.cwd();
+    try {
+      process.chdir(workspace);
+      await mkdir(path.join(workspace, "apps", "agent-cli", "src"), { recursive: true });
+      await writeJson(path.join(workspace, "package.json"), {
+        name: "delivery-secret",
+        private: true,
+        scripts: {
+          lint: "node -e \"console.log('lint ok')\"",
+        },
+      });
+      await writeFile(path.join(workspace, "pnpm-workspace.yaml"), "packages:\n  - \"apps/*\"\n", "utf8");
+      await writeJson(path.join(workspace, "apps", "agent-cli", "package.json"), {
+        name: "agent-cli",
+        private: true,
+        scripts: {},
+      });
+      await writeFile(
+        path.join(workspace, "apps", "agent-cli", "src", "leak.ts"),
+        "export const token = 'sk-123456789012345678901234';\n",
+        "utf8",
+      );
+
+      const report = await runDeliveryValidation({
+        mode: "manual",
+        changedPaths: ["apps/agent-cli/src/leak.ts"],
+      });
+
+      expect(report.summary.status).toBe("failed");
+      expect(report.latestFailure).toMatchObject({
+        stage: "security",
+        code: "SECRET_FINDINGS_BLOCKED",
+      });
+      expect(report.risks).toEqual(
+        expect.arrayContaining([expect.stringContaining("secret findings")]),
+      );
     } finally {
       process.chdir(previousCwd);
     }

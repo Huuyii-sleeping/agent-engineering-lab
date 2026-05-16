@@ -805,22 +805,33 @@ export function renderCliPromptDump(
   loadedNames: string[],
   missingNames: string[],
 ): string {
+  const protectedExportNotice =
+    dump.inspectionMode === "protected" && dump.protectedExportPath
+      ? [``, strong("Protected Export"), dump.protectedExportPath, muted("Inline protected prompt content is suppressed in the terminal.")]
+      : [];
   return [
     strong("System Prompt"),
     renderRows([
+      { label: "inspection", value: dump.inspectionMode ?? "default" },
       { label: "stable", value: dump.stableSectionIds.join(", ") || "(none)" },
       { label: "dynamic", value: dump.dynamicSectionIds.join(", ") || "(none)" },
       { label: "skills", value: loadedNames.join(", ") || "(none)" },
       { label: "missing", value: missingNames.join(", ") || "(none)" },
+      { label: "export", value: dump.protectedExportPath ?? "(inline only)" },
     ]),
     "",
     strong("Primary"),
-    dump.primarySystemPrompt || muted("(empty)"),
+    dump.inspectionMode === "protected" && dump.protectedExportPath
+      ? muted("(stored in protected export)")
+      : dump.primarySystemPrompt || muted("(empty)"),
     "",
     strong("Supplemental"),
-    dump.supplementalSystemMessages.length > 0
-      ? dump.supplementalSystemMessages.join("\n\n---\n\n")
-      : muted("(none)"),
+    dump.inspectionMode === "protected" && dump.protectedExportPath
+      ? muted("(stored in protected export)")
+      : dump.supplementalSystemMessages.length > 0
+        ? dump.supplementalSystemMessages.join("\n\n---\n\n")
+        : muted("(none)"),
+    ...protectedExportNotice,
   ].join("\n");
 }
 

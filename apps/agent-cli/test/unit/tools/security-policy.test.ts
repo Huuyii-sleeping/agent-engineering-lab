@@ -37,6 +37,21 @@ describe("tools/security-policy", () => {
       risk: "medium",
       matchedRule: "mcp-tool-approval",
     });
+    expect(evaluateSecurityPolicy(policy, { toolName: "write_file", args: { path: ".env", content: "x=y" } })).toMatchObject({
+      decision: "require_approval",
+      risk: "high",
+      matchedRule: "write-managed-path-high-approval",
+    });
+    expect(
+      evaluateSecurityPolicy(policy, {
+        toolName: "edit_file",
+        args: { path: ".github/workflows/ci.yml", old_text: "a", new_text: "b" },
+      }),
+    ).toMatchObject({
+      decision: "require_approval",
+      risk: "high",
+      matchedRule: "edit-managed-path-high-approval",
+    });
     expect(evaluateSecurityPolicy(policy, { toolName: "read_file", args: { path: "README.md" } })).toMatchObject({
       decision: "allow",
       risk: "low",

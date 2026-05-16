@@ -36,6 +36,21 @@ export class McpRegistry {
       if (!client) {
         continue;
       }
+      if (!server.trusted) {
+        const context = getExecutionContext();
+        await recordObservabilityEvent(
+          "mcp_lifecycle",
+          {
+            serverName: server.name,
+            action: "registration_blocked_untrusted",
+            trust: "untrusted",
+            provenance: server.provenance,
+            credentialMode: server.credentialMode,
+          },
+          context ?? undefined,
+        );
+        continue;
+      }
       try {
         const tools = await client.listTools();
         for (const tool of tools) {
@@ -47,6 +62,9 @@ export class McpRegistry {
             parameters: tool.inputSchema,
             target: "mcp",
             allowDuringReplay: false,
+            trust: "trusted",
+            provenance: server.provenance,
+            credentialMode: server.credentialMode,
           });
         }
       } catch (error) {

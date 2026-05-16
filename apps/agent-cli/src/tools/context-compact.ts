@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
 import type {
@@ -7,6 +7,8 @@ import type {
   ChatCompletionTool,
 } from "openai/resources/chat/completions";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
+import { sanitizeAndRedactValue } from "../security/data-hygiene.js";
+import { buildArtifactMetadata, isExpired } from "../security/local-retention.js";
 
 export const COMPACT_THRESHOLD_TOKENS = RUNTIME_CONFIG.compactThresholdTokens;
 const SUMMARY_LINE_LIMIT = 24;
@@ -64,11 +66,53 @@ async function writeTranscriptSnapshot(
 ): Promise<string> {
   const dir = path.join(process.cwd(), ".transcripts");
   await mkdir(dir, { recursive: true });
+  await cleanupTranscriptSnapshots(dir);
   const filename = `transcript_${phase}_${stamp}.jsonl`;
   const full = path.join(dir, filename);
-  const lines = messages.map((message) => JSON.stringify(message));
+  const metaPath = path.join(dir, `transcript_${phase}_${stamp}.meta.json`);
+  const lines = messages.map((message) => JSON.stringify(sanitizeAndRedactValue(message)));
   await writeFile(full, `${lines.join("\n")}\n`, "utf8");
+  await writeFile(
+    metaPath,
+    `${JSON.stringify(
+      {
+        ...buildArtifactMetadata("transcript_snapshot"),
+        phase,
+        transcriptPath: filename,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
   return path.relative(process.cwd(), full).replace(/\\/g, "/");
+}
+
+async function cleanupTranscriptSnapshots(dir: string): Promise<void> {
+  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".meta.json")) {
+      continue;
+    }
+    const metaPath = path.join(dir, entry.name);
+    const raw = await readFile(metaPath, "utf8").catch(() => "");
+    if (!raw.trim()) {
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(raw) as { expiresAt?: unknown; transcriptPath?: unknown };
+      if (!isExpired(typeof parsed.expiresAt === "number" ? parsed.expiresAt : null)) {
+        continue;
+      }
+      const transcriptName = String(parsed.transcriptPath ?? "").trim();
+      if (transcriptName) {
+        await rm(path.join(dir, transcriptName), { force: true }).catch(() => {});
+      }
+      await rm(metaPath, { force: true }).catch(() => {});
+    } catch {
+      // ignore malformed metadata
+    }
+  }
 }
 
 function summarizeMessages(messages: ChatCompletionMessageParam[]): string {

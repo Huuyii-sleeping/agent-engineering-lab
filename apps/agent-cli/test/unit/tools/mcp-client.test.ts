@@ -15,6 +15,9 @@ function createConfig(): McpServerConfig {
     env: {},
     cwd: process.cwd(),
     enabled: true,
+    trusted: true,
+    provenance: `${path.join(process.cwd(), ".codex", "mcp.json")}#demo`,
+    credentialMode: "none",
     requestTimeoutMs: 2000,
   };
 }

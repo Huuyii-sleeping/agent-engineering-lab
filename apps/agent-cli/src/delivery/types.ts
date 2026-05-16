@@ -1,4 +1,5 @@
 export type DeliveryStageName =
+  | "security"
   | "lint"
   | "test"
   | "build"
@@ -8,6 +9,8 @@ export type DeliveryStageName =
   | "recovery"
   | "scheduler";
 export type DeliveryFailureCode =
+  | "SECRET_FINDINGS_BLOCKED"
+  | "SECRET_FINDINGS_REVIEW_REQUIRED"
   | "LINT_FAILED"
   | "TEST_FAILED"
   | "BUILD_FAILED"

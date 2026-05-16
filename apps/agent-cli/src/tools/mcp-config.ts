@@ -10,6 +10,9 @@ export type McpServerConfig = {
   env: Record<string, string>;
   cwd: string;
   enabled: boolean;
+  trusted: boolean;
+  provenance: string;
+  credentialMode: "none" | "configured";
   requestTimeoutMs: number;
 };
 
@@ -30,7 +33,7 @@ function normalizeStringMap(value: unknown): Record<string, string> {
   );
 }
 
-function normalizeServerConfig(item: unknown): McpServerConfig | null {
+function normalizeServerConfig(item: unknown, configPath: string): McpServerConfig | null {
   if (!item || typeof item !== "object") {
     return null;
   }
@@ -50,6 +53,9 @@ function normalizeServerConfig(item: unknown): McpServerConfig | null {
     env: normalizeStringMap(input.env),
     cwd,
     enabled: input.enabled !== false,
+    trusted: input.trusted === true,
+    provenance: `${configPath}#${name}`,
+    credentialMode: Object.keys(normalizeStringMap(input.env)).length > 0 ? "configured" : "none",
     requestTimeoutMs:
       Number.isFinite(timeoutOverride) && timeoutOverride >= 100
         ? Math.trunc(timeoutOverride)
@@ -66,7 +72,7 @@ export async function loadMcpServerConfigs(): Promise<McpServerConfig[]> {
   const parsed = parseConfigObject(raw);
   const servers = Array.isArray(parsed.servers) ? parsed.servers : [];
   return servers
-    .map((item) => normalizeServerConfig(item))
+    .map((item) => normalizeServerConfig(item, configPath))
     .filter((item): item is McpServerConfig => Boolean(item))
     .filter((item) => item.enabled);
 }

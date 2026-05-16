@@ -1,4 +1,11 @@
+import { readFile } from "node:fs/promises";
 import { recordObservabilityEvent } from "../observability/runtime.js";
+import {
+  replaceTrackedWorkspaceFindings,
+  reportSecretScan,
+  scanTextForSecrets,
+  type SecretFinding,
+} from "../security/secret-scanning.js";
 import { nowTimestampMs } from "../time.js";
 import { buildDeliveryPlan } from "./plan.js";
 import { loadLatestDeliveryReportFromStore, saveDeliveryReport } from "./report-store.js";
@@ -22,13 +29,103 @@ export async function loadLatestDeliveryReport(): Promise<DeliveryReport | null>
   return loadLatestDeliveryReportFromStore();
 }
 
+async function scanChangedPathsForSecrets(
+  changedPaths: string[],
+  traceId?: string,
+): Promise<{ findings: SecretFinding[]; action: "block" | "warn" | "audit_only" | null }> {
+  const findings: SecretFinding[] = [];
+  for (const changedPath of changedPaths) {
+    try {
+      const content = await readFile(changedPath, "utf8");
+      const result = scanTextForSecrets({
+        content,
+        sourceKind: "delivery_validation",
+        targetPath: changedPath,
+      });
+      await replaceTrackedWorkspaceFindings(changedPath, result.findings);
+      if (result.action) {
+        await reportSecretScan({
+          sourceKind: "delivery_validation",
+          action: result.action,
+          findings: result.findings,
+          targetPath: changedPath,
+          traceId,
+        });
+        findings.push(...result.findings);
+      }
+    } catch {
+      // ignore missing or unreadable changed paths during delivery scanning
+    }
+  }
+  const action = findings.reduce<"block" | "warn" | "audit_only" | null>(
+    (best, item) => {
+      if (item.action === "block") {
+        return "block";
+      }
+      if (item.action === "warn" && best !== "block") {
+        return "warn";
+      }
+      if (item.action === "audit_only" && !best) {
+        return "audit_only";
+      }
+      return best;
+    },
+    null,
+  );
+  return { findings, action };
+}
+
 export async function runDeliveryValidation(options: DeliveryOptions = {}): Promise<DeliveryReport> {
   const changedPaths = [...new Set(options.changedPaths ?? [])].sort();
   const ctx: DeliveryContext = { changedPaths };
   const plans = await buildDeliveryPlan(ctx);
   const stages: DeliveryStageResult[] = [];
 
-  for (const plan of plans) {
+  const secretScan = await scanChangedPathsForSecrets(changedPaths, options.traceId);
+  if (secretScan.action === "block" || secretScan.action === "warn") {
+    const failedStage: DeliveryStageResult = {
+      stage: "security",
+      command: [],
+      status: "failed",
+      exitCode: null,
+      durationMs: 0,
+      attempts: 1,
+      stdout: "",
+      stderr: secretScan.findings
+        .slice(0, 3)
+        .map((item) => `${item.targetPath ?? "unknown"}: ${item.summary}`)
+        .join("\n"),
+      failure: {
+        stage: "security",
+        code: secretScan.action === "block" ? "SECRET_FINDINGS_BLOCKED" : "SECRET_FINDINGS_REVIEW_REQUIRED",
+        message:
+          secretScan.action === "block"
+            ? "high-confidence secret findings remain in changed files"
+            : "secret-like findings require manual review before delivery",
+        suggestion:
+          secretScan.action === "block"
+            ? "Remove or rotate the detected secret material, then rerun validation."
+            : "Review the flagged files, redact secret-like values, and rerun validation.",
+      },
+      skippedReason: null,
+    };
+    stages.push(failedStage);
+  } else {
+    stages.push({
+      stage: "security",
+      command: [],
+      status: "passed",
+      exitCode: 0,
+      durationMs: 0,
+      attempts: 1,
+      stdout: secretScan.action === "audit_only" ? "audit-only secret hints recorded" : "",
+      stderr: "",
+      failure: null,
+      skippedReason: null,
+    });
+  }
+
+  for (const plan of stages[0]?.status === "failed" ? [] : plans) {
     if (plan.condition && !plan.condition(ctx)) {
       stages.push({
         stage: plan.stage,
@@ -55,7 +152,13 @@ export async function runDeliveryValidation(options: DeliveryOptions = {}): Prom
   const skipped = stages.filter((item) => item.status === "skipped");
   const passed = stages.filter((item) => item.status === "passed");
   const latestFailure = failed[0]?.failure ?? null;
-  const risks = latestFailure ? [`validation failed at ${latestFailure.stage} with ${latestFailure.code}`] : [];
+  const risks = latestFailure
+    ? [
+        latestFailure.stage === "security"
+          ? `secret findings blocked delivery validation: ${latestFailure.code}`
+          : `validation failed at ${latestFailure.stage} with ${latestFailure.code}`,
+      ]
+    : [];
   const suggestions = latestFailure
     ? [latestFailure.suggestion]
     : ["Validation passed. Delivery report is ready for review or archive."];

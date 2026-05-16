@@ -2,7 +2,6 @@
 
 ## Purpose
 定义 Agent 的持久化记忆、轻量检索、可解释命中与主循环注入能力，支持跨会话恢复用户偏好、约束和历史决策，同时受 token 预算约束。
-
 ## Requirements
 ### Requirement: Agent SHALL persist memory across sessions
 系统 SHALL 将短期与长期记忆持久化到 `.memory/*.jsonl`，并在重启后可恢复读取。
@@ -37,3 +36,12 @@
 - **WHEN** 自动记忆抽取命中包含 secret-like 内容的候选项
 - **THEN** 系统写入脱敏后的记忆条目
 - **AND** 后续 `memory_list` / `memory_search` 返回脱敏后的内容
+
+### Requirement: Memory persistence SHALL honor lifecycle and deletion controls
+memory 在完成脱敏后，SHALL 继续接入 retention、过期清理与显式删除 contract，避免 long-term memory 默认无限期累积。
+
+#### Scenario: Retention policy expires long-term memory entries
+- **WHEN** 某批 long-term memory 条目达到保留阈值
+- **THEN** 系统按策略删除、裁剪或降级这些条目
+- **AND** 后续 `memory_list` / `memory_search` 不再返回已清理内容
+

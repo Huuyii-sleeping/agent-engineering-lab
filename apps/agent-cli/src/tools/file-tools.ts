@@ -1,9 +1,14 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
-import { isWorkspacePathAllowed } from "../workspace-roots.js";
+import {
+  replaceTrackedWorkspaceFindings,
+  reportSecretScan,
+  scanTextForSecrets,
+} from "../security/secret-scanning.js";
+import { isWorkspacePathAllowed, listWorkspaceRoots, resolveWorkspacePath } from "../workspace-roots.js";
 
 type FileToolErrorCode =
   | "PATH_OUT_OF_BOUNDS"
@@ -34,9 +39,36 @@ function truncateContent(content: string, limit: number): string {
   return `${content.slice(0, limit)}\n...[truncated to ${limit} chars]`;
 }
 
-export function safePath(inputPath: string): string {
-  const resolved = path.resolve(process.cwd(), inputPath);
+const SENSITIVE_WRITE_SEGMENTS = new Set([
+  ".git",
+  ".sessions",
+  ".transcripts",
+  ".memory",
+  ".observability",
+  ".security",
+  ".audit",
+]);
+
+function isSensitiveWriteTarget(candidate: string): boolean {
+  return listWorkspaceRoots().some((root) => {
+    const canonicalRoot = resolveWorkspacePath(root);
+    const relative = path.relative(canonicalRoot, candidate);
+    if (relative !== "" && (relative.startsWith("..") || path.isAbsolute(relative))) {
+      return false;
+    }
+    return relative
+      .split(path.sep)
+      .filter((segment) => segment.length > 0)
+      .some((segment) => SENSITIVE_WRITE_SEGMENTS.has(segment));
+  });
+}
+
+export function safePath(inputPath: string, options: { forWrite?: boolean } = {}): string {
+  const resolved = resolveWorkspacePath(inputPath);
   if (!isWorkspacePathAllowed(resolved)) {
+    throw new Error("PATH_OUT_OF_BOUNDS");
+  }
+  if (options.forWrite && isSensitiveWriteTarget(resolved)) {
     throw new Error("PATH_OUT_OF_BOUNDS");
   }
   return resolved;
@@ -76,7 +108,7 @@ export async function runWriteFile(pathArg: unknown, contentArg: unknown): Promi
 
   let target = "";
   try {
-    target = safePath(pathArg);
+    target = safePath(pathArg, { forWrite: true });
   } catch {
     return toFileToolError("PATH_OUT_OF_BOUNDS", "路径越界，已拒绝访问");
   }
@@ -84,6 +116,43 @@ export async function runWriteFile(pathArg: unknown, contentArg: unknown): Promi
   try {
     await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, contentArg, "utf8");
+    const scan = scanTextForSecrets({
+      content: contentArg,
+      sourceKind: "workspace_write",
+      targetPath: pathArg,
+    });
+    if (scan.action === "block") {
+      await rm(target, { force: true }).catch(() => {});
+      await replaceTrackedWorkspaceFindings(pathArg, []);
+      await reportSecretScan({
+        sourceKind: "workspace_write",
+        action: scan.action,
+        findings: scan.findings,
+        targetPath: pathArg,
+        rolledBack: true,
+      });
+      return JSON.stringify({
+        ok: false,
+        error: {
+          code: "SECURITY_SECRET_DETECTED",
+          message: "workspace write rolled back by secret scanning",
+        },
+      });
+    }
+    if (scan.action) {
+      await replaceTrackedWorkspaceFindings(pathArg, scan.findings);
+      await reportSecretScan({
+        sourceKind: "workspace_write",
+        action: scan.action,
+        findings: scan.findings,
+        targetPath: pathArg,
+      });
+      if (scan.action === "warn") {
+        return `OK: 已写入 ${pathArg} [security warning: secret-like content retained under audit]`;
+      }
+      return `OK: 已写入 ${pathArg} [security audit recorded]`;
+    }
+    await replaceTrackedWorkspaceFindings(pathArg, []);
     return `OK: 已写入 ${pathArg}`;
   } catch {
     return toFileToolError("IO_ERROR", `写入文件失败: ${pathArg}`);
@@ -107,7 +176,7 @@ export async function runEditFile(
 
   let target = "";
   try {
-    target = safePath(pathArg);
+    target = safePath(pathArg, { forWrite: true });
   } catch {
     return toFileToolError("PATH_OUT_OF_BOUNDS", "路径越界，已拒绝访问");
   }
@@ -120,6 +189,43 @@ export async function runEditFile(
     }
     const updated = `${original.slice(0, index)}${newTextArg}${original.slice(index + oldTextArg.length)}`;
     await writeFile(target, updated, "utf8");
+    const scan = scanTextForSecrets({
+      content: updated,
+      sourceKind: "workspace_write",
+      targetPath: pathArg,
+    });
+    if (scan.action === "block") {
+      await writeFile(target, original, "utf8");
+      await replaceTrackedWorkspaceFindings(pathArg, []);
+      await reportSecretScan({
+        sourceKind: "workspace_write",
+        action: scan.action,
+        findings: scan.findings,
+        targetPath: pathArg,
+        rolledBack: true,
+      });
+      return JSON.stringify({
+        ok: false,
+        error: {
+          code: "SECURITY_SECRET_DETECTED",
+          message: "workspace edit rolled back by secret scanning",
+        },
+      });
+    }
+    if (scan.action) {
+      await replaceTrackedWorkspaceFindings(pathArg, scan.findings);
+      await reportSecretScan({
+        sourceKind: "workspace_write",
+        action: scan.action,
+        findings: scan.findings,
+        targetPath: pathArg,
+      });
+      if (scan.action === "warn") {
+        return `OK: 已编辑 ${pathArg} [security warning: secret-like content retained under audit]`;
+      }
+      return `OK: 已编辑 ${pathArg} [security audit recorded]`;
+    }
+    await replaceTrackedWorkspaceFindings(pathArg, []);
     return `OK: 已编辑 ${pathArg}`;
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;

@@ -15,6 +15,9 @@ function createRegistry(): McpRegistry {
     env: {},
     cwd: process.cwd(),
     enabled: true,
+    trusted: true,
+    provenance: `${path.join(process.cwd(), ".codex", "mcp.json")}#demo`,
+    credentialMode: "none",
     requestTimeoutMs: 2000,
   };
   activeRegistry = new McpRegistry([config]);
@@ -39,6 +42,9 @@ describe("tools/mcp-registry", () => {
         serverName: "demo",
         remoteName: "echo_upper",
         target: "mcp",
+        trust: "trusted",
+        provenance: `${path.join(process.cwd(), ".codex", "mcp.json")}#demo`,
+        credentialMode: "none",
       }),
     );
     expect(tools).toContainEqual(
@@ -50,6 +56,25 @@ describe("tools/mcp-registry", () => {
         }),
       }),
     );
+  });
+
+  it("keeps untrusted mcp servers out of the executable tool set", async () => {
+    const config: McpServerConfig = {
+      name: "demo",
+      command: process.execPath,
+      args: [fixtureServerPath],
+      env: { TOKEN: "super-secret" },
+      cwd: process.cwd(),
+      enabled: true,
+      trusted: false,
+      provenance: `${path.join(process.cwd(), ".codex", "mcp.json")}#demo`,
+      credentialMode: "configured",
+      requestTimeoutMs: 2000,
+    };
+    activeRegistry = new McpRegistry([config]);
+
+    expect(await activeRegistry.listRegistrations()).toEqual([]);
+    expect(await activeRegistry.run("mcp__demo__echo_upper", { text: "hello" })).toBeNull();
   });
 
   it("runs matching mcp tools and keeps missing aliases as null", async () => {

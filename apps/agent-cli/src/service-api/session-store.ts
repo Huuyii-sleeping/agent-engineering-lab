@@ -1,7 +1,10 @@
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { createAgentRuntimeState } from "../bootstrap/app-runtime.js";
 import type { PendingApprovalReplay } from "../runtime/query-types.js";
+import { buildArtifactMetadata, isExpired } from "../security/local-retention.js";
+import { sanitizeAndRedactValue } from "../security/data-hygiene.js";
 import type { AgentSessionRecord } from "./sessions.js";
 
 type PersistedRuntimeState = {
@@ -24,6 +27,16 @@ type PersistedSessionRecord = {
   history: AgentSessionRecord["history"];
   runtimeState: PersistedRuntimeState;
 };
+
+type PersistedSessionEnvelope = {
+  schemaVersion: 1;
+  kind: "session";
+  createdAt: number;
+  expiresAt: number;
+  session: PersistedSessionRecord;
+};
+
+const RETRYABLE_RENAME_ERROR_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
 
 function sessionFilename(sessionId: string): string {
   return `session_${sessionId}.json`;
@@ -76,6 +89,20 @@ function toPersistedSessionRecord(session: AgentSessionRecord): PersistedSession
   };
 }
 
+function toPersistedSessionEnvelope(session: AgentSessionRecord): PersistedSessionEnvelope {
+  const record = sanitizeAndRedactValue(
+    toPersistedSessionRecord(session),
+  ) as PersistedSessionRecord;
+  const metadata = buildArtifactMetadata("session");
+  return {
+    schemaVersion: 1,
+    kind: "session",
+    createdAt: metadata.createdAt,
+    expiresAt: metadata.expiresAt,
+    session: record,
+  };
+}
+
 function fromPersistedSessionRecord(input: PersistedSessionRecord): AgentSessionRecord {
   return {
     id: input.id,
@@ -87,7 +114,13 @@ function fromPersistedSessionRecord(input: PersistedSessionRecord): AgentSession
   };
 }
 
+function fromPersistedSessionEnvelope(input: PersistedSessionEnvelope): AgentSessionRecord {
+  return fromPersistedSessionRecord(input.session);
+}
+
 export class SessionStore {
+  private readonly pendingWrites = new Map<string, Promise<void>>();
+
   constructor(private readonly root: string = path.join(process.cwd(), ".sessions")) {}
 
   private sessionPath(sessionId: string): string {
@@ -98,13 +131,65 @@ export class SessionStore {
     await mkdir(this.root, { recursive: true });
   }
 
+  private async pruneExpiredSessionFile(filePath: string): Promise<boolean> {
+    const raw = await readFile(filePath, "utf8").catch(() => "");
+    if (!raw.trim()) {
+      return false;
+    }
+    try {
+      const parsed = JSON.parse(raw) as Partial<PersistedSessionEnvelope>;
+      if (parsed.kind !== "session") {
+        return false;
+      }
+      if (!isExpired(parsed.expiresAt ?? null)) {
+        return false;
+      }
+      await rm(filePath, { force: true });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async replaceSessionFile(temp: string, target: string): Promise<void> {
+    for (let attempt = 0; ; attempt += 1) {
+      await rm(target, { force: true }).catch(() => {});
+      try {
+        await rename(temp, target);
+        return;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code ?? "";
+        if (!RETRYABLE_RENAME_ERROR_CODES.has(code) || attempt >= 4) {
+          await rm(temp, { force: true }).catch(() => {});
+          throw error;
+        }
+        await delay(25 * (attempt + 1));
+      }
+    }
+  }
+
+  private async enqueueWrite(sessionId: string, operation: () => Promise<void>): Promise<void> {
+    const previous = this.pendingWrites.get(sessionId) ?? Promise.resolve();
+    const next = previous.catch(() => {}).then(operation);
+    this.pendingWrites.set(sessionId, next);
+    try {
+      await next;
+    } finally {
+      if (this.pendingWrites.get(sessionId) === next) {
+        this.pendingWrites.delete(sessionId);
+      }
+    }
+  }
+
   async save(session: AgentSessionRecord): Promise<void> {
-    await this.ensureRoot();
-    const target = this.sessionPath(session.id);
-    const temp = `${target}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
-    const payload = `${JSON.stringify(toPersistedSessionRecord(session), null, 2)}\n`;
-    await writeFile(temp, payload, "utf8");
-    await rename(temp, target);
+    await this.enqueueWrite(session.id, async () => {
+      await this.ensureRoot();
+      const target = this.sessionPath(session.id);
+      const temp = `${target}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
+      const payload = `${JSON.stringify(toPersistedSessionEnvelope(session), null, 2)}\n`;
+      await writeFile(temp, payload, "utf8");
+      await this.replaceSessionFile(temp, target);
+    });
   }
 
   async load(sessionId: string): Promise<AgentSessionRecord | null> {
@@ -113,7 +198,15 @@ export class SessionStore {
     if (!raw.trim()) {
       return null;
     }
-    return fromPersistedSessionRecord(JSON.parse(raw) as PersistedSessionRecord);
+    const parsed = JSON.parse(raw) as PersistedSessionRecord | PersistedSessionEnvelope;
+    if ("kind" in parsed && parsed.kind === "session") {
+      if (isExpired(parsed.expiresAt ?? null)) {
+        await rm(target, { force: true }).catch(() => {});
+        return null;
+      }
+      return fromPersistedSessionEnvelope(parsed);
+    }
+    return fromPersistedSessionRecord(parsed);
   }
 
   async list(): Promise<AgentSessionRecord[]> {
@@ -125,10 +218,33 @@ export class SessionStore {
       .sort((a, b) => a.localeCompare(b));
     const sessions = await Promise.all(
       files.map(async (file) => {
-        const raw = await readFile(path.join(this.root, file), "utf8");
-        return fromPersistedSessionRecord(JSON.parse(raw) as PersistedSessionRecord);
+        const full = path.join(this.root, file);
+        if (await this.pruneExpiredSessionFile(full)) {
+          return null;
+        }
+        const raw = await readFile(full, "utf8");
+        const parsed = JSON.parse(raw) as PersistedSessionRecord | PersistedSessionEnvelope;
+        if ("kind" in parsed && parsed.kind === "session") {
+          return fromPersistedSessionEnvelope(parsed);
+        }
+        return fromPersistedSessionRecord(parsed);
       }),
     );
-    return sessions;
+    return sessions.filter((item): item is AgentSessionRecord => Boolean(item));
+  }
+
+  async delete(sessionId: string): Promise<boolean> {
+    let deleted = false;
+    await this.enqueueWrite(sessionId, async () => {
+      const target = this.sessionPath(sessionId);
+      const exists = Boolean((await readFile(target, "utf8").catch(() => "")).trim());
+      if (!exists) {
+        deleted = false;
+        return;
+      }
+      await rm(target, { force: true });
+      deleted = true;
+    });
+    return deleted;
   }
 }

@@ -9,6 +9,7 @@ export type MemoryEntry = {
   content: string;
   confidence: number;
   updatedAt: number;
+  expiresAt: number | null;
 };
 
 export type SearchHit = MemoryEntry & {

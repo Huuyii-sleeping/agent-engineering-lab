@@ -22,6 +22,9 @@ describe("tools/catalog", () => {
         allowDuringReplay: false,
         serverName: "demo",
         remoteName: "echo",
+        trust: "trusted",
+        provenance: ".codex/mcp.json#demo",
+        credentialMode: "configured",
       },
     ]);
 
@@ -34,6 +37,9 @@ describe("tools/catalog", () => {
         target: "mcp",
         serverName: "demo",
         remoteName: "echo",
+        trust: "trusted",
+        provenance: ".codex/mcp.json#demo",
+        credentialMode: "configured",
       }),
     );
   });
@@ -48,6 +54,9 @@ describe("tools/catalog", () => {
         allowDuringReplay: false,
         serverName: "demo",
         remoteName: "echo",
+        trust: "trusted",
+        provenance: ".codex/mcp.json#demo",
+        credentialMode: "configured",
       },
     ]);
 
@@ -71,6 +80,9 @@ describe("tools/catalog", () => {
         replaySafe: "false",
         serverName: "demo",
         remoteName: "echo",
+        trust: "trusted",
+        provenance: ".codex/mcp.json#demo",
+        credentialMode: "configured",
       }),
     );
   });

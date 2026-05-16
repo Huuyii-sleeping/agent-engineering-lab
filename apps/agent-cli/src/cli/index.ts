@@ -37,7 +37,7 @@ import {
   renderCliSection,
   setCliUiTheme,
 } from "./ui.js";
-import { inspectPromptSource } from "../prompt/inspect.js";
+import { exportProtectedPromptDump, inspectPromptSource } from "../prompt/inspect.js";
 import { CliTranscriptBrowserStore } from "./transcript.js";
 import type { CliWorkflowMode } from "./workflow.js";
 import { createClient, getStaticPromptSource } from "../config.js";
@@ -437,10 +437,13 @@ async function runDaemonCli(opts: {
             ),
           };
         },
-        dumpSystemPrompt: async () => {
+        dumpSystemPrompt: async (mode = "default") => {
           const catalog = getSkillCatalog();
           return {
-            dump: inspectPromptSource(getStaticPromptSource()),
+            dump:
+              mode === "protected"
+                ? await exportProtectedPromptDump(getStaticPromptSource())
+                : inspectPromptSource(getStaticPromptSource(), mode),
             loadedNames: catalog.loadedNames,
             missingNames: catalog.missingNames,
           };
@@ -841,10 +844,13 @@ export async function runCli(options: RunCliOptions = {}): Promise<void> {
             ),
           };
         },
-        dumpSystemPrompt: async () => {
+        dumpSystemPrompt: async (mode = "default") => {
           const catalog = getSkillCatalog();
           return {
-            dump: inspectPromptSource(app.promptSource),
+            dump:
+              mode === "protected"
+                ? await exportProtectedPromptDump(app.promptSource)
+                : inspectPromptSource(app.promptSource, mode),
             loadedNames: catalog.loadedNames,
             missingNames: catalog.missingNames,
           };

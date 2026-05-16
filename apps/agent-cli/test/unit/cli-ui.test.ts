@@ -257,10 +257,12 @@ describe("cli-ui", () => {
     expect(
       renderCliPromptDump(
         {
+          inspectionMode: "default",
           primarySystemPrompt: "## Core\ncore",
           supplementalSystemMessages: [],
           stableSectionIds: ["core"],
           dynamicSectionIds: [],
+          protectedExportPath: null,
         },
         ["openspec-apply-change"],
         ["missing-skill"],

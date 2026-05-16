@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
 import { sanitizeAndRedactText } from "../security/data-hygiene.js";
+import { buildArtifactMetadata, isExpired } from "../security/local-retention.js";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
 import { nowTimestampMs, parseTimestampMs } from "../time.js";
 import { parseJsonl, toJsonl } from "./jsonl.js";
@@ -22,6 +23,7 @@ function dedupLongTerm(items: MemoryEntry[], next: MemoryEntry): MemoryEntry[] {
   found.confidence = Math.max(found.confidence, next.confidence);
   found.tags = Array.from(new Set([...found.tags, ...next.tags])).slice(0, 12);
   found.source = next.source || found.source;
+  found.expiresAt = next.expiresAt;
   return items;
 }
 
@@ -73,6 +75,10 @@ export class MemoryStore {
       content: String(item.content ?? ""),
       confidence: normalizeConfidence(item.confidence),
       updatedAt: parseTimestampMs(item.updatedAt, nowTimestampMs()),
+      expiresAt:
+        item.expiresAt === null || item.expiresAt === undefined
+          ? null
+          : parseTimestampMs(item.expiresAt, nowTimestampMs()),
     }));
   }
 
@@ -102,21 +108,51 @@ export class MemoryStore {
       content,
       confidence: normalizeConfidence(confidenceArg),
       updatedAt: nowTimestampMs(),
+      expiresAt: null,
     };
 
     const shortItems = await this.loadLayer("short_term");
-    shortItems.push(entry);
+    shortItems.push({
+      ...entry,
+      expiresAt: buildArtifactMetadata("memory_short_term", entry.updatedAt).expiresAt,
+    });
     const capped = shortItems.slice(-RUNTIME_CONFIG.memoryShortTermLimit);
     await this.saveLayer("short_term", capped);
 
     const longItems = await this.loadLayer("long_term");
-    const merged = dedupLongTerm(longItems, entry);
+    const merged = dedupLongTerm(longItems, {
+      ...entry,
+      expiresAt: buildArtifactMetadata("memory_long_term", entry.updatedAt).expiresAt,
+    });
     await this.saveLayer("long_term", merged);
 
     return entry;
   }
 
   async listLayer(layer: "short_term" | "long_term"): Promise<MemoryEntry[]> {
-    return this.loadLayer(layer);
+    const items = await this.loadLayer(layer);
+    const active = items.filter((item) => !isExpired(item.expiresAt));
+    if (active.length !== items.length) {
+      await this.saveLayer(layer, active);
+    }
+    return active;
+  }
+
+  async delete(memoryId: string): Promise<boolean> {
+    const id = String(memoryId ?? "").trim();
+    if (!id) {
+      return false;
+    }
+    const shortItems = await this.loadLayer("short_term");
+    const longItems = await this.loadLayer("long_term");
+    const nextShort = shortItems.filter((item) => item.id !== id);
+    const nextLong = longItems.filter((item) => item.id !== id);
+    const changed = nextShort.length !== shortItems.length || nextLong.length !== longItems.length;
+    if (!changed) {
+      return false;
+    }
+    await this.saveLayer("short_term", nextShort);
+    await this.saveLayer("long_term", nextLong);
+    return true;
   }
 }

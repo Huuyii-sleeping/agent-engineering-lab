@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import * as process from "node:process";
@@ -36,5 +36,42 @@ describe("memory/store", () => {
     expect(entry?.content).toContain("[REDACTED_SECRET]");
     expect(raw).toContain("[REDACTED_SECRET]");
     expect(raw).not.toContain("sk-12345678901234567890");
+  });
+
+  it("prunes expired memory entries when loading a layer", async () => {
+    await withWorkspace();
+    const store = new MemoryStore();
+    await store.listLayer("long_term");
+    const root = path.join(process.cwd(), ".memory");
+    await writeFile(
+      path.join(root, "long_term.jsonl"),
+      `${JSON.stringify({
+        id: "expired",
+        source: "test",
+        type: "fact",
+        tags: [],
+        content: "old",
+        confidence: 0.5,
+        updatedAt: 1,
+        expiresAt: 2,
+      })}\n`,
+      "utf8",
+    );
+
+    const entries = await store.listLayer("long_term");
+
+    expect(entries).toEqual([]);
+  });
+
+  it("supports explicit deletion of memory entries", async () => {
+    await withWorkspace();
+    const store = new MemoryStore();
+    const entry = await store.add("user", "note", ["cleanup"], "temporary note", 0.8);
+
+    const removed = await store.delete(entry?.id ?? "");
+    const entries = await store.listLayer("long_term");
+
+    expect(removed).toBe(true);
+    expect(entries.some((item) => item.id === entry?.id)).toBe(false);
   });
 });

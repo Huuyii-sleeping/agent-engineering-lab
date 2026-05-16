@@ -21,6 +21,7 @@ async function writeMcpConfig(dir: string): Promise<void> {
             name: "demo",
             command: process.execPath,
             args: [fixtureServerPath],
+            trusted: true,
           },
         ],
       },
@@ -69,6 +70,9 @@ describe("mcp capability bus", () => {
     expect(echoRegistration?.target).toBe("mcp");
     expect(echoRegistration?.serverName).toBe("demo");
     expect(echoRegistration?.remoteName).toBe("echo_upper");
+    expect(echoRegistration?.trust).toBe("trusted");
+    expect(String(echoRegistration?.provenance ?? "")).toContain(".codex");
+    expect(echoRegistration?.credentialMode).toBe("none");
 
     const blocked = JSON.parse(await toolsModule.runToolByName("mcp__demo__echo_upper", '{"text":"hello"}')) as {
       ok?: boolean;

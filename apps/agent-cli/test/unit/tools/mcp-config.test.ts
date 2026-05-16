@@ -49,6 +49,7 @@ describe("tools/mcp-config", () => {
           args: ["server.mjs", 42],
           env: { TOKEN: 123, EMPTY: null },
           cwd: "nested",
+          trusted: true,
           requestTimeoutMs: 250.9,
         },
         {
@@ -70,6 +71,9 @@ describe("tools/mcp-config", () => {
         env: { TOKEN: "123", EMPTY: "" },
         cwd: path.resolve(process.cwd(), "nested"),
         enabled: true,
+        trusted: true,
+        provenance: `${path.join(process.cwd(), ".codex", "mcp.json")}#demo`,
+        credentialMode: "configured",
         requestTimeoutMs: 250,
       },
     ]);
@@ -77,9 +81,21 @@ describe("tools/mcp-config", () => {
 
   it("uses the runtime default timeout when overrides are too small", async () => {
     await writeConfig({
-      servers: [{ name: "demo", command: "node", requestTimeoutMs: 50 }],
+      servers: [{ name: "demo", command: "node", trusted: true, requestTimeoutMs: 50 }],
     });
 
     expect((await loadMcpServerConfigs())[0]?.requestTimeoutMs).toBe(RUNTIME_CONFIG.mcpRequestTimeoutMs);
+  });
+
+  it("defaults servers to untrusted until the config opts in", async () => {
+    await writeConfig({
+      servers: [{ name: "demo", command: "node" }],
+    });
+
+    expect((await loadMcpServerConfigs())[0]).toMatchObject({
+      name: "demo",
+      trusted: false,
+      credentialMode: "none",
+    });
   });
 });

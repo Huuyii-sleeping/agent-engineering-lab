@@ -158,12 +158,16 @@ function createContext(input: {
           }
         : null,
     ),
-    dumpSystemPrompt: vi.fn(async () => ({
+    dumpSystemPrompt: vi.fn(async (mode?: "default" | "protected") => ({
       dump: {
+        inspectionMode: mode ?? "default",
         primarySystemPrompt: "## Core\ncore\n\n## Skills\n### openspec-apply-change\nUse the apply workflow.",
-        supplementalSystemMessages: [],
+        supplementalSystemMessages:
+          mode === "protected" ? ["runtime details"] : ["[protected dynamic message 1; 15 chars hidden; use /prompt full]"],
         stableSectionIds: ["core", "skills"],
-        dynamicSectionIds: [],
+        dynamicSectionIds: ["dynamic"],
+        protectedExportPath:
+          mode === "protected" ? ".security/prompt-dumps/prompt_dump_123.json" : null,
       },
       loadedNames: ["openspec-apply-change"],
       missingNames: ["missing-skill"],
@@ -340,6 +344,8 @@ describe("cli-commands", () => {
     expect((await dispatchCliCommand("/skills", context)).output).toContain("openspec-apply-change");
     expect((await dispatchCliCommand("/skill openspec-apply-change", context)).output).toContain("Use the apply workflow.");
     expect((await dispatchCliCommand("/prompt", context)).output).toContain("System Prompt");
+    expect((await dispatchCliCommand("/prompt full", context)).output).toContain(".security/prompt-dumps/prompt_dump_123.json");
+    expect((await dispatchCliCommand("/prompt full", context)).output).not.toContain("runtime details");
     expect((await dispatchCliCommand("/cost", context)).output).toContain("Usage");
     expect((await dispatchCliCommand("/compact 5", context)).output).toContain("Compact");
     expect((await dispatchCliCommand("/add-dir /tmp/demo", context)).output).toContain("added workspace root /tmp/demo");

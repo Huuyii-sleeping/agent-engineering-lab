@@ -136,6 +136,37 @@ describe("runtime/query-tool-executor", () => {
     );
   });
 
+  it("blocks high-confidence secret tool output before it is appended to the session", async () => {
+    const messages: ChatCompletionMessageParam[] = [];
+    const observabilityService = createObservabilityService();
+
+    const result = await executeQueryFunctionToolCall({
+      toolCall: createToolCall("bash", '{"command":"echo secret"}'),
+      messages,
+      runtimeState: createRuntimeState(),
+      traceId: "trace-secret-output",
+      toolService: createToolService("OPENAI_API_KEY=sk-123456789012345678901234"),
+      hookService: createHookService(),
+      observabilityService,
+    });
+
+    expect(result.analyzed).toMatchObject({
+      ok: false,
+      errorCode: "SECURITY_SECRET_DETECTED",
+    });
+    expect(String(messages[0]?.content)).toContain("SECURITY_SECRET_DETECTED");
+    expect(String(messages[0]?.content)).not.toContain("sk-123456789012345678901234");
+    expect(observabilityService.recordEvent).toHaveBeenCalledWith(
+      "secret_scan",
+      expect.objectContaining({
+        sourceKind: "tool_output",
+        toolName: "bash",
+        action: "block",
+      }),
+      { traceId: "trace-secret-output", spanId: "span-executor" },
+    );
+  });
+
   it("tracks approval candidates and links created approval requests to the blocked tool call", async () => {
     const runtimeState = createRuntimeState();
 

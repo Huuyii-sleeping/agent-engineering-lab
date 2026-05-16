@@ -1,3 +1,4 @@
+import { existsSync, realpathSync } from "node:fs";
 import { access, constants, stat } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
@@ -13,13 +14,35 @@ function isWithinRoot(candidate: string, root: string): boolean {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
+function realpathNative(input: string): string {
+  return typeof realpathSync.native === "function" ? realpathSync.native(input) : realpathSync(input);
+}
+
+export function resolveWorkspacePath(candidate: string): string {
+  const resolved = path.resolve(process.cwd(), candidate);
+  const pendingSegments: string[] = [];
+  let existing = resolved;
+
+  while (!existsSync(existing)) {
+    const parent = path.dirname(existing);
+    if (parent === existing) {
+      break;
+    }
+    pendingSegments.unshift(path.basename(existing));
+    existing = parent;
+  }
+
+  const existingReal = realpathNative(existing);
+  return pendingSegments.reduce((current, segment) => path.join(current, segment), existingReal);
+}
+
 export function listWorkspaceRoots(): string[] {
   return [process.cwd(), ...[...extraWorkspaceRoots].sort((a, b) => a.localeCompare(b))];
 }
 
 export function isWorkspacePathAllowed(candidate: string): boolean {
-  const resolved = path.resolve(process.cwd(), candidate);
-  return listWorkspaceRoots().some((root) => isWithinRoot(resolved, root));
+  const resolved = resolveWorkspacePath(candidate);
+  return listWorkspaceRoots().some((root) => isWithinRoot(resolved, resolveWorkspacePath(root)));
 }
 
 export async function addWorkspaceRoot(rootArg: string): Promise<{ ok: true; root: string } | { ok: false; error: string }> {

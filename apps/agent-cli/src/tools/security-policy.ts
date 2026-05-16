@@ -40,6 +40,22 @@ export function defaultSecurityPolicy(): PolicyConfig {
         ],
       },
       {
+        id: "write-managed-path-high-approval",
+        tool: "write_file",
+        action: "require_approval",
+        risk: "high",
+        reason: "writes to managed control paths require higher approval",
+        pathPrefixes: [".env", ".github/", ".vscode/", ".idea/", ".devcontainer/", ".claude/", ".codex/"],
+      },
+      {
+        id: "edit-managed-path-high-approval",
+        tool: "edit_file",
+        action: "require_approval",
+        risk: "high",
+        reason: "edits to managed control paths require higher approval",
+        pathPrefixes: [".env", ".github/", ".vscode/", ".idea/", ".devcontainer/", ".claude/", ".codex/"],
+      },
+      {
         id: "write-file-approval",
         tool: "write_file",
         action: "require_approval",

@@ -2,6 +2,7 @@ import type { ChatCompletionMessageParam } from "openai/resources/chat/completio
 import type { HookServiceLike, ObservabilityServiceLike } from "../services/index.js";
 import type { ToolServiceLike } from "../tools/service.js";
 import { renderCliEvent } from "../cli/ui.js";
+import { protectToolOutput } from "../security/secret-scanning.js";
 import {
   linkApprovalRequestToCandidate,
   trackPendingApprovalCandidate,
@@ -65,6 +66,14 @@ export async function executeQueryFunctionToolCall(input: {
     );
     durationMs = Date.now() - startedAt;
   }
+  const protectedOutput = await protectToolOutput({
+    toolName,
+    output: toolOutput,
+    traceId: input.traceId,
+    spanId,
+    recordEvent: (kind, payload, context) => input.observabilityService.recordEvent(kind, payload, context),
+  });
+  toolOutput = protectedOutput.output;
 
   const analyzed = analyzeToolOutput(toolOutput);
   console.log(

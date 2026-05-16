@@ -45,7 +45,7 @@ import {
   setCliUiTheme,
 } from "../cli/ui.js";
 import { createClient, getStaticPromptSource } from "../config.js";
-import { inspectPromptSource } from "../prompt/inspect.js";
+import { exportProtectedPromptDump, inspectPromptSource } from "../prompt/inspect.js";
 import { runCliShellShortcut } from "../cli/shell.js";
 import { CliTranscriptBrowserStore } from "../cli/transcript.js";
 import type { CliWorkflowMode } from "../cli/workflow.js";
@@ -608,10 +608,13 @@ export async function handleTerminalTuiCommand(input: {
           ),
         };
       },
-      dumpSystemPrompt: async () => {
+      dumpSystemPrompt: async (mode = "default") => {
         const catalog = getSkillCatalog();
         return {
-          dump: inspectPromptSource(getStaticPromptSource()),
+          dump:
+            mode === "protected"
+              ? await exportProtectedPromptDump(getStaticPromptSource())
+              : inspectPromptSource(getStaticPromptSource(), mode),
           loadedNames: catalog.loadedNames,
           missingNames: catalog.missingNames,
         };

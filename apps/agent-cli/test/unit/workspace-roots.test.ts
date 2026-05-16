@@ -1,9 +1,9 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import * as process from "node:process";
 import { afterEach, describe, expect, it } from "vitest";
-import { safePath } from "../../src/tools/file-tools.js";
+import { runWriteFile, safePath } from "../../src/tools/file-tools.js";
 import { addWorkspaceRoot, listWorkspaceRoots, resetWorkspaceRootsForTest } from "../../src/workspace-roots.js";
 
 const tempDirs: string[] = [];
@@ -41,6 +41,23 @@ describe("workspace roots", () => {
       expect(listWorkspaceRoots()[0]).toContain(path.basename(root));
       expect(listWorkspaceRoots()).toContain(extra);
       expect(safePath(path.join(extra, "note.txt"))).toBe(path.join(extra, "note.txt"));
+    });
+  });
+
+  it("rejects paths that escape through a workspace symlink", async () => {
+    await withWorkspace("workspace-roots-link", async (root, extra) => {
+      const link = path.join(root, "linked-outside");
+      await symlink(extra, link, "junction");
+
+      expect(() => safePath(path.join(link, "note.txt"))).toThrow("PATH_OUT_OF_BOUNDS");
+    });
+  });
+
+  it("blocks writes into sensitive internal paths", async () => {
+    await withWorkspace("workspace-roots-deny", async () => {
+      const result = await runWriteFile(".git/config", "unsafe=true\n");
+
+      expect(result).toContain("PATH_OUT_OF_BOUNDS");
     });
   });
 });

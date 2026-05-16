@@ -66,7 +66,9 @@ export type CliCommandContext = {
   rejectRequest(requestId: string): Promise<string>;
   listSkills(): Promise<{ skills: CliSkillSummary[]; loadedNames: string[]; missingNames: string[] }>;
   getSkill(name: string): Promise<CliSkillDetail | null>;
-  dumpSystemPrompt(): Promise<{ dump: PromptDump; loadedNames: string[]; missingNames: string[] }>;
+  dumpSystemPrompt(
+    mode?: "default" | "protected",
+  ): Promise<{ dump: PromptDump; loadedNames: string[]; missingNames: string[] }>;
   getUsage(): Promise<CliUsageSnapshot>;
   canCompactSession(): boolean;
   compactSession(keepRecent?: number): Promise<CliCompactSummary>;
@@ -861,13 +863,13 @@ export async function dispatchCliCommand(
   }
   if (parsed.command === "prompt") {
     const action = parsed.args.join(" ").trim().toLowerCase();
-    if (action && action !== "dump") {
+    if (action && action !== "dump" && action !== "full") {
       return {
         handled: true,
-        output: renderCliError("unknown prompt action", `unsupported prompt action: ${action}`, "use /prompt or /prompt dump"),
+        output: renderCliError("unknown prompt action", `unsupported prompt action: ${action}`, "use /prompt, /prompt dump, or /prompt full"),
       };
     }
-    const promptDump = await context.dumpSystemPrompt();
+    const promptDump = await context.dumpSystemPrompt(action === "full" ? "protected" : "default");
     return {
       handled: true,
       output: renderCliPromptDump(promptDump.dump, promptDump.loadedNames, promptDump.missingNames),

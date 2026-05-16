@@ -10,6 +10,9 @@ export type ToolRegistration = {
   allowDuringReplay: boolean;
   serverName?: string;
   remoteName?: string;
+  trust?: "trusted" | "untrusted";
+  provenance?: string;
+  credentialMode?: "none" | "configured";
 };
 
 type FunctionTool = Extract<ChatCompletionTool, { type: "function" }>;
@@ -45,6 +48,15 @@ export function toToolMetadata(registration: ToolRegistration): Record<string, s
   }
   if (registration.remoteName) {
     metadata.remoteName = registration.remoteName;
+  }
+  if (registration.trust) {
+    metadata.trust = registration.trust;
+  }
+  if (registration.provenance) {
+    metadata.provenance = registration.provenance;
+  }
+  if (registration.credentialMode) {
+    metadata.credentialMode = registration.credentialMode;
   }
   return metadata;
 }
