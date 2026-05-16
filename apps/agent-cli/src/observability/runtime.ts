@@ -1,6 +1,7 @@
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
+import { sanitizeAndRedactText, sanitizeMcpIdentifier } from "../security/data-hygiene.js";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
 import { nowTimestampMs, parseTimestampMs } from "../time.js";
 
@@ -65,18 +66,29 @@ function trimText(value: string, limit = RUNTIME_CONFIG.observabilityFieldMaxCha
   return `${value.slice(0, limit)}...`;
 }
 
-function sanitizeValue(value: unknown): unknown {
+function sanitizePrimitiveString(value: string, key?: string, mcpContext = false): string {
+  if (key === "serverName" && mcpContext) {
+    return "[mcp_server]";
+  }
+  if (key === "remoteTool" && mcpContext) {
+    return "[mcp_remote_tool]";
+  }
+  const cleaned = sanitizeAndRedactText(value);
+  return trimText(cleaned.startsWith("mcp__") ? sanitizeMcpIdentifier(cleaned) : cleaned);
+}
+
+function sanitizeValue(value: unknown, key?: string, mcpContext = false): unknown {
   if (typeof value === "string") {
-    return trimText(value);
+    return sanitizePrimitiveString(value, key, mcpContext);
   }
   if (Array.isArray(value)) {
-    return value.map((item) => sanitizeValue(item));
+    return value.map((item) => sanitizeValue(item, key, mcpContext));
   }
   if (value && typeof value === "object") {
     const input = value as Record<string, unknown>;
     const out: Record<string, unknown> = {};
     for (const [key, item] of Object.entries(input)) {
-      out[key] = sanitizeValue(item);
+      out[key] = sanitizeValue(item, key, mcpContext);
     }
     return out;
   }
@@ -106,19 +118,29 @@ function defaultMetrics(): ObservabilityMetrics {
 }
 
 class ObservabilityRuntime {
-  private readonly root = path.join(process.cwd(), ".observability");
-  private readonly eventsPath = path.join(this.root, "events.jsonl");
-  private readonly metricsPath = path.join(this.root, "metrics.json");
+  private initRoot: string | null = null;
   private initPromise: Promise<void> | null = null;
   private metrics: ObservabilityMetrics | null = null;
   private activeContext: ExecutionContext | null = null;
 
+  private paths(): { root: string; eventsPath: string; metricsPath: string } {
+    const root = path.join(process.cwd(), ".observability");
+    return {
+      root,
+      eventsPath: path.join(root, "events.jsonl"),
+      metricsPath: path.join(root, "metrics.json"),
+    };
+  }
+
   private async ensureInit(): Promise<void> {
-    if (!this.initPromise) {
+    const paths = this.paths();
+    if (this.initRoot !== paths.root) {
+      this.initRoot = paths.root;
+      this.metrics = null;
       this.initPromise = (async () => {
-        await mkdir(this.root, { recursive: true });
-        await this.ensureFile(this.eventsPath, "");
-        await this.ensureFile(this.metricsPath, `${JSON.stringify(defaultMetrics(), null, 2)}\n`);
+        await mkdir(paths.root, { recursive: true });
+        await this.ensureFile(paths.eventsPath, "");
+        await this.ensureFile(paths.metricsPath, `${JSON.stringify(defaultMetrics(), null, 2)}\n`);
       })();
     }
     await this.initPromise;
@@ -137,7 +159,8 @@ class ObservabilityRuntime {
     if (this.metrics) {
       return this.metrics;
     }
-    const raw = await readFile(this.metricsPath, "utf8").catch(() => "");
+    const { metricsPath } = this.paths();
+    const raw = await readFile(metricsPath, "utf8").catch(() => "");
     try {
       const parsed = JSON.parse(raw) as Partial<ObservabilityMetrics>;
       this.metrics = {
@@ -156,8 +179,9 @@ class ObservabilityRuntime {
 
   private async saveMetrics(): Promise<void> {
     const metrics = await this.loadMetrics();
+    const { metricsPath } = this.paths();
     metrics.updatedAt = nowTimestampMs();
-    await writeFile(this.metricsPath, `${JSON.stringify(metrics, null, 2)}\n`, "utf8");
+    await writeFile(metricsPath, `${JSON.stringify(metrics, null, 2)}\n`, "utf8");
   }
 
   private updateMetrics(kind: string, payload: Record<string, unknown>, metrics: ObservabilityMetrics): void {
@@ -257,6 +281,7 @@ class ObservabilityRuntime {
     const active = this.activeContext;
     const traceId = context?.traceId ?? active?.traceId ?? null;
     const spanId = context?.spanId ?? active?.spanId ?? null;
+    const mcpContext = kind.startsWith("mcp") || String(payload.toolName ?? "").startsWith("mcp__");
     const event: ObservabilityEvent = {
       schemaVersion: 1,
       id: makeId("evt"),
@@ -264,9 +289,10 @@ class ObservabilityRuntime {
       trace_id: traceId,
       span_id: spanId,
       kind,
-      payload: sanitizeValue(payload) as Record<string, unknown>,
+      payload: sanitizeValue(payload, undefined, mcpContext) as Record<string, unknown>,
     };
-    await appendFile(this.eventsPath, `${JSON.stringify(event)}\n`, "utf8");
+    const { eventsPath } = this.paths();
+    await appendFile(eventsPath, `${JSON.stringify(event)}\n`, "utf8");
     const metrics = await this.loadMetrics();
     this.updateMetrics(kind, event.payload, metrics);
     await this.saveMetrics();
@@ -275,7 +301,8 @@ class ObservabilityRuntime {
 
   async readEvents(traceId?: string): Promise<ObservabilityEvent[]> {
     await this.ensureInit();
-    const raw = await readFile(this.eventsPath, "utf8").catch(() => "");
+    const { eventsPath } = this.paths();
+    const raw = await readFile(eventsPath, "utf8").catch(() => "");
     const lines = raw
       .split("\n")
       .map((line) => line.trim())

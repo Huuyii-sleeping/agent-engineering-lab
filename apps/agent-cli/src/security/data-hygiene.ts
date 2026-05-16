@@ -27,7 +27,7 @@ const SECRET_TEXT_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
 ];
 
 const SECRET_ASSIGNMENT_REGEX =
-  /\b([A-Za-z0-9_]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|PASSWD|AUTHORIZATION)[A-Za-z0-9_]*)\b\s*([:=])\s*([^\s,"'`}\]]+)/gi;
+  /(["']?[A-Za-z0-9_]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|PASSWD|AUTHORIZATION)[A-Za-z0-9_]*["']?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|`[^`]*`|Bearer\s+[^\s,"'`}\]]+|[^\s,"'`}\]]+)/gi;
 
 function sortKeys(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -49,13 +49,14 @@ export function sanitizeVisibleText(value: string): string {
 }
 
 export function redactSecretText(value: string): string {
-  let next = value;
+  let next = value.replace(SECRET_ASSIGNMENT_REGEX, (match, prefix: string) => {
+    const trimmed = match.slice(prefix.length).trimStart();
+    const wrapper = trimmed.startsWith('"') ? '"' : trimmed.startsWith("'") ? "'" : trimmed.startsWith("`") ? "`" : "";
+    return `${prefix}${wrapper}[REDACTED_SECRET]${wrapper}`;
+  });
   for (const { pattern, replacement } of SECRET_TEXT_PATTERNS) {
     next = next.replace(pattern, replacement);
   }
-  next = next.replace(SECRET_ASSIGNMENT_REGEX, (_match, key: string, separator: string) => {
-    return `${key}${separator}[REDACTED_SECRET]`;
-  });
   return next;
 }
 

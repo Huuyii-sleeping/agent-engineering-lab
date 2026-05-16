@@ -1,3 +1,4 @@
+import { buildScopePreview, stableScopeHash } from "../security/data-hygiene.js";
 import type { PolicyConfig, PolicyDecision, PolicyInput, PolicyRule } from "./security-types.js";
 
 export function defaultSecurityPolicy(): PolicyConfig {
@@ -19,6 +20,24 @@ export function defaultSecurityPolicy(): PolicyConfig {
         risk: "high",
         reason: "high risk shell command requires approval",
         commandIncludes: ["git reset --hard", "Remove-Item -Recurse", "rd /s /q", "drop database"],
+      },
+      {
+        id: "bash-high-risk-pattern-approval",
+        tool: "bash",
+        action: "require_approval",
+        risk: "high",
+        reason: "interpreter, nested shell, and remote execution patterns require approval",
+        commandPrefixes: [
+          "python -c",
+          "python3 -c",
+          "node -e",
+          "bash -lc",
+          "sh -c",
+          "pwsh -command",
+          "powershell -command",
+          "cmd /c",
+          "ssh ",
+        ],
       },
       {
         id: "write-file-approval",
@@ -79,6 +98,12 @@ export function matchSecurityRule(rule: PolicyRule, input: PolicyInput): boolean
       return false;
     }
   }
+  if (rule.commandPrefixes && rule.commandPrefixes.length > 0) {
+    const cmd = String(input.args.command ?? "").trim().toLowerCase();
+    if (!rule.commandPrefixes.some((prefix) => cmd.startsWith(prefix.toLowerCase()))) {
+      return false;
+    }
+  }
   if (rule.pathPrefixes && rule.pathPrefixes.length > 0) {
     const targetPath = String(input.args.path ?? "");
     if (!rule.pathPrefixes.some((prefix) => targetPath.startsWith(prefix))) {
@@ -90,7 +115,8 @@ export function matchSecurityRule(rule: PolicyRule, input: PolicyInput): boolean
 
 export function evaluateSecurityPolicy(policy: PolicyConfig, input: PolicyInput): PolicyDecision {
   const matched = policy.rules.find((rule) => matchSecurityRule(rule, input));
-  const scope = JSON.stringify({ toolName: input.toolName, args: input.args });
+  const scope = buildScopePreview(input.toolName, input.args);
+  const scopeHash = stableScopeHash(input.toolName, input.args);
   if (matched) {
     return {
       decision: matched.action,
@@ -98,6 +124,7 @@ export function evaluateSecurityPolicy(policy: PolicyConfig, input: PolicyInput)
       reason: matched.reason,
       matchedRule: matched.id,
       scope,
+      scopeHash,
     };
   }
   return {
@@ -106,5 +133,6 @@ export function evaluateSecurityPolicy(policy: PolicyConfig, input: PolicyInput)
     reason: "default allow",
     matchedRule: "default-allow",
     scope,
+    scopeHash,
   };
 }

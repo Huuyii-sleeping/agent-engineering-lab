@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
+import { sanitizeAndRedactValue, stableScopeHash } from "../security/data-hygiene.js";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
 import { nowTimestampMs, plusSecondsMs } from "../time.js";
 import { SecurityApprovalStore } from "./security-approvals.js";
@@ -85,7 +86,7 @@ export class SecurityManager {
 
   private async audit(type: string, payload: Record<string, unknown>): Promise<void> {
     await this.ensureInit();
-    const event = { at: nowTimestampMs(), type, payload };
+    const event = { at: nowTimestampMs(), type, payload: sanitizeAndRedactValue(payload) as Record<string, unknown> };
     await writeFile(this.auditPath, `${JSON.stringify(event)}\n`, { flag: "a", encoding: "utf8" });
   }
 
@@ -112,6 +113,7 @@ export class SecurityManager {
       risk: decision.risk,
       reason: decision.reason,
       scope: decision.scope,
+      scopeHash: decision.scopeHash,
       status: "pending",
       createdAt,
       expiresAt: plusSecondsMs(createdAt, RUNTIME_CONFIG.securityApprovalDefaultTtlSec),
@@ -193,12 +195,13 @@ export class SecurityManager {
 
   async consumeApproval(toolName: string, args: Record<string, unknown>): Promise<boolean> {
     const all = await this.loadApprovals();
-    const scope = JSON.stringify({ toolName, args });
+    const scopeHash = stableScopeHash(toolName, args);
+    const legacyScope = JSON.stringify({ toolName, args });
     const nowMs = Date.now();
     const item = all.find(
       (row) =>
         row.action === toolName &&
-        row.scope === scope &&
+        ((row.scopeHash && row.scopeHash === scopeHash) || (!row.scopeHash && row.scope === legacyScope)) &&
         row.status === "approved" &&
         row.expiresAt > nowMs,
     );

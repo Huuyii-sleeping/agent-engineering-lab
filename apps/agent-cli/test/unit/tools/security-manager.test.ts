@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -23,7 +23,7 @@ async function makeManager(): Promise<SecurityManager> {
 describe("tools/security-manager", () => {
   it("requires approval, consumes it once, then blocks the same scoped call again", async () => {
     const manager = await makeManager();
-    const args = { path: "tmp/out.txt", content: "hello" };
+    const args = { path: "tmp/out.txt", content: "token=sk-12345678901234567890" };
 
     const firstGate = await manager.gate("write_file", args);
     expect(firstGate.ok).toBe(false);
@@ -39,6 +39,9 @@ describe("tools/security-manager", () => {
       request?: ApprovalRequest;
     };
     expect(approval.request?.status).toBe("pending");
+    expect(approval.request?.scope).toContain("[REDACTED_SECRET]");
+    expect(approval.request?.scope).not.toContain("sk-12345678901234567890");
+    expect(approval.request?.scopeHash).toBeTruthy();
 
     const approved = JSON.parse(await manager.approve(approval.request?.request_id)) as {
       request?: ApprovalRequest;
@@ -51,7 +54,17 @@ describe("tools/security-manager", () => {
     expect(secondGate.ok).toBe(false);
 
     const approvals = JSON.parse(await manager.listApprovals("consumed")) as { approvals?: ApprovalRequest[] };
-    expect(approvals.approvals).toMatchObject([{ request_id: approval.request?.request_id, status: "consumed" }]);
+    expect(approvals.approvals).toMatchObject([
+      {
+        request_id: approval.request?.request_id,
+        status: "consumed",
+        scopeHash: approval.request?.scopeHash,
+      },
+    ]);
+
+    const rawApprovals = await readFile(path.join(tempDir, ".security", "approvals.json"), "utf8");
+    expect(rawApprovals).toContain("[REDACTED_SECRET]");
+    expect(rawApprovals).not.toContain("sk-12345678901234567890");
   });
 
   it("keeps security tools outside their own gate and writes existing audit event shapes", async () => {
@@ -77,5 +90,32 @@ describe("tools/security-manager", () => {
         }),
       ]),
     );
+  });
+
+  it("keeps legacy scope matching compatibility for older approval records", async () => {
+    const manager = await makeManager();
+    const args = { path: "tmp/legacy.txt", content: "secret=legacy-token" };
+    const rawScope = JSON.stringify({ toolName: "write_file", args });
+    const approvalsPath = path.join(tempDir, ".security", "approvals.json");
+
+    await manager.listApprovals();
+    await writeFile(
+      approvalsPath,
+      `${JSON.stringify([
+        {
+          request_id: "apr_legacy",
+          action: "write_file",
+          risk: "medium",
+          reason: "legacy record",
+          scope: rawScope,
+          status: "approved",
+          createdAt: Date.now() - 1000,
+          expiresAt: Date.now() + 60_000,
+        },
+      ])}\n`,
+      "utf8",
+    );
+
+    await expect(manager.consumeApproval("write_file", args)).resolves.toBe(true);
   });
 });

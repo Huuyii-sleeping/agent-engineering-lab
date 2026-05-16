@@ -42,7 +42,7 @@ function handleMessage(message) {
         tools: [
           {
             name: "echo_upper",
-            description: "Uppercase an input string.",
+            description: "Uppercase an input string.\u202E token=sk-demo-secret-12345678901234567890",
             inputSchema: {
               type: "object",
               properties: {
@@ -78,9 +78,11 @@ function handleMessage(message) {
           structuredContent: {
             ok: true,
             echoed: text.toUpperCase(),
+            secret: "token=sk-demo-secret-12345678901234567890",
+            hidden: "visible\u202Etext",
             source: "mcp-demo-server",
           },
-          content: [{ type: "text", text: text.toUpperCase() }],
+          content: [{ type: "text", text: `${text.toUpperCase()}\u202E token=sk-demo-secret-12345678901234567890` }],
         },
       });
       return;

@@ -20,28 +20,32 @@ async function cleanMemory(): Promise<void> {
 async function main(): Promise<void> {
   await cleanMemory();
 
-  const added = asJson(
-    await runMemoryAdd("user", "constraint", ["lang", "rule"], "每次完成后都要告诉我具体改动点", 0.95),
-  );
+  const secret = "token=sk-12345678901234567890";
+  const content = `Remember to include specific change details. ${secret}`;
+  const added = asJson(await runMemoryAdd("user", "constraint", ["lang", "rule"], content, 0.95));
   assert(added.ok === true, "memory_add should succeed");
+  assert(JSON.stringify(added).includes("[REDACTED_SECRET]"), "memory_add response should redact secret-like content");
 
-  const search = asJson(await runMemorySearch("具体改动点", 5, "both"));
+  const search = asJson(await runMemorySearch("specific change details", 5, "both"));
   assert(search.ok === true, "memory_search should succeed");
-  const hits = search.hits as Array<{ score?: number; source?: string }> | undefined;
+  const hits = search.hits as Array<{ score?: number; source?: string; content?: string }> | undefined;
   if (!Array.isArray(hits) || hits.length === 0) {
     throw new Error("memory_search should return hits");
   }
   const firstHit = hits[0];
   assert(typeof firstHit.score === "number", "memory_search hit should include score");
   assert(typeof firstHit.source === "string", "memory_search hit should include source");
+  assert(typeof firstHit.content === "string" && firstHit.content.includes("[REDACTED_SECRET]"), "search should return redacted content");
 
-  const inject = await buildMemoryInjectionForQuery("后续输出要包含改动点");
+  const inject = await buildMemoryInjectionForQuery("include the change details in the next answer");
   assert(inject.usedEntries > 0, "memory injection should include at least one entry");
   assert(inject.estimatedTokens > 0, "memory injection should have token estimate");
+  assert(typeof inject.content === "string" && inject.content.includes("[REDACTED_SECRET]"), "memory injection should stay redacted");
 
   const longPath = path.join(process.cwd(), ".memory", "long_term.jsonl");
   const raw = await readFile(longPath, "utf8");
-  assert(raw.includes("具体改动点"), "long_term memory should persist content");
+  assert(raw.includes("[REDACTED_SECRET]"), "long_term memory should persist redacted content");
+  assert(!raw.includes(secret), "long_term memory should not persist raw secret");
 
   console.log("PRD08_MEMORY_SMOKE_OK");
 }

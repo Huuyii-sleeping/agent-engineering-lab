@@ -33,7 +33,7 @@ describe("tools/mcp-client", () => {
     expect(tools).toContainEqual(
       expect.objectContaining({
         name: "echo_upper",
-        description: "Uppercase an input string.",
+        description: "Uppercase an input string. token=[REDACTED_SECRET]",
       }),
     );
   });
@@ -46,6 +46,8 @@ describe("tools/mcp-client", () => {
     expect(result.structuredContent).toEqual({
       ok: true,
       echoed: "HELLO",
+      secret: "token=sk-demo-secret-12345678901234567890",
+      hidden: "visible\u202Etext",
       source: "mcp-demo-server",
     });
   });

@@ -86,9 +86,11 @@ describe("mcp capability bus", () => {
     const output = JSON.parse(await toolsModule.runToolByName("mcp__demo__echo_upper", '{"text":"hello"}')) as {
       ok?: boolean;
       echoed?: string;
+      secret?: string;
     };
     expect(output.ok).toBe(true);
     expect(output.echoed).toBe("HELLO");
+    expect(output.secret).toBe("token=[REDACTED_SECRET]");
   });
 
   it("returns structured failures and observability events for mcp tool errors", async () => {
@@ -114,7 +116,7 @@ describe("mcp capability bus", () => {
       events.some(
         (event) =>
           event.kind === "mcp_call" &&
-          event.payload.toolName === "mcp__demo__fail_now" &&
+          event.payload.toolName === "[mcp_tool]" &&
           event.payload.ok === false,
       ),
     ).toBe(true);

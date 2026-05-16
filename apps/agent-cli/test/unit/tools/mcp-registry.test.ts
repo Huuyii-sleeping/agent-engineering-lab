@@ -46,7 +46,7 @@ describe("tools/mcp-registry", () => {
         type: "function",
         function: expect.objectContaining({
           name: "mcp__demo__echo_upper",
-          description: "[mcp:demo] Uppercase an input string.",
+          description: "[mcp:demo] Uppercase an input string. token=[REDACTED_SECRET]",
         }),
       }),
     );
@@ -58,10 +58,14 @@ describe("tools/mcp-registry", () => {
     const output = JSON.parse((await registry.run("mcp__demo__echo_upper", { text: "hello" })) ?? "{}") as {
       ok?: boolean;
       echoed?: string;
+      secret?: string;
+      hidden?: string;
     };
 
     expect(output.ok).toBe(true);
     expect(output.echoed).toBe("HELLO");
+    expect(output.secret).toBe("token=[REDACTED_SECRET]");
+    expect(output.hidden).toBe("visibletext");
     expect(await registry.run("mcp__demo__missing", {})).toBeNull();
   });
 

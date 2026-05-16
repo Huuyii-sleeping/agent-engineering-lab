@@ -2,11 +2,7 @@ import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
 import { replayTrace } from "../../src/observability/replay.js";
-import {
-  createSpanId,
-  recordObservabilityEvent,
-  withExecutionContext,
-} from "../../src/observability/runtime.js";
+import { createSpanId, recordObservabilityEvent, withExecutionContext } from "../../src/observability/runtime.js";
 import { runToolByName } from "../../src/tools/index.js";
 
 function assert(condition: unknown, message: string): void {
@@ -69,6 +65,16 @@ async function main(): Promise<void> {
     },
     { traceId, spanId: writeSpan },
   );
+  await recordObservabilityEvent(
+    "mcp_call",
+    {
+      toolName: "mcp__private_demo__echo",
+      serverName: "private-demo",
+      remoteTool: "echo",
+      outputSummary: "authorization=Bearer top-secret-token",
+    },
+    { traceId },
+  );
 
   const eventsPath = path.join(process.cwd(), ".observability", "events.jsonl");
   const metricsPath = path.join(process.cwd(), ".observability", "metrics.json");
@@ -77,6 +83,9 @@ async function main(): Promise<void> {
 
   assert(eventsRaw.includes('"kind":"tool_call"'), "events should contain tool_call");
   assert(eventsRaw.includes('"trace_id":"trace_prd09_smoke"'), "events should contain smoke trace_id");
+  assert(eventsRaw.includes("[mcp_tool]"), "events should redact mcp aliases");
+  assert(eventsRaw.includes("[REDACTED_SECRET]"), "events should redact secret-like content");
+  assert(!eventsRaw.includes("top-secret-token"), "events should not persist raw secret");
 
   const metrics = asJson(metricsRaw);
   assert(Number(metrics.toolCalls) >= 2, "metrics should count tool calls");

@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
+import { sanitizeAndRedactText } from "../security/data-hygiene.js";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
 import { nowTimestampMs, parseTimestampMs } from "../time.js";
 import { parseJsonl, toJsonl } from "./jsonl.js";
@@ -89,7 +90,7 @@ export class MemoryStore {
     confidenceArg: unknown,
   ): Promise<MemoryEntry | null> {
     const source = String(sourceArg ?? "").trim() || "manual";
-    const content = String(contentArg ?? "").trim();
+    const content = sanitizeAndRedactText(String(contentArg ?? "").trim());
     if (!content) {
       return null;
     }

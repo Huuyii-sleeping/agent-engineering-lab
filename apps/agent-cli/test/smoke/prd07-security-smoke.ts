@@ -1,4 +1,4 @@
-import { rm } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
 import { runBaseToolByName } from "../../src/tools/base.js";
@@ -22,6 +22,7 @@ async function cleanDirs(): Promise<void> {
 
 async function main(): Promise<void> {
   await cleanDirs();
+  const writeArgs = { path: "tmp/a.txt", content: "token=sk-12345678901234567890" };
 
   const deniedRaw = await runBaseToolByName("bash", JSON.stringify({ command: "shutdown /s /t 0" }));
   const denied = asJson(deniedRaw);
@@ -33,15 +34,25 @@ async function main(): Promise<void> {
 
   const reqRaw = await runBaseToolByName(
     "security_request_approval",
-    JSON.stringify({ tool: "write_file", args_json: JSON.stringify({ path: "tmp/a.txt", content: "x" }) }),
+    JSON.stringify({
+      tool: "write_file",
+      args_json: JSON.stringify(writeArgs),
+    }),
   );
   const req = asJson(reqRaw);
   const requestId = (req.request as { request_id?: string } | undefined)?.request_id;
   assert(typeof requestId === "string" && requestId.length > 0, "approval request should be created");
+  const request = req.request as { scope?: string; scopeHash?: string } | undefined;
+  assert(typeof request?.scope === "string" && request.scope.includes("[REDACTED_SECRET]"), "scope should be redacted");
+  assert(typeof request?.scopeHash === "string" && request.scopeHash.length > 0, "scope hash should be persisted");
+
+  const approvalsRaw = await readFile(path.join(process.cwd(), ".security", "approvals.json"), "utf8");
+  assert(approvalsRaw.includes("[REDACTED_SECRET]"), "approval store should persist redacted preview");
+  assert(!approvalsRaw.includes("sk-12345678901234567890"), "approval store should not persist raw secret");
 
   const notAllowedRaw = await runBaseToolByName(
     "write_file",
-    JSON.stringify({ path: "tmp/a.txt", content: "x" }),
+    JSON.stringify(writeArgs),
   );
   const notAllowed = asJson(notAllowedRaw);
   assert(notAllowed.ok === false, "write should require approval before approve");
@@ -56,9 +67,17 @@ async function main(): Promise<void> {
 
   const allowedRaw = await runBaseToolByName(
     "write_file",
-    JSON.stringify({ path: "tmp/a.txt", content: "x" }),
+    JSON.stringify(writeArgs),
   );
   assert(!allowedRaw.includes('"ok": false'), "write should pass after approval");
+
+  const highRiskRaw = await runBaseToolByName("bash", JSON.stringify({ command: 'python -c "print(1)"' }));
+  const highRisk = asJson(highRiskRaw);
+  assert(highRisk.ok === false, "high risk interpreter command should require approval");
+  assert(
+    (highRisk.error as { code?: string } | undefined)?.code === "SECURITY_APPROVAL_REQUIRED",
+    "high risk interpreter command should return SECURITY_APPROVAL_REQUIRED",
+  );
 
   console.log("PRD07_SECURITY_SMOKE_OK");
 }
@@ -68,4 +87,3 @@ main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
 });
-

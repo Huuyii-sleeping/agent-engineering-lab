@@ -1,3 +1,4 @@
+import { sanitizeAndRedactText, sanitizeAndRedactValue } from "../security/data-hygiene.js";
 import type { ToolRegistration } from "./protocol.js";
 
 export type JsonRpcError = {
@@ -50,7 +51,7 @@ function normalizeInputSchema(value: unknown): Record<string, unknown> {
 function extractTextContent(result: McpCallResult): string {
   const lines = (result.content ?? [])
     .filter((item) => item?.type === "text" && typeof item.text === "string")
-    .map((item) => item.text?.trim() ?? "")
+    .map((item) => sanitizeAndRedactText(item.text?.trim() ?? ""))
     .filter(Boolean);
   return lines.join("\n");
 }
@@ -90,7 +91,7 @@ export function parseToolsList(result: unknown): McpToolDescriptor[] {
       }
       return {
         name,
-        description: String(tool.description ?? ""),
+        description: sanitizeAndRedactText(String(tool.description ?? "")),
         inputSchema: normalizeInputSchema(tool.inputSchema),
       } satisfies McpToolDescriptor;
     })
@@ -111,9 +112,9 @@ export function formatMcpFailure(code: string, message: string, extra?: Record<s
 export function normalizeMcpCallOutput(serverName: string, remoteName: string, result: McpCallResult): string {
   if (result.structuredContent !== undefined) {
     if (typeof result.structuredContent === "string") {
-      return result.structuredContent;
+      return sanitizeAndRedactText(result.structuredContent);
     }
-    return `${JSON.stringify(result.structuredContent, null, 2)}\n`;
+    return `${JSON.stringify(sanitizeAndRedactValue(result.structuredContent), null, 2)}\n`;
   }
   const text = extractTextContent(result);
   if (result.isError) {

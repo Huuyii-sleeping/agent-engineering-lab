@@ -51,26 +51,28 @@ async function main(): Promise<void> {
   await withWorkspace("prd19-mcp-smoke", async () => {
     await writeMcpConfig();
 
-    const [{ agentLoop }, { withCompactRuntimeContext }, toolsModule, securityModule, mcpModule] =
-      await Promise.all([
-        import("../../src/agent-loop.js"),
-        import("../../src/tools/context-compact.js"),
-        import("../../src/tools/index.js"),
-        import("../../src/tools/security.js"),
-        import("../../src/tools/mcp.js"),
-      ]);
+    const [{ agentLoop }, { withCompactRuntimeContext }, toolsModule, securityModule, mcpModule] = await Promise.all([
+      import("../../src/agent-loop.js"),
+      import("../../src/tools/context-compact.js"),
+      import("../../src/tools/index.js"),
+      import("../../src/tools/security.js"),
+      import("../../src/tools/mcp.js"),
+    ]);
 
     const tools = await toolsModule.listTools();
     const externalTool = tools.find(
       (tool) => tool.type === "function" && tool.function.name === "mcp__demo__echo_upper",
     );
     assert(externalTool, "expected mcp tool to be listed");
+    assert(
+      externalTool.type === "function" &&
+        externalTool.function.description.includes("[REDACTED_SECRET]") &&
+        !externalTool.function.description.includes("\u202E"),
+      "expected mcp tool description to be sanitized",
+    );
 
     const approval = JSON.parse(
-      await securityModule.runSecurityRequestApproval(
-        "mcp__demo__echo_upper",
-        '{"text":"mixed round"}',
-      ),
+      await securityModule.runSecurityRequestApproval("mcp__demo__echo_upper", '{"text":"mixed round"}'),
     ) as { request?: { request_id?: string } };
     await securityModule.runSecurityApprove(approval.request?.request_id);
 
@@ -133,9 +135,7 @@ async function main(): Promise<void> {
       },
     } as unknown as OpenAI;
 
-    const messages: ChatCompletionMessageParam[] = [
-      { role: "user", content: "run native and mcp in one round" },
-    ];
+    const messages: ChatCompletionMessageParam[] = [{ role: "user", content: "run native and mcp in one round" }];
     await withCompactRuntimeContext({ messages }, async () =>
       agentLoop({
         client,
@@ -163,13 +163,16 @@ async function main(): Promise<void> {
     const toolMessages = messages.filter((message) => message.role === "tool");
     assert(toolMessages.length === 2, "expected native and mcp tool messages");
     const nativeOutput = JSON.parse(String(toolMessages[0]?.content ?? "{}")) as { id?: number };
-    const mcpOutput = JSON.parse(String(toolMessages[1]?.content ?? "{}")) as { echoed?: string };
+    const mcpOutput = JSON.parse(String(toolMessages[1]?.content ?? "{}")) as {
+      echoed?: string;
+      secret?: string;
+      hidden?: string;
+    };
     assert(typeof nativeOutput.id === "number", "task_create should produce a task id");
     assert(mcpOutput.echoed === "MIXED ROUND", "mcp tool should uppercase the payload");
-    assert(
-      messages[messages.length - 1]?.role === "assistant",
-      "assistant reply should be appended",
-    );
+    assert(mcpOutput.secret === "token=[REDACTED_SECRET]", "mcp output should redact secret-like content");
+    assert(mcpOutput.hidden === "visibletext", "mcp output should remove hidden control characters");
+    assert(messages[messages.length - 1]?.role === "assistant", "assistant reply should be appended");
     assert(
       typeof messages[messages.length - 1]?.content === "string" &&
         messages[messages.length - 1]?.content.includes("mixed round complete"),

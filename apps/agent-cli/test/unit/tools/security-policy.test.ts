@@ -22,6 +22,16 @@ describe("tools/security-policy", () => {
       risk: "high",
       matchedRule: "bash-high-approval",
     });
+    expect(evaluateSecurityPolicy(policy, { toolName: "bash", args: { command: "python -c \"print(1)\"" } })).toMatchObject({
+      decision: "require_approval",
+      risk: "high",
+      matchedRule: "bash-high-risk-pattern-approval",
+    });
+    expect(evaluateSecurityPolicy(policy, { toolName: "bash", args: { command: "ssh prod.example hostname" } })).toMatchObject({
+      decision: "require_approval",
+      risk: "high",
+      matchedRule: "bash-high-risk-pattern-approval",
+    });
     expect(evaluateSecurityPolicy(policy, { toolName: "mcp__demo__echo", args: { text: "hello" } })).toMatchObject({
       decision: "require_approval",
       risk: "medium",
