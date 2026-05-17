@@ -6,6 +6,7 @@ import type {
   ObservabilityServiceLike,
   RuntimeCoordinationServiceLike,
 } from "../services/index.js";
+import { getPrivacyConfig, isMemoryAutomationEnabled } from "../runtime-config.js";
 import { collectDynamicSystemMessages } from "./query-notifications.js";
 
 export type QueryRoundPreparationResult =
@@ -33,6 +34,7 @@ type PrepareQueryRoundOptions = {
 export async function prepareQueryRound(
   opts: PrepareQueryRoundOptions,
 ): Promise<QueryRoundPreparationResult> {
+  const privacy = getPrivacyConfig();
   const sessionStartHooks = await opts.hookService.run("SessionStart", {
     session_id: opts.runtimeState.sessionId,
     trace_id: opts.traceId,
@@ -49,7 +51,11 @@ export async function prepareQueryRound(
     };
   }
 
-  if (opts.latestUserInput && opts.runtimeState.lastMemoryInput !== opts.latestUserInput) {
+  if (
+    isMemoryAutomationEnabled(privacy) &&
+    opts.latestUserInput &&
+    opts.runtimeState.lastMemoryInput !== opts.latestUserInput
+  ) {
     await opts.memoryService.autoExtract("user", opts.latestUserInput);
     opts.runtimeState.lastMemoryInput = opts.latestUserInput;
   }
@@ -77,7 +83,7 @@ export async function prepareQueryRound(
   });
 
   let memoryContext: string | null = null;
-  if (opts.latestUserInput) {
+  if (isMemoryAutomationEnabled(privacy) && opts.latestUserInput) {
     const injected = await opts.memoryService.buildInjectionForQuery(opts.latestUserInput);
     if (injected.content) {
       memoryContext = injected.content;

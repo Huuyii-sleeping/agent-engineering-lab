@@ -616,6 +616,7 @@ export function renderCliUserDataGovernance(report: UserDataGovernanceReport): s
     renderRows([
       { label: "reference", value: report.reference },
       { label: "surfaces", value: String(report.surfaces.length) },
+      { label: "privacy", value: String(report.privacyControls.length) },
       {
         label: "legend",
         value: Object.entries(report.statusLabels)
@@ -623,6 +624,18 @@ export function renderCliUserDataGovernance(report: UserDataGovernanceReport): s
           .join(" | "),
       },
     ]),
+    "",
+    strong("Privacy Minimization"),
+    ...report.privacyControls.flatMap((control) => [
+      renderRows([
+        { label: "control", value: control.id },
+        { label: "state", value: control.state },
+        { label: "summary", value: control.summary },
+      ]),
+      "",
+    ]),
+    strong("Reserved Privacy Gaps"),
+    ...(report.privacyReservedGaps.length > 0 ? report.privacyReservedGaps.map((item) => `- ${item}`) : ["(none)"]),
     "",
     ...report.surfaces.flatMap((surface) => [
       strong(surface.title),
@@ -853,7 +866,13 @@ export function renderCliPromptDump(
       { label: "dynamic", value: dump.dynamicSectionIds.join(", ") || "(none)" },
       { label: "skills", value: loadedNames.join(", ") || "(none)" },
       { label: "missing", value: missingNames.join(", ") || "(none)" },
+      {
+        label: "suppressed",
+        value:
+          dump.suppressedCategories?.map((item) => `${item.id}:${item.reason}`).join(" | ") || "(none)",
+      },
       { label: "export", value: dump.protectedExportPath ?? "(inline only)" },
+      { label: "persistence", value: dump.persistenceBlockedReason ?? "(allowed)" },
     ]),
     "",
     strong("Primary"),

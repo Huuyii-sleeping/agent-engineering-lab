@@ -98,4 +98,50 @@ describe("tools/mcp-config", () => {
       credentialMode: "none",
     });
   });
+
+  it("returns no external servers when privacy mode disables external capabilities", async () => {
+    const previous = process.env.AGENT_PRIVACY_EXTERNAL_CAPABILITIES_MODE;
+    process.env.AGENT_PRIVACY_EXTERNAL_CAPABILITIES_MODE = "disabled";
+    try {
+      await writeConfig({
+        servers: [{ name: "demo", command: "node", trusted: true }],
+      });
+
+      expect(await loadMcpServerConfigs()).toEqual([]);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.AGENT_PRIVACY_EXTERNAL_CAPABILITIES_MODE;
+      } else {
+        process.env.AGENT_PRIVACY_EXTERNAL_CAPABILITIES_MODE = previous;
+      }
+    }
+  });
+
+  it("filters configured servers through the explicit allowlist privacy mode", async () => {
+    const previousMode = process.env.AGENT_PRIVACY_EXTERNAL_CAPABILITIES_MODE;
+    const previousAllowlist = process.env.AGENT_PRIVACY_MCP_ALLOWLIST;
+    process.env.AGENT_PRIVACY_EXTERNAL_CAPABILITIES_MODE = "allowlist";
+    process.env.AGENT_PRIVACY_MCP_ALLOWLIST = "demo-two";
+    try {
+      await writeConfig({
+        servers: [
+          { name: "demo-one", command: "node", trusted: true },
+          { name: "demo-two", command: "node", trusted: true },
+        ],
+      });
+
+      expect((await loadMcpServerConfigs()).map((item) => item.name)).toEqual(["demo-two"]);
+    } finally {
+      if (previousMode === undefined) {
+        delete process.env.AGENT_PRIVACY_EXTERNAL_CAPABILITIES_MODE;
+      } else {
+        process.env.AGENT_PRIVACY_EXTERNAL_CAPABILITIES_MODE = previousMode;
+      }
+      if (previousAllowlist === undefined) {
+        delete process.env.AGENT_PRIVACY_MCP_ALLOWLIST;
+      } else {
+        process.env.AGENT_PRIVACY_MCP_ALLOWLIST = previousAllowlist;
+      }
+    }
+  });
 });

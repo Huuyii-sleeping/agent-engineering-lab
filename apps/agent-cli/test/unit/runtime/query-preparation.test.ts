@@ -169,4 +169,43 @@ describe("runtime/query-preparation", () => {
     expect(memoryService.autoExtract).toHaveBeenCalledWith("user", "hello");
     expect(runtimeState.lastMemoryInput).toBe("hello");
   });
+
+  it("skips automatic memory extraction and injection when privacy mode is manual-only", async () => {
+    const previous = process.env.AGENT_PRIVACY_MEMORY_MODE;
+    process.env.AGENT_PRIVACY_MEMORY_MODE = "manual_only";
+    try {
+      const runtimeState = createRuntimeState();
+      const hookService = createHookService();
+      const memoryService = createMemoryService();
+      const notificationService = createNotificationService();
+      const observabilityService = createObservabilityService();
+      const runtimeCoordinationService = createRuntimeCoordinationService();
+
+      const result = await prepareQueryRound({
+        runtimeState,
+        traceId: "trace_test",
+        latestUserInput: "hello",
+        hookService,
+        memoryService,
+        notificationService,
+        observabilityService,
+        runtimeCoordinationService,
+      });
+
+      expect(result).toEqual({
+        ok: true,
+        dynamicSystemMessages: [],
+        memoryContext: null,
+      });
+      expect(memoryService.autoExtract).not.toHaveBeenCalled();
+      expect(memoryService.buildInjectionForQuery).not.toHaveBeenCalled();
+      expect(runtimeState.lastMemoryInput).toBeNull();
+    } finally {
+      if (previous === undefined) {
+        delete process.env.AGENT_PRIVACY_MEMORY_MODE;
+      } else {
+        process.env.AGENT_PRIVACY_MEMORY_MODE = previous;
+      }
+    }
+  });
 });

@@ -2,7 +2,11 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
 import { sanitizeAndRedactText, sanitizeMcpIdentifier } from "../security/data-hygiene.js";
-import { RUNTIME_CONFIG } from "../runtime-config.js";
+import {
+  RUNTIME_CONFIG,
+  getPrivacyConfig,
+  shouldPersistObservabilityEvent,
+} from "../runtime-config.js";
 import { nowTimestampMs, parseTimestampMs } from "../time.js";
 
 type ObservabilityMetrics = {
@@ -277,7 +281,6 @@ class ObservabilityRuntime {
     payload: Record<string, unknown>,
     context?: Partial<ExecutionContext>,
   ): Promise<ObservabilityEvent> {
-    await this.ensureInit();
     const active = this.activeContext;
     const traceId = context?.traceId ?? active?.traceId ?? null;
     const spanId = context?.spanId ?? active?.spanId ?? null;
@@ -291,6 +294,10 @@ class ObservabilityRuntime {
       kind,
       payload: sanitizeValue(payload, undefined, mcpContext) as Record<string, unknown>,
     };
+    if (!shouldPersistObservabilityEvent(kind, getPrivacyConfig())) {
+      return event;
+    }
+    await this.ensureInit();
     const { eventsPath } = this.paths();
     await appendFile(eventsPath, `${JSON.stringify(event)}\n`, "utf8");
     const metrics = await this.loadMetrics();
@@ -300,7 +307,9 @@ class ObservabilityRuntime {
   }
 
   async readEvents(traceId?: string): Promise<ObservabilityEvent[]> {
-    await this.ensureInit();
+    if (getPrivacyConfig().observabilityMode === "disabled") {
+      return [];
+    }
     const { eventsPath } = this.paths();
     const raw = await readFile(eventsPath, "utf8").catch(() => "");
     const lines = raw

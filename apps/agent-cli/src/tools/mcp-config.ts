@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
-import { RUNTIME_CONFIG } from "../runtime-config.js";
+import { RUNTIME_CONFIG, getPrivacyConfig } from "../runtime-config.js";
 
 export type McpServerConfig = {
   name: string;
@@ -71,8 +71,17 @@ export async function loadMcpServerConfigs(): Promise<McpServerConfig[]> {
   }
   const parsed = parseConfigObject(raw);
   const servers = Array.isArray(parsed.servers) ? parsed.servers : [];
-  return servers
+  const normalized = servers
     .map((item) => normalizeServerConfig(item, configPath))
     .filter((item): item is McpServerConfig => Boolean(item))
     .filter((item) => item.enabled);
+  const privacy = getPrivacyConfig();
+  if (privacy.externalCapabilitiesMode === "disabled") {
+    return [];
+  }
+  if (privacy.externalCapabilitiesMode === "allowlist") {
+    const allowed = new Set(privacy.mcpAllowlist);
+    return normalized.filter((item) => allowed.has(item.name.toLowerCase()));
+  }
+  return normalized;
 }

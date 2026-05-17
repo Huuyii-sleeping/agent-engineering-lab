@@ -1,9 +1,15 @@
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildPromptEnvelope } from "./builder.js";
+import { getPrivacyConfig, isLocalPersistenceEnabled } from "../runtime-config.js";
 import { sanitizeAndRedactText } from "../security/data-hygiene.js";
 import { buildArtifactMetadata, isExpired } from "../security/local-retention.js";
 import type { StaticPromptSource } from "./types.js";
+
+export type PromptSuppressedCategory = {
+  id: string;
+  reason: string;
+};
 
 export type PromptDump = {
   inspectionMode: "default" | "protected";
@@ -11,7 +17,9 @@ export type PromptDump = {
   supplementalSystemMessages: string[];
   stableSectionIds: string[];
   dynamicSectionIds: string[];
+  suppressedCategories?: PromptSuppressedCategory[];
   protectedExportPath: string | null;
+  persistenceBlockedReason?: string | null;
 };
 
 type PersistedPromptDumpEnvelope = {
@@ -40,13 +48,29 @@ export function inspectPromptSource(
   mode: "default" | "protected" = "default",
 ): PromptDump {
   const envelope = buildPromptEnvelope(source);
+  const privacy = getPrivacyConfig();
+  const suppressedCategories: PromptSuppressedCategory[] = [];
+  if (privacy.memoryMode !== "default") {
+    suppressedCategories.push({
+      id: "memory_context",
+      reason: `memory automation suppressed by privacy mode ${privacy.memoryMode}`,
+    });
+  }
+  if (privacy.externalCapabilitiesMode !== "default") {
+    suppressedCategories.push({
+      id: "external_capabilities",
+      reason: `external capabilities constrained by privacy mode ${privacy.externalCapabilitiesMode}`,
+    });
+  }
   return {
     inspectionMode: mode,
     primarySystemPrompt: sanitizeAndRedactText(envelope.primarySystemPrompt),
     supplementalSystemMessages: protectSupplementalMessages(envelope.supplementalSystemMessages, mode),
     stableSectionIds: envelope.stableSections.map((section) => section.id),
     dynamicSectionIds: envelope.dynamicSections.map((section) => section.id),
+    suppressedCategories,
     protectedExportPath: null,
+    persistenceBlockedReason: null,
   };
 }
 
@@ -77,6 +101,13 @@ export async function exportProtectedPromptDump(
   source: StaticPromptSource,
   rootDir = process.cwd(),
 ): Promise<PromptDump> {
+  if (!isLocalPersistenceEnabled()) {
+    return {
+      ...inspectPromptSource(source, "protected"),
+      protectedExportPath: null,
+      persistenceBlockedReason: "protected prompt export blocked because local persistence is disabled",
+    };
+  }
   const outputRoot = path.join(rootDir, ".security", "prompt-dumps");
   await mkdir(outputRoot, { recursive: true });
   await pruneExpiredPromptDumps(outputRoot);

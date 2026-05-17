@@ -104,4 +104,36 @@ describe("service-api/daemon-client", () => {
       }),
     ).rejects.toThrow(/bridge unavailable/);
   });
+
+  it("refuses automatic daemon attach when privacy mode is local-only", async () => {
+    const previous = process.env.AGENT_PRIVACY_REMOTE_ATTACH_MODE;
+    process.env.AGENT_PRIVACY_REMOTE_ATTACH_MODE = "local_only";
+    const clientFactory = vi.fn(() => {
+      throw new Error("should not construct client");
+    });
+    try {
+      await expect(
+        resolveRunningDaemonServiceClient({
+          lock: {
+            status: async () => ({
+              state: "running",
+              filePath: "/tmp/.runtime/daemon.lock",
+              pid: 4242,
+              cwd: "/workspace",
+              startedAt: 123,
+              detail: null,
+            }),
+          },
+          clientFactory,
+        }),
+      ).resolves.toBeNull();
+      expect(clientFactory).not.toHaveBeenCalled();
+    } finally {
+      if (previous === undefined) {
+        delete process.env.AGENT_PRIVACY_REMOTE_ATTACH_MODE;
+      } else {
+        process.env.AGENT_PRIVACY_REMOTE_ATTACH_MODE = previous;
+      }
+    }
+  });
 });

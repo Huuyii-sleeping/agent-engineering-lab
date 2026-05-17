@@ -277,6 +277,7 @@ describe("cli-ui", () => {
     expect(renderCliUserDataGovernance(buildUserDataGovernanceReport())).toContain("User Data Governance");
     expect(renderCliUserDataGovernance(buildUserDataGovernanceReport())).toContain("model_input");
     expect(renderCliUserDataGovernance(buildUserDataGovernanceReport())).toContain("reserved_gap");
+    expect(renderCliUserDataGovernance(buildUserDataGovernanceReport())).toContain("Privacy Minimization");
     expect(
       renderCliShortcutLines({
         composerActive: false,

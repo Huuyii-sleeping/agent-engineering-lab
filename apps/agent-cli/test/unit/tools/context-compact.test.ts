@@ -62,4 +62,32 @@ describe("tools/context-compact", () => {
     const files = await readdir(path.join(process.cwd(), ".transcripts"));
     expect(files.some((file) => file.endsWith(".meta.json"))).toBe(true);
   });
+
+  it("skips transcript snapshot persistence when no-persistence mode is enabled", async () => {
+    const previous = process.env.AGENT_PRIVACY_PERSISTENCE_MODE;
+    process.env.AGENT_PRIVACY_PERSISTENCE_MODE = "disabled";
+    try {
+      await withWorkspace();
+
+      const result = await compactMessages(
+        {
+          messages: [
+            { role: "user", content: "hello" },
+            { role: "assistant", content: "ok" },
+          ],
+        },
+        "manual",
+        1,
+      );
+
+      expect(result.transcriptBeforePath).toContain("disabled");
+      await expect(readdir(path.join(process.cwd(), ".transcripts"))).rejects.toBeTruthy();
+    } finally {
+      if (previous === undefined) {
+        delete process.env.AGENT_PRIVACY_PERSISTENCE_MODE;
+      } else {
+        process.env.AGENT_PRIVACY_PERSISTENCE_MODE = previous;
+      }
+    }
+  });
 });

@@ -48,4 +48,52 @@ describe("observability/runtime", () => {
     expect(raw).not.toContain("top-secret-token");
     expect(events[0]?.payload.toolName).toBe("[mcp_tool]");
   });
+
+  it("skips local observability persistence completely when privacy mode is disabled", async () => {
+    const previous = process.env.AGENT_PRIVACY_OBSERVABILITY_MODE;
+    process.env.AGENT_PRIVACY_OBSERVABILITY_MODE = "disabled";
+    try {
+      await withWorkspace();
+
+      await recordObservabilityEvent("tool_result", {
+        toolName: "write_file",
+        ok: true,
+      });
+
+      await expect(readFile(path.join(process.cwd(), ".observability", "events.jsonl"), "utf8")).rejects.toBeTruthy();
+    } finally {
+      if (previous === undefined) {
+        delete process.env.AGENT_PRIVACY_OBSERVABILITY_MODE;
+      } else {
+        process.env.AGENT_PRIVACY_OBSERVABILITY_MODE = previous;
+      }
+    }
+  });
+
+  it("keeps only essential observability records in minimal mode", async () => {
+    const previous = process.env.AGENT_PRIVACY_OBSERVABILITY_MODE;
+    process.env.AGENT_PRIVACY_OBSERVABILITY_MODE = "minimal";
+    try {
+      await withWorkspace();
+
+      await recordObservabilityEvent("tool_result", {
+        toolName: "write_file",
+        ok: true,
+      });
+      await recordObservabilityEvent("security_blocked", {
+        toolName: "bash",
+        reason: "approval required",
+      });
+
+      const raw = await readFile(path.join(process.cwd(), ".observability", "events.jsonl"), "utf8");
+      expect(raw).not.toContain("tool_result");
+      expect(raw).toContain("security_blocked");
+    } finally {
+      if (previous === undefined) {
+        delete process.env.AGENT_PRIVACY_OBSERVABILITY_MODE;
+      } else {
+        process.env.AGENT_PRIVACY_OBSERVABILITY_MODE = previous;
+      }
+    }
+  });
 });

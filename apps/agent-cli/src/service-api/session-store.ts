@@ -2,6 +2,7 @@ import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promise
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { createAgentRuntimeState } from "../bootstrap/app-runtime.js";
+import { isLocalPersistenceEnabled } from "../runtime-config.js";
 import type { PendingApprovalReplay } from "../runtime/query-types.js";
 import { buildArtifactMetadata, isExpired } from "../security/local-retention.js";
 import { sanitizeAndRedactValue } from "../security/data-hygiene.js";
@@ -188,6 +189,9 @@ export class SessionStore {
   }
 
   async save(session: AgentSessionRecord): Promise<void> {
+    if (!isLocalPersistenceEnabled()) {
+      return;
+    }
     await this.enqueueWrite(session.id, async () => {
       await this.ensureRoot();
       const target = this.sessionPath(session.id);
@@ -199,6 +203,9 @@ export class SessionStore {
   }
 
   async load(sessionId: string): Promise<AgentSessionRecord | null> {
+    if (!isLocalPersistenceEnabled()) {
+      return null;
+    }
     const target = this.sessionPath(sessionId);
     const raw = await readFile(target, "utf8").catch(() => "");
     if (!raw.trim()) {
@@ -216,6 +223,9 @@ export class SessionStore {
   }
 
   async list(): Promise<AgentSessionRecord[]> {
+    if (!isLocalPersistenceEnabled()) {
+      return [];
+    }
     await this.ensureRoot();
     const entries = await readdir(this.root, { withFileTypes: true });
     const files = entries
@@ -240,6 +250,9 @@ export class SessionStore {
   }
 
   async delete(sessionId: string): Promise<boolean> {
+    if (!isLocalPersistenceEnabled()) {
+      return false;
+    }
     let deleted = false;
     await this.enqueueWrite(sessionId, async () => {
       const target = this.sessionPath(sessionId);

@@ -40,6 +40,21 @@ type RuntimeConfig = {
   modelDailyTokenBudget: number;
 };
 
+export type PrivacyPersistenceMode = "default" | "disabled";
+export type PrivacyMemoryMode = "default" | "manual_only" | "disabled";
+export type PrivacyObservabilityMode = "default" | "minimal" | "disabled";
+export type PrivacyRemoteAttachMode = "default" | "local_only";
+export type PrivacyExternalCapabilitiesMode = "default" | "disabled" | "allowlist";
+
+export type PrivacyConfig = {
+  persistenceMode: PrivacyPersistenceMode;
+  memoryMode: PrivacyMemoryMode;
+  observabilityMode: PrivacyObservabilityMode;
+  remoteAttachMode: PrivacyRemoteAttachMode;
+  externalCapabilitiesMode: PrivacyExternalCapabilitiesMode;
+  mcpAllowlist: string[];
+};
+
 function readInt(name: string, fallback: number, min: number): number {
   const raw = process.env[name];
   if (!raw) {
@@ -65,6 +80,25 @@ function readBool(name: string, fallback: boolean): boolean {
     return false;
   }
   return fallback;
+}
+
+function readEnum<T extends string>(
+  raw: string | undefined,
+  allowed: readonly T[],
+  fallback: T,
+): T {
+  if (!raw) {
+    return fallback;
+  }
+  const normalized = raw.trim().toLowerCase();
+  return allowed.find((value) => value === normalized) ?? fallback;
+}
+
+function readCsvList(raw: string | undefined): string[] {
+  if (!raw) {
+    return [];
+  }
+  return [...new Set(raw.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean))];
 }
 
 export const RUNTIME_CONFIG: RuntimeConfig = {
@@ -106,3 +140,47 @@ export const RUNTIME_CONFIG: RuntimeConfig = {
   modelSessionTokenBudget: readInt("AGENT_MODEL_SESSION_TOKEN_BUDGET", 200_000, 1_000),
   modelDailyTokenBudget: readInt("AGENT_MODEL_DAILY_TOKEN_BUDGET", 2_000_000, 1_000),
 };
+
+export function getPrivacyConfig(env: NodeJS.ProcessEnv = process.env): PrivacyConfig {
+  return {
+    persistenceMode: readEnum(env.AGENT_PRIVACY_PERSISTENCE_MODE, ["default", "disabled"], "default"),
+    memoryMode: readEnum(env.AGENT_PRIVACY_MEMORY_MODE, ["default", "manual_only", "disabled"], "default"),
+    observabilityMode: readEnum(
+      env.AGENT_PRIVACY_OBSERVABILITY_MODE,
+      ["default", "minimal", "disabled"],
+      "default",
+    ),
+    remoteAttachMode: readEnum(env.AGENT_PRIVACY_REMOTE_ATTACH_MODE, ["default", "local_only"], "default"),
+    externalCapabilitiesMode: readEnum(
+      env.AGENT_PRIVACY_EXTERNAL_CAPABILITIES_MODE,
+      ["default", "disabled", "allowlist"],
+      "default",
+    ),
+    mcpAllowlist: readCsvList(env.AGENT_PRIVACY_MCP_ALLOWLIST),
+  };
+}
+
+export function isLocalPersistenceEnabled(config = getPrivacyConfig()): boolean {
+  return config.persistenceMode !== "disabled";
+}
+
+export function isMemoryAutomationEnabled(config = getPrivacyConfig()): boolean {
+  return config.memoryMode === "default";
+}
+
+export function isRemoteAttachAllowed(config = getPrivacyConfig()): boolean {
+  return config.remoteAttachMode !== "local_only";
+}
+
+export function shouldPersistObservabilityEvent(
+  kind: string,
+  config = getPrivacyConfig(),
+): boolean {
+  if (config.observabilityMode === "disabled") {
+    return false;
+  }
+  if (config.observabilityMode === "default") {
+    return true;
+  }
+  return kind === "security_blocked" || kind.startsWith("replay") || kind.includes("error");
+}

@@ -1,3 +1,4 @@
+import { getPrivacyConfig } from "../runtime-config.js";
 import { LOCAL_ARTIFACT_CONTRACTS, type LocalArtifactKind } from "../security/local-retention.js";
 import { createAgentBridgeManifest } from "../service-api/bridge.js";
 
@@ -34,9 +35,25 @@ export type UserDataSurface = {
   notes: string[];
 };
 
+export type PrivacyControlState =
+  | "default"
+  | "disabled"
+  | "manual_only"
+  | "minimal"
+  | "local_only"
+  | "allowlist";
+
+export type UserPrivacyControl = {
+  id: "persistence" | "memory" | "observability" | "remote_attach" | "external_capabilities";
+  state: PrivacyControlState;
+  summary: string;
+};
+
 export type UserDataGovernanceReport = {
   reference: string;
   statusLabels: Record<UserDataSurfaceStatus, string>;
+  privacyControls: UserPrivacyControl[];
+  privacyReservedGaps: string[];
   surfaces: UserDataSurface[];
 };
 
@@ -46,17 +63,51 @@ function formatContract(kind: LocalArtifactKind, label: string): string {
 }
 
 export function buildUserDataGovernanceReport(): UserDataGovernanceReport {
+  const privacy = getPrivacyConfig();
   const bridgeManifest = createAgentBridgeManifest();
 
   return {
     reference:
-      "github.com/liuup/claude-code-analysis/blob/main/analysis/02-user-data-and-usage.md",
+      "github.com/liuup/claude-code-analysis/blob/main/analysis/02-user-data-and-usage.md | github.com/liuup/claude-code-analysis/blob/main/analysis/03-privacy-avoidance.md",
     statusLabels: {
-      implemented: "已实现",
-      partial: "部分等价",
-      pending: "待实现",
-      reserved_gap: "保留缺口",
+      implemented: "implemented",
+      partial: "partial parity",
+      pending: "pending",
+      reserved_gap: "reserved gap",
     },
+    privacyControls: [
+      {
+        id: "persistence",
+        state: privacy.persistenceMode,
+        summary: "Controls local writes for sessions, transcript snapshots, and protected prompt dumps.",
+      },
+      {
+        id: "memory",
+        state: privacy.memoryMode,
+        summary: "Controls automatic memory extraction and memory injection into model requests.",
+      },
+      {
+        id: "observability",
+        state: privacy.observabilityMode,
+        summary: "Controls local observability persistence, including minimal and disabled modes.",
+      },
+      {
+        id: "remote_attach",
+        state: privacy.remoteAttachMode,
+        summary: "Controls whether the CLI auto-attaches to an already-running daemon session.",
+      },
+      {
+        id: "external_capabilities",
+        state: privacy.externalCapabilitiesMode,
+        summary: "Controls MCP and other external capability loading, including explicit allowlist mode.",
+      },
+    ],
+    privacyReservedGaps: [
+      "remote telemetry privacy tiers and sink selection",
+      "organization policy controls and admin enforcement",
+      "team memory sync identity, isolation, and deletion contracts",
+      "training uploads or feedback egress with explicit consent modeling",
+    ],
     surfaces: [
       {
         id: "model_input",
@@ -65,7 +116,7 @@ export function buildUserDataGovernanceReport(): UserDataGovernanceReport {
         boundary: "local_only",
         defaultState: "default_on",
         summary:
-          "当前请求会组合用户输入、会话历史、工具结果、memory 注入、compact 摘要与动态提醒，但此前缺少统一的用户视角披露面。",
+          "Requests combine user input, session history, tool results, memory context, dynamic system messages, and compact summaries through one local runtime pipeline.",
         sources: [
           "latest user prompt",
           "session history",
@@ -75,16 +126,17 @@ export function buildUserDataGovernanceReport(): UserDataGovernanceReport {
           "compact transcript summaries",
         ],
         uses: [
-          "组装模型请求",
-          "保持多轮上下文连续性",
-          "按相关性补充记忆与运行时提醒",
+          "assemble model requests",
+          "keep multi-round context coherent",
+          "inject relevant runtime reminders and memory context",
         ],
-        retention: "主要驻留于当前会话内存；如触发 compact 或 session 持久化，则受本地 retention contract 约束。",
+        retention:
+          "Primarily in-memory during the active session; if session persistence or compact snapshots are used, the local retention contracts apply.",
         exportDelete:
-          "默认通过 /prompt 仅看摘要；完整 prompt 通过 protected export 导出，相关会话数据走显式删除与过期清理。",
+          "The /prompt surface shows a protected summary by default; full protected prompt export is local-only and tied to explicit deletion plus TTL cleanup.",
         notes: [
-          "该面现在由 /data 统一披露。",
-          "默认 inspection 不直接暴露完整高敏感动态正文。",
+          "This surface is disclosed through /data.",
+          "Default prompt inspection avoids echoing full dynamic message bodies inline.",
         ],
       },
       {
@@ -94,7 +146,7 @@ export function buildUserDataGovernanceReport(): UserDataGovernanceReport {
         boundary: "local_only",
         defaultState: "default_on",
         summary:
-          "本地会保存 session、transcript snapshot、prompt dump 等高敏感运行工件，但此前缺少统一说明它们分别为何存在。",
+          "The local runtime persists sessions, transcript snapshots, and protected prompt dumps unless privacy persistence is disabled.",
         sources: [
           ".sessions/session_<id>.json",
           ".transcripts/transcript_<phase>_<ts>.jsonl",
@@ -102,7 +154,7 @@ export function buildUserDataGovernanceReport(): UserDataGovernanceReport {
         ],
         uses: [
           "session resume",
-          "compact 前后快照",
+          "before and after compact snapshots",
           "protected prompt export",
         ],
         retention: [
@@ -110,10 +162,9 @@ export function buildUserDataGovernanceReport(): UserDataGovernanceReport {
           formatContract("transcript_snapshot", "transcript"),
           formatContract("prompt_dump", "prompt_dump"),
         ].join(" | "),
-        exportDelete:
-          "高敏感工件统一走 protected_export，并且都声明 explicit_delete。",
+        exportDelete: "All three artifacts are local protected exports with explicit delete semantics.",
         notes: [
-          "session / transcript / prompt dump 现在统一纳入一个披露面。",
+          "No-persistence mode now blocks these writes through one runtime control surface.",
         ],
       },
       {
@@ -123,24 +174,23 @@ export function buildUserDataGovernanceReport(): UserDataGovernanceReport {
         boundary: "local_only",
         defaultState: "default_on",
         summary:
-          "仓库已实现 short-term 与 long-term 本地 memory，以及按查询相关性注入模型请求；但 shared/team memory 仍未实现。",
+          "Short-term and long-term local memory exist, and the runtime can auto-extract and auto-inject memory unless the privacy posture suppresses that automation.",
         sources: [
           ".memory/short_term.jsonl",
           ".memory/long_term.jsonl",
           "memory_search / memory_list / memory_add",
         ],
         uses: [
-          "跨会话恢复偏好与历史决策",
-          "在请求前注入相关 memory_context",
+          "recover preferences and prior decisions across sessions",
+          "inject relevant memory_context before model requests",
         ],
         retention: [
           formatContract("memory_short_term", "short_term"),
           formatContract("memory_long_term", "long_term"),
         ].join(" | "),
-        exportDelete:
-          "memory 默认 query_only，不做远端同步；删除语义为 explicit_delete。",
+        exportDelete: "Memory is local query-only storage with explicit delete semantics and no team sync.",
         notes: [
-          "shared team memory / team memory sync 仍是保留缺口。",
+          "Shared team memory and team memory sync remain reserved gaps.",
         ],
       },
       {
@@ -150,22 +200,22 @@ export function buildUserDataGovernanceReport(): UserDataGovernanceReport {
         boundary: "mixed",
         defaultState: "default_on",
         summary:
-          "当前已有本地 observability 与 replay 数据面，但没有 remote analytics / telemetry sink、essential-only 分层或组织级关闭开关。",
+          "The repository implements local observability and replay, but not remote analytics sinks or policy-managed privacy tiers.",
         sources: [
           ".observability/events.jsonl",
           ".observability/metrics.json",
           "observability runtime events",
         ],
         uses: [
-          "本地问题回放与调试",
-          "统计工具与模型调用概况",
+          "local debugging and replay",
+          "aggregate tool and model usage",
         ],
         retention: formatContract("observability_event", "observability"),
         exportDelete:
-          "当前仅为本地 query_only；远端 telemetry 尚未接入，因此不存在默认出站上传。",
+          "Current observability is local query-only storage; no default remote telemetry upload path exists.",
         notes: [
-          "`.observability` 已实现，本地可观测性不等于 remote analytics。",
-          "remote telemetry / analytics privacy tiers 仍是 reserved_gap。",
+          "Minimal mode keeps only essential security, replay, and error signals.",
+          "remote telemetry and analytics privacy tiers remain a reserved gap.",
         ],
       },
       {
@@ -174,8 +224,7 @@ export function buildUserDataGovernanceReport(): UserDataGovernanceReport {
         status: "reserved_gap",
         boundary: "reserved_gap",
         defaultState: "not_supported",
-        summary:
-          "当前仓库没有完整 OAuth / account / organization / subscription 数据面，不能用本地配置或 daemon 状态弱等价代替。",
+        summary: "The repository does not implement an account, organization, or subscription identity plane.",
         sources: [
           "not implemented in current repository",
         ],
@@ -185,7 +234,7 @@ export function buildUserDataGovernanceReport(): UserDataGovernanceReport {
         retention: "not supported",
         exportDelete: "not supported",
         notes: [
-          "需要单独定义 principal、tenant、email、org、subscription 等身份字段合同。",
+          "Future work must model principal, tenant, email, org, and subscription contracts explicitly.",
         ],
       },
       {
@@ -194,8 +243,7 @@ export function buildUserDataGovernanceReport(): UserDataGovernanceReport {
         status: "reserved_gap",
         boundary: "reserved_gap",
         defaultState: "not_supported",
-        summary:
-          "当前只有本地 team communication protocol，没有组织级 shared team memory 或 memory sync 产品面。",
+        summary: "Only local team coordination primitives exist today; shared team memory and sync are not implemented.",
         sources: [
           "not implemented in current repository",
         ],
@@ -205,7 +253,7 @@ export function buildUserDataGovernanceReport(): UserDataGovernanceReport {
         retention: "not supported",
         exportDelete: "not supported",
         notes: [
-          "后续必须先定义身份、隔离、加密与删除传播，再考虑同步实现。",
+          "Identity, isolation, encryption, and delete propagation must exist before sync is implemented.",
         ],
       },
       {
@@ -215,7 +263,7 @@ export function buildUserDataGovernanceReport(): UserDataGovernanceReport {
         boundary: "outbound_consent",
         defaultState: "not_supported",
         summary:
-          "当前仓库没有 transcript 分享、feedback survey、训练改进上传等需要用户主动同意的出站数据面。",
+          "There is no implemented transcript sharing, feedback survey, or training-improvement upload surface in the repository.",
         sources: [
           "not implemented in current repository",
         ],
@@ -225,8 +273,8 @@ export function buildUserDataGovernanceReport(): UserDataGovernanceReport {
         retention: "not supported",
         exportDelete: "not supported",
         notes: [
-          "后续必须显式建模 consent、脱敏、关闭开关与训练改进边界。",
-          "训练改进类上传当前并不存在，不应被隐含为默认行为。",
+          "Future training and feedback egress must explicitly model consent, redaction, and disable switches.",
+          "training uploads do not exist today and must not be implied as a default behavior.",
         ],
       },
       {
@@ -236,7 +284,7 @@ export function buildUserDataGovernanceReport(): UserDataGovernanceReport {
         boundary: "conditional_remote",
         defaultState: "on_demand",
         summary:
-          "daemon / bridge / event replay 已实现，但只有在显式启用 bridge 或 attach 模式时才会扩大数据边界。",
+          "Daemon, bridge, and event replay are implemented, but they expand the data boundary only when explicitly enabled or attached.",
         sources: [
           "GET /bridge",
           "GET /bridge/state",
@@ -244,17 +292,17 @@ export function buildUserDataGovernanceReport(): UserDataGovernanceReport {
           `bridge endpoints: ${Object.values(bridgeManifest.endpoints).join(", ")}`,
         ],
         uses: [
-          "共享 session",
-          "bridge state 查询",
+          "shared session access",
+          "bridge state inspection",
           "event replay / attach",
         ],
         retention:
-          "remote ingress 自身不新增独立持久化 contract；相关会话与 observability 数据分别沿用 session / telemetry contract。",
+          "Remote ingress does not introduce its own persistence contract; related session and observability artifacts reuse the existing local contracts.",
         exportDelete:
-          "该面默认为按需启用；启用后仍依赖各本地工件的显式删除和过期清理。",
+          "This boundary is on-demand. After activation it still depends on local artifact deletion and TTL cleanup.",
         notes: [
-          "remote / bridge ingress 不是默认本地最小边界。",
-          "当前仓库也没有独立 remote dashboard 或 org-level remote control plane。",
+          "local_only remote attach mode blocks automatic daemon attach without hiding status probes.",
+          "There is still no separate remote dashboard or org-level remote control plane.",
         ],
       },
     ],

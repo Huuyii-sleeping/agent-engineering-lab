@@ -93,4 +93,25 @@ describe("service-api/session-store", () => {
     const loaded = await store.load(session.id);
     expect(loaded?.updatedAt).toBe(2000);
   });
+
+  it("does not persist session files when no-persistence mode is enabled", async () => {
+    const previous = process.env.AGENT_PRIVACY_PERSISTENCE_MODE;
+    process.env.AGENT_PRIVACY_PERSISTENCE_MODE = "disabled";
+    try {
+      tempDir = await mkdtemp(path.join(tmpdir(), "agent-session-store-"));
+      const store = new SessionStore(path.join(tempDir, ".sessions"));
+      const session = createAgentSessionRecord("session_private", 1000);
+
+      await store.save(session);
+
+      await expect(readFile(path.join(tempDir, ".sessions", "session_session_private.json"), "utf8")).rejects.toBeTruthy();
+      expect(await store.list()).toEqual([]);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.AGENT_PRIVACY_PERSISTENCE_MODE;
+      } else {
+        process.env.AGENT_PRIVACY_PERSISTENCE_MODE = previous;
+      }
+    }
+  });
 });

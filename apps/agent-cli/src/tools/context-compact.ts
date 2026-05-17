@@ -6,7 +6,7 @@ import type {
   ChatCompletionMessageParam,
   ChatCompletionTool,
 } from "openai/resources/chat/completions";
-import { RUNTIME_CONFIG } from "../runtime-config.js";
+import { RUNTIME_CONFIG, isLocalPersistenceEnabled } from "../runtime-config.js";
 import { sanitizeAndRedactValue } from "../security/data-hygiene.js";
 import { buildArtifactMetadata, isExpired } from "../security/local-retention.js";
 
@@ -64,6 +64,9 @@ async function writeTranscriptSnapshot(
   phase: "before" | "after",
   stamp: number,
 ): Promise<string> {
+  if (!isLocalPersistenceEnabled()) {
+    return `[disabled by privacy mode: transcript ${phase} persistence skipped]`;
+  }
   const dir = path.join(process.cwd(), ".transcripts");
   await mkdir(dir, { recursive: true });
   await cleanupTranscriptSnapshots(dir);

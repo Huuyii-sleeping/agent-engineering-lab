@@ -1,5 +1,6 @@
 import { DaemonLock } from "../entrypoints/daemon-lock.js";
 import type { DaemonLockStatus } from "../entrypoints/daemon-lock.js";
+import { isRemoteAttachAllowed } from "../runtime-config.js";
 import { AgentServiceClient } from "./client.js";
 
 export type RunningDaemonServiceClient = {
@@ -45,6 +46,9 @@ export async function probeDaemonServiceClient(
 export async function resolveRunningDaemonServiceClient(
   options: ResolveRunningDaemonServiceClientOptions = {},
 ): Promise<RunningDaemonServiceClient | null> {
+  if (!isRemoteAttachAllowed()) {
+    return null;
+  }
   const probed = await probeDaemonServiceClient(options);
   if (probed.error) {
     throw probed.error;
