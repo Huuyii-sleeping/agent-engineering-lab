@@ -18,11 +18,16 @@ describe("cli-doctor", () => {
     delete process.env.MODEL_ID;
     const report = await runCliDoctor();
     const modelCheck = report.checks.find((check) => check.id === "model-id");
+    const memoryCheck = report.checks.find((check) => check.id === "memory");
 
     expect(modelCheck).toMatchObject({
       severity: "error",
       suggestion: "set MODEL_ID before running natural-language agent queries",
     });
+    expect(memoryCheck).toMatchObject({
+      severity: "pass",
+    });
+    expect(memoryCheck?.reason).toContain("reserved_gaps=");
   });
 
   it("collects runtime status using provided tool metadata", async () => {

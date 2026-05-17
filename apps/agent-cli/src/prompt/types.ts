@@ -1,4 +1,4 @@
-export type StablePromptSectionId = "core" | "tools" | "skills" | "rules";
+export type StablePromptSectionId = "core" | "tools" | "skills" | "rules" | "agent_memory";
 export type DynamicPromptSectionId = "memory" | "dynamic";
 export type PromptSectionId = StablePromptSectionId | DynamicPromptSectionId;
 
@@ -13,6 +13,14 @@ export type StaticPromptSource = {
   tools: string[];
   skills: string[];
   rules: string[];
+  agentMemory?: {
+    agentType: string;
+    scope: "user" | "project" | "local";
+    mode: "read_write" | "read_only" | "disabled";
+    memoryDir: string;
+    entrypoint: string;
+    currentIndex?: string;
+  };
 };
 
 export type PromptBuilderInput = StaticPromptSource & {

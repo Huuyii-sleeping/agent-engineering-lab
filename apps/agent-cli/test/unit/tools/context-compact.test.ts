@@ -63,6 +63,35 @@ describe("tools/context-compact", () => {
     expect(files.some((file) => file.endsWith(".meta.json"))).toBe(true);
   });
 
+  it("writes session memory and reuses it on later compacts", async () => {
+    await withWorkspace();
+
+    const first = await compactMessages(
+      {
+        sessionId: "s123",
+        messages: [
+          { role: "user", content: "We decided to use durable markdown memory." },
+          { role: "assistant", content: "Recorded." },
+          { role: "user", content: "Continue with migration." },
+        ],
+      },
+      "manual",
+      1,
+    );
+    const sessionMemoryPath = path.join(process.cwd(), ".sessions", "s123", "session-memory.md");
+    const sessionMemoryRaw = await readFile(sessionMemoryPath, "utf8");
+
+    const messages = [
+      { role: "user" as const, content: "New request" },
+      { role: "assistant" as const, content: "Working" },
+    ];
+    await compactMessages({ sessionId: "s123", messages }, "manual", 1);
+
+    expect(first.sessionMemoryPath).toBe(".sessions/s123/session-memory.md");
+    expect(sessionMemoryRaw).toContain("We decided to use durable markdown memory.");
+    expect(messages[0]?.content).toContain("Session memory summary");
+  });
+
   it("skips transcript snapshot persistence when no-persistence mode is enabled", async () => {
     const previous = process.env.AGENT_PRIVACY_PERSISTENCE_MODE;
     process.env.AGENT_PRIVACY_PERSISTENCE_MODE = "disabled";

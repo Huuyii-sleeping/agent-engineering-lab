@@ -37,4 +37,30 @@ describe("buildPromptEnvelope", () => {
     ]);
     expect(result.dynamicSections.map((section) => section.id)).toEqual(["memory", "dynamic", "dynamic"]);
   });
+
+  it("adds agent memory guidance when an agent definition declares memory", () => {
+    const result = buildPromptEnvelope({
+      core: "core prompt",
+      tools: [],
+      skills: [],
+      rules: [],
+      memoryContext: null,
+      dynamicMessages: [],
+      agentMemory: {
+        agentType: "reviewer",
+        scope: "project",
+        mode: "read_write",
+        memoryDir: ".agent/agent-memory/reviewer",
+        entrypoint: "MEMORY.md",
+        currentIndex: "# Memory Index\n\n- prefer strict reviews",
+      },
+    });
+
+    expect(result.primarySystemPrompt).toContain("## Agent Memory");
+    expect(result.primarySystemPrompt).toContain("agentType=reviewer");
+    expect(result.primarySystemPrompt).toContain("scope=project");
+    expect(result.primarySystemPrompt).toContain(".agent/agent-memory/reviewer");
+    expect(result.primarySystemPrompt).toContain("prefer strict reviews");
+    expect(result.stableSections.map((section) => section.id)).toContain("agent_memory");
+  });
 });

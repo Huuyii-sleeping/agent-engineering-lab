@@ -1,147 +1,84 @@
-# Memory 模块说明
+# Memory Module
 
-本目录是 `agent-cli` 的记忆子系统实现。
+This directory owns the local memory subsystem for `agent-cli`.
 
-目标：
+## Current Layers
 
-- 将 memory 业务逻辑独立于 tool 注册层；
-- 保持单文件单职责；
-- 对外 API 稳定，兼容 agent loop 中的 tool 调用。
-
-## 架构
-
-调用链：
-
-1. 工具层：`src/tools/memory.ts`
-2. 服务层：`src/memory/service.ts`
-3. 细分子模块：`store/retrieval/injection/extractor/scorer/...`
-
-数据落盘：
-
-- 运行时记忆文件位于当前工作目录下 `.memory/`
+- JSONL compatibility layer:
   - `.memory/short_term.jsonl`
   - `.memory/long_term.jsonl`
+- Durable project memory:
+  - `.memory/projects/<project-key>/memory/MEMORY.md`
+  - `.memory/projects/<project-key>/memory/memories/*.md`
+  - `.memory/projects/<project-key>/memory/.metadata/index.json`
+  - `.memory/projects/<project-key>/memory/.metadata/events.jsonl`
 
-## 文件职责
+The JSONL layer remains compatible with existing tools. New durable entries are also written as human-readable markdown topics with a machine-readable index and append-only audit events.
 
-- `types.ts`
-  - 领域类型定义（`MemoryType`、`MemoryLayer`、`MemoryEntry`、`SearchHit`）
+## Responsibilities
 
-- `response.ts`
-  - 面向 tool 返回值的统一 JSON 字符串封装：
-    - `ok(...)`
-    - `fail(...)`
+- `types.ts`: shared memory types, including JSONL entries, durable topics, scopes, and search hits.
+- `files.ts`: durable markdown memory store, path resolution, index rebuild, doctor snapshot, and audit events.
+- `store.ts`: compatibility facade that writes short-term, long-term, and durable project memory.
+- `retrieval.ts`: search/list orchestration across JSONL and durable memory with hybrid keyword, bigram, and local hashed-vector scoring.
+- `injection.ts`: `<memory_context>` formatting with provenance, scope, path, and reason.
+- `extractor.ts`: rule-based candidate extraction from Chinese and English user text.
+- `service.ts`: tool-facing API for add/search/list/explain/doctor/rebuild-index/team-sync/session-summary.
+- `response.ts`: consistent JSON tool responses.
 
-- `normalize.ts`
-  - 输入归一化与安全默认值：
-    - memory type 归一化
-    - tags 清洗与数量上限
-    - confidence 夹紧到 `[0, 1]`
-    - 文本归一化工具
+## Tool Surface
 
-- `jsonl.ts`
-  - JSONL 解析与序列化工具
-  - 解析时容忍坏行（跳过 malformed line）
+- `memory_add`: writes redacted memory to short-term, long-term, and durable project memory.
+- `memory_search`: returns ranked memory hits.
+- `memory_list`: lists entries by `short_term`, `long_term`, `durable`, or `both`.
+- `memory_explain`: explains score, score breakdown, retrieval mode, scope, path, reason, and token cost for matched entries.
+- `memory_doctor`: reports memory classes, local paths, topic counts, and reserved gaps.
+- `memory_rebuild_index`: rebuilds durable metadata from markdown topic files.
+- `agent_memory_snapshot`: inspects or initializes project/user/local agent memory from `.agent/agent-memory-snapshots/<agentType>`.
+- `memory_migrate_jsonl`: dry-runs or applies migration from `long_term.jsonl` into durable markdown topics.
+- `team_memory_sync`: pushes, pulls, or checks local team memory at `.agent/team-memory/MEMORY.md`.
+- `memory_session_summarize`: writes `.sessions/<sessionId>/session-memory.md` explicitly for later compaction reuse.
 
-- `store.ts`
-  - 持久化边界
-  - 确保 memory 文件存在
-  - 写入 short-term 与 long-term 两层
-  - long-term 按“归一化内容 + type”去重合并
-  - short-term 按运行时配置做容量截断
+## Session Memory
 
-- `scorer.ts`
-  - 检索打分与 token 粗估
-  - 使用轻量混合评分：关键词重叠 + 字符 bigram 相似度 + confidence
+`compact` can write `.sessions/<sessionId>/session-memory.md` when the compact runtime context includes a session id. Later compacts for the same session reuse that summary inside the compacted assistant message. `memory_session_summarize` exposes the same local session-memory target for explicit background-worker summaries.
 
-- `extractor.ts`
-  - 从用户文本做启发式候选抽取
-  - 生成结构化候选（`type/content/confidence/tags`）供自动记忆写入
+This is a deterministic local summary path, not yet a model-backed background summarizer.
 
-- `retrieval.ts`
-  - 搜索/列表编排工具：
-    - 层解析（layer parsing）
-    - limit 解析
-    - 多层聚合
-    - 过滤与排序
+## Agent Memory
 
-- `injection.ts`
-  - 基于排序命中的 `SearchHit[]` 构建 `<memory_context>...</memory_context>` 注入块
-  - 约束 top-k 与 token 预算
+Agent memory path helpers support `user`, `project`, and `local` scopes:
 
-- `service.ts`
-  - 供外部调用的统一 API 面
-  - 对外函数：
-    - `runMemoryAdd`
-    - `runMemorySearch`
-    - `runMemoryList`
-    - `autoExtractMemory`
-    - `buildMemoryInjectionForQuery`
-  - 仅做编排，不承载底层细节实现
+- user: `.memory/agent-memory/<agentType>/`
+- project: `.agent/agent-memory/<agentType>/`
+- local: `.agent/agent-memory-local/<agentType>/`
 
-## 对外 API 契约
+Snapshot initialization copies `.agent/agent-memory-snapshots/<agentType>/` into the selected agent memory directory only when the destination is empty.
 
-tool-facing 函数返回 JSON 字符串：
+Agent definitions can bind memory into the stable prompt through the `Agent Memory` prompt section. The section records agent type, scope, mode, memory directory, entrypoint, and the current index when available.
 
-- `runMemoryAdd(...)`
-  - 成功：`{ ok: true, entry: ... }`
-  - 失败：`{ ok: false, error: { code, message } }`
+## Team Memory
 
-- `runMemorySearch(...)`
-  - 成功：`{ ok: true, query, hits: SearchHit[] }`
-  - 失败：`{ ok: false, error: { code, message } }`
+Local team memory sync is implemented through `.agent/team-memory/MEMORY.md`. It supports `status`, `pull`, and `push` with checksums so multiple local agents can share a deterministic file contract. Managed remote/cloud team memory remains reserved.
 
-- `runMemoryList(...)`
-  - 成功：`{ ok: true, memories: [{ layer, entry }] }`
+## Retrieval
 
-注入函数返回结构化对象：
+`memory_search` and `memory_explain` use `hybrid_keyword_bigram_local_vector`: keyword overlap, character bigram Jaccard similarity, deterministic local hashed-vector cosine similarity, confidence, and recency. No external embedding service is required for the local vector score.
 
-- `buildMemoryInjectionForQuery(query)`
-  - `{ content: string | null, usedEntries: number, estimatedTokens: number }`
+## Reserved Gaps
 
-## 运行时配置
+The local durable foundation, compact session memory, explicit session summaries, agent memory prompt binding, agent memory path guards, snapshot initialization, local team memory sync, local vector scoring, and JSONL migration are implemented. These capabilities are intentionally exposed as reserved gaps until they are built:
 
-配置定义于 `src/runtime-config.ts`：
+- Managed Team Memory remote/cloud sync
+- Model-backed Session Memory background summaries
+- External embedding service integration
 
-- `AGENT_MEMORY_SHORT_TERM_LIMIT`
-  - short-term 最大保留条数
+## Verification
 
-- `AGENT_MEMORY_SEARCH_DEFAULT_LIMIT`
-  - memory search 默认返回条数
-
-- `AGENT_MEMORY_INJECT_TOP_K`
-  - 注入阶段最多考虑的命中数
-
-- `AGENT_MEMORY_INJECT_MAX_TOKENS`
-  - 注入块的近似 token 上限
-
-## 关键设计说明
-
-- 工具层保持薄：
-  - `src/tools/memory.ts` 只定义 schema 与转发调用
-- 业务逻辑可测试：
-  - 主要逻辑集中在 `src/memory/*`
-- 保持 JSON 字符串兼容：
-  - 现有 tool runtime 仍以字符串作为函数返回值
-- 注入避免 JSON 往返：
-  - 注入流程直接使用结构化 hits，不再先走 tool JSON 再反序列化
-
-## 验证
-
-常用命令：
+Common checks:
 
 ```bash
-pnpm build
-pnpm test:memory
-pnpm test:regression
+pnpm --filter agent-cli test -- test/unit/memory/store.test.ts
+pnpm --filter agent-cli test:memory
+pnpm --filter agent-cli build
 ```
-
-memory smoke 测试文件：
-
-- `test/smoke/prd08-memory-smoke.ts`
-
-## 扩展点
-
-- 在 `scorer.ts` 中将 `scoreEntry` 替换为 embedding/vector 检索
-- 将 `extractor.ts` 从规则抽取升级为模型辅助抽取
-- 在 `store.ts` 增强元数据与索引（例如 TTL、source 分类、多项目命名空间）

@@ -5,9 +5,10 @@ import { sanitizeAndRedactText } from "../security/data-hygiene.js";
 import { buildArtifactMetadata, isExpired } from "../security/local-retention.js";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
 import { nowTimestampMs, parseTimestampMs } from "../time.js";
+import { DurableMemoryStore } from "./files.js";
 import { parseJsonl, toJsonl } from "./jsonl.js";
 import { asMemoryType, asTags, normalizeConfidence, normalizeMemoryText } from "./normalize.js";
-import type { MemoryEntry } from "./types.js";
+import type { DurableMemoryTopic, MemoryEntry } from "./types.js";
 
 function makeId(): string {
   return `mem_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -30,6 +31,7 @@ function dedupLongTerm(items: MemoryEntry[], next: MemoryEntry): MemoryEntry[] {
 export class MemoryStore {
   private initRoot: string | null = null;
   private initPromise: Promise<void> | null = null;
+  private readonly durable = new DurableMemoryStore();
 
   private paths(): { root: string; shortPath: string; longPath: string } {
     const root = path.join(process.cwd(), ".memory");
@@ -125,6 +127,10 @@ export class MemoryStore {
       expiresAt: buildArtifactMetadata("memory_long_term", entry.updatedAt).expiresAt,
     });
     await this.saveLayer("long_term", merged);
+    await this.durable.upsert({
+      ...entry,
+      expiresAt: buildArtifactMetadata("memory_long_term", entry.updatedAt).expiresAt,
+    });
 
     return entry;
   }
@@ -153,6 +159,30 @@ export class MemoryStore {
     }
     await this.saveLayer("short_term", nextShort);
     await this.saveLayer("long_term", nextLong);
+    await this.durable.delete(id);
     return true;
+  }
+
+  async listDurable(): Promise<DurableMemoryTopic[]> {
+    return this.durable.listTopics();
+  }
+
+  async upsertDurable(entry: MemoryEntry): Promise<DurableMemoryTopic> {
+    return this.durable.upsert(entry);
+  }
+
+  async rebuildDurableIndex(): Promise<{ rebuiltTopics: number; topics: DurableMemoryTopic[] }> {
+    return this.durable.rebuildIndex();
+  }
+
+  async durableDoctor(): Promise<{
+    root: string;
+    scope: "project";
+    status: "available" | "empty";
+    topicCount: number;
+    indexPath: string;
+    eventsPath: string;
+  }> {
+    return this.durable.doctor();
   }
 }

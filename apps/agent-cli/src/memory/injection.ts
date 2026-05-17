@@ -16,7 +16,15 @@ export function buildMemoryInjectionFromHits(hits: SearchHit[]): {
   let count = 0;
 
   for (const hit of hits.slice(0, RUNTIME_CONFIG.memoryInjectTopK)) {
-    const line = `- (${hit.layer}) [${hit.type}] score=${hit.score} source=${hit.source}: ${hit.content}`;
+    const provenance = [
+      `layer=${hit.layer}`,
+      hit.scope ? `scope=${hit.scope}` : "",
+      hit.path ? `path=${hit.path}` : "",
+      hit.reason ? `reason=${hit.reason}` : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const line = `- (${provenance}) [${hit.type}] score=${hit.score} source=${hit.source}: ${hit.content}`;
     const next = estimateTokens(`${lines.join("\n")}\n${line}`);
     if (next > RUNTIME_CONFIG.memoryInjectMaxTokens) {
       break;

@@ -1,9 +1,16 @@
 import {
   autoExtractMemory,
   buildMemoryInjectionForQuery,
+  runAgentMemorySnapshot,
   runMemoryAdd,
+  runMemoryDoctor,
+  runMemoryExplain,
   runMemoryList,
+  runMemoryMigrateJsonl,
+  runMemoryRebuildIndex,
   runMemorySearch,
+  runMemorySessionSummarize,
+  runTeamMemorySync,
 } from "../tools/memory.js";
 
 export type MemoryInjectionResult = {
@@ -45,6 +52,34 @@ export class MemoryService implements MemoryServiceLike {
 
   async runList(layer?: unknown, limit?: unknown): Promise<string> {
     return runMemoryList(layer, limit);
+  }
+
+  async runExplain(query: unknown, limit?: unknown, layer?: unknown, type?: unknown): Promise<string> {
+    return runMemoryExplain(query, limit, layer, type);
+  }
+
+  async runDoctor(): Promise<string> {
+    return runMemoryDoctor();
+  }
+
+  async runRebuildIndex(): Promise<string> {
+    return runMemoryRebuildIndex();
+  }
+
+  async runAgentSnapshot(agentType: unknown, scope?: unknown, action?: unknown): Promise<string> {
+    return runAgentMemorySnapshot(agentType, scope, action);
+  }
+
+  async runMigrateJsonl(mode?: unknown): Promise<string> {
+    return runMemoryMigrateJsonl(mode);
+  }
+
+  async runTeamSync(action?: unknown, content?: unknown): Promise<string> {
+    return runTeamMemorySync(action, content);
+  }
+
+  async runSessionSummarize(sessionId: unknown, summary: unknown): Promise<string> {
+    return runMemorySessionSummarize(sessionId, summary);
   }
 }
 

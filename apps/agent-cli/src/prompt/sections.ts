@@ -35,6 +35,27 @@ export function buildStablePromptSections(source: StaticPromptSource): PromptSec
     sections.push({ id: "rules", title: "Rules", content: rules });
   }
 
+  const agentMemory = source.agentMemory;
+  if (agentMemory && agentMemory.mode !== "disabled") {
+    const lines = [
+      `agentType=${agentMemory.agentType}`,
+      `scope=${agentMemory.scope}`,
+      `mode=${agentMemory.mode}`,
+      `memoryDir=${agentMemory.memoryDir}`,
+      `entrypoint=${agentMemory.entrypoint}`,
+      "",
+      "Use this agent memory as durable role-specific guidance. Read it before making role-specific decisions.",
+      agentMemory.mode === "read_write"
+        ? "When durable role knowledge changes, update files only under memoryDir."
+        : "Treat this memory as read-only; do not modify files under memoryDir.",
+    ];
+    const currentIndex = normalizeText(agentMemory.currentIndex ?? "");
+    if (currentIndex) {
+      lines.push("", "Current index:", currentIndex);
+    }
+    sections.push({ id: "agent_memory", title: "Agent Memory", content: joinLines(lines) });
+  }
+
   return sections;
 }
 

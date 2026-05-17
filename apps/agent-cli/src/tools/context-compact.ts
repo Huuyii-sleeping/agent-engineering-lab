@@ -15,6 +15,7 @@ const SUMMARY_LINE_LIMIT = 24;
 const SUMMARY_ITEM_CHAR_LIMIT = 160;
 
 export type CompactRuntimeContext = {
+  sessionId?: string | null;
   messages: ChatCompletionMessageParam[];
 };
 
@@ -27,6 +28,7 @@ type CompactResult = {
   transcriptPath: string;
   transcriptBeforePath: string;
   transcriptAfterPath: string;
+  sessionMemoryPath: string | null;
   keptRecent: number;
   oldMessageCount: number;
   newMessageCount: number;
@@ -91,6 +93,10 @@ async function writeTranscriptSnapshot(
   return path.relative(process.cwd(), full).replace(/\\/g, "/");
 }
 
+function safeSessionId(sessionId: string): string {
+  return sessionId.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120) || "default";
+}
+
 async function cleanupTranscriptSnapshots(dir: string): Promise<void> {
   const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
   for (const entry of entries) {
@@ -142,6 +148,42 @@ function summarizeMessages(messages: ChatCompletionMessageParam[]): string {
   return lines.join("\n");
 }
 
+async function readSessionMemory(sessionId?: string | null): Promise<{ path: string; content: string } | null> {
+  const id = String(sessionId ?? "").trim();
+  if (!id || !isLocalPersistenceEnabled()) {
+    return null;
+  }
+  const relativePath = path.join(".sessions", safeSessionId(id), "session-memory.md");
+  const full = path.join(process.cwd(), relativePath);
+  const content = await readFile(full, "utf8").catch(() => "");
+  return content.trim() ? { path: relativePath.replace(/\\/g, "/"), content } : null;
+}
+
+async function writeSessionMemory(
+  sessionId: string | null | undefined,
+  older: ChatCompletionMessageParam[],
+  summary: string,
+): Promise<string | null> {
+  const id = String(sessionId ?? "").trim();
+  if (!id || !isLocalPersistenceEnabled() || older.length === 0) {
+    return null;
+  }
+  const dir = path.join(process.cwd(), ".sessions", safeSessionId(id));
+  await mkdir(dir, { recursive: true });
+  const full = path.join(dir, "session-memory.md");
+  const content = [
+    "# Session memory summary",
+    "",
+    `updatedAt: ${new Date().toISOString()}`,
+    `messageCount: ${older.length}`,
+    "",
+    summary || "- (no older text content)",
+    "",
+  ].join("\n");
+  await writeFile(full, content, "utf8");
+  return path.relative(process.cwd(), full).replace(/\\/g, "/");
+}
+
 export async function compactMessages(
   context: CompactRuntimeContext,
   reason: "manual" | "auto",
@@ -162,11 +204,16 @@ export async function compactMessages(
   const older = oldMessages.slice(0, splitAt);
   const recent = oldMessages.slice(splitAt);
   const summary = summarizeMessages(older);
+  const previousSessionMemory = await readSessionMemory(context.sessionId);
+  const sessionMemoryPath = await writeSessionMemory(context.sessionId, older, summary);
+  const sessionMemoryPrefix = previousSessionMemory
+    ? `Session memory summary reused from ${previousSessionMemory.path}:\n${previousSessionMemory.content}\n\n`
+    : "";
   const compactedMessage: ChatCompletionMessageParam = {
     role: "assistant",
     content:
       `Context compacted (${reason}). ` +
-      `Summary of ${older.length} earlier messages:\n${summary || "- (no older text content)"}`,
+      `${sessionMemoryPrefix}Summary of ${older.length} earlier messages:\n${summary || "- (no older text content)"}`,
   };
 
   const newMessages = older.length > 0 ? [compactedMessage, ...recent] : recent;
@@ -181,6 +228,7 @@ export async function compactMessages(
     transcriptPath: transcriptBeforePath,
     transcriptBeforePath,
     transcriptAfterPath,
+    sessionMemoryPath,
     keptRecent: keepRecent,
     oldMessageCount: oldMessages.length,
     newMessageCount: context.messages.length,

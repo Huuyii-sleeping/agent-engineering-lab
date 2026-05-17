@@ -14,6 +14,7 @@ import {
 } from "./ui.js";
 import { loadHooksConfig } from "../hooks/config.js";
 import { readModelUsageSnapshot } from "../model-policy.js";
+import { runMemoryDoctor } from "../memory/service.js";
 import { loadMcpServerConfigs } from "../tools/mcp-config.js";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
 import { listWorkspaceRoots } from "../workspace-roots.js";
@@ -121,6 +122,11 @@ export async function runCliDoctor(): Promise<CliDoctorReport> {
   const hookCount = await countHooks();
   const approvals = await collectCliApprovalSummary();
   const roots = listWorkspaceRoots();
+  const memoryDoctor = JSON.parse(await runMemoryDoctor()) as {
+    ok?: boolean;
+    scopes?: Array<{ scope?: string; status?: string; topicCount?: number }>;
+    reservedGaps?: Array<{ id?: string; status?: string }>;
+  };
 
   checks.push({
     id: "node-version",
@@ -230,6 +236,16 @@ export async function runCliDoctor(): Promise<CliDoctorReport> {
     severity: "pass",
     reason: `${roots.length} readable root(s) active`,
     suggestion: roots.length > 1 ? "" : "run /add-dir <path> if your task spans multiple directories",
+  });
+
+  const projectMemory = memoryDoctor.scopes?.find((scope) => scope.scope === "project");
+  const reservedGaps = memoryDoctor.reservedGaps?.filter((gap) => gap.status === "reserved_gap").length ?? 0;
+  checks.push({
+    id: "memory",
+    label: "memory",
+    severity: memoryDoctor.ok ? "pass" : "warn",
+    reason: `project=${projectMemory?.status ?? "unknown"} topics=${projectMemory?.topicCount ?? 0}; reserved_gaps=${reservedGaps}`,
+    suggestion: reservedGaps > 0 ? "run memory_doctor for Agent/Session/Team memory reserved gaps" : "",
   });
 
   return { checks };
