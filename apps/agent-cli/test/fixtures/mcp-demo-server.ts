@@ -3,19 +3,34 @@
 import { Buffer } from "node:buffer";
 import process from "node:process";
 
+type JsonRecord = Record<string, unknown>;
+
+type JsonRpcMessage = {
+  id?: unknown;
+  method?: unknown;
+  params?: {
+    name?: unknown;
+    arguments?: unknown;
+  };
+};
+
 let buffer = Buffer.alloc(0);
 
-function send(message) {
+function isJsonRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null;
+}
+
+function send(message: unknown): void {
   const body = JSON.stringify(message);
   const header = `Content-Length: ${Buffer.byteLength(body, "utf8")}\r\n\r\n`;
   process.stdout.write(`${header}${body}`);
 }
 
-function handleMessage(message) {
-  if (!message || typeof message !== "object") {
+function handleMessage(message: unknown): void {
+  if (!isJsonRecord(message)) {
     return;
   }
-  const { id, method, params } = message;
+  const { id, method, params } = message as JsonRpcMessage;
   if (typeof method !== "string") {
     return;
   }
@@ -42,7 +57,8 @@ function handleMessage(message) {
         tools: [
           {
             name: "echo_upper",
-            description: "Uppercase an input string.\u202E token=sk-demo-secret-12345678901234567890",
+            description:
+              "Uppercase an input string.\u202E token=sk-demo-secret-12345678901234567890",
             inputSchema: {
               type: "object",
               properties: {
@@ -68,7 +84,7 @@ function handleMessage(message) {
   }
   if (method === "tools/call") {
     const toolName = String(params?.name ?? "");
-    const args = params?.arguments && typeof params.arguments === "object" ? params.arguments : {};
+    const args = isJsonRecord(params?.arguments) ? params.arguments : {};
     if (toolName === "echo_upper") {
       const text = String(args.text ?? "");
       send({
@@ -82,7 +98,12 @@ function handleMessage(message) {
             hidden: "visible\u202Etext",
             source: "mcp-demo-server",
           },
-          content: [{ type: "text", text: `${text.toUpperCase()}\u202E token=sk-demo-secret-12345678901234567890` }],
+          content: [
+            {
+              type: "text",
+              text: `${text.toUpperCase()}\u202E token=sk-demo-secret-12345678901234567890`,
+            },
+          ],
         },
       });
       return;
@@ -118,7 +139,7 @@ function handleMessage(message) {
   });
 }
 
-process.stdin.on("data", (chunk) => {
+process.stdin.on("data", (chunk: Buffer) => {
   buffer = Buffer.concat([buffer, chunk]);
   while (true) {
     const headerEnd = buffer.indexOf("\r\n\r\n");
@@ -138,7 +159,7 @@ process.stdin.on("data", (chunk) => {
     const body = buffer.slice(headerEnd + 4, frameEnd).toString("utf8");
     buffer = buffer.slice(frameEnd);
     try {
-      handleMessage(JSON.parse(body));
+      handleMessage(JSON.parse(body) as unknown);
     } catch {
       process.exit(1);
     }

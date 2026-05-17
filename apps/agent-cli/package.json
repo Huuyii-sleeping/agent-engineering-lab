@@ -25,7 +25,7 @@
     "test:delivery": "tsx test/smoke/prd10-delivery-smoke.ts",
     "test:model-policy": "tsx test/smoke/prd11-model-policy-smoke.ts",
     "test:service-api": "tsx test/smoke/prd12-service-api-smoke.ts",
-    "test:daemon": "node test/smoke/prd20-daemon-control-smoke.mjs",
+    "test:daemon": "tsx test/smoke/prd20-daemon-control-smoke.ts",
     "replay:trace": "tsx src/observability/replay-cli.ts",
     "test": "vitest run --no-cache",
     "lint": "eslint . --ext .ts",

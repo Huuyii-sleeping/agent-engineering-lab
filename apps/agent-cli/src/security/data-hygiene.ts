@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 
-const HIDDEN_CONTROL_REGEX = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g;
+/* eslint-disable no-control-regex */
+const HIDDEN_CONTROL_REGEX = new RegExp(
+  "[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F-\\u009F]",
+  "g",
+);
+/* eslint-enable no-control-regex */
 const BIDI_CONTROL_REGEX = /[\u200E\u200F\u202A-\u202E\u2066-\u2069]/g;
 
 const SECRET_TEXT_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
@@ -51,7 +56,13 @@ export function sanitizeVisibleText(value: string): string {
 export function redactSecretText(value: string): string {
   let next = value.replace(SECRET_ASSIGNMENT_REGEX, (match, prefix: string) => {
     const trimmed = match.slice(prefix.length).trimStart();
-    const wrapper = trimmed.startsWith('"') ? '"' : trimmed.startsWith("'") ? "'" : trimmed.startsWith("`") ? "`" : "";
+    const wrapper = trimmed.startsWith('"')
+      ? '"'
+      : trimmed.startsWith("'")
+        ? "'"
+        : trimmed.startsWith("`")
+          ? "`"
+          : "";
     return `${prefix}${wrapper}[REDACTED_SECRET]${wrapper}`;
   });
   for (const { pattern, replacement } of SECRET_TEXT_PATTERNS) {

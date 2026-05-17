@@ -11,7 +11,8 @@ function assert(condition: unknown, message: string): void {
   }
 }
 
-const fixtureServerPath = path.resolve(process.cwd(), "test/fixtures/mcp-demo-server.mjs");
+const fixtureServerPath = path.resolve(process.cwd(), "test/fixtures/mcp-demo-server.ts");
+const tsxCliPath = path.resolve(process.cwd(), "node_modules/tsx/dist/cli.mjs");
 
 async function withWorkspace<T>(name: string, fn: () => Promise<T>): Promise<T> {
   const dir = await mkdtemp(path.join(tmpdir(), `${name}-`));
@@ -36,7 +37,8 @@ async function writeMcpConfig(): Promise<void> {
           {
             name: "demo",
             command: process.execPath,
-            args: [fixtureServerPath],
+            args: [tsxCliPath, fixtureServerPath],
+            trusted: true,
           },
         ],
       },
@@ -51,13 +53,14 @@ async function main(): Promise<void> {
   await withWorkspace("prd19-mcp-smoke", async () => {
     await writeMcpConfig();
 
-    const [{ agentLoop }, { withCompactRuntimeContext }, toolsModule, securityModule, mcpModule] = await Promise.all([
-      import("../../src/agent-loop.js"),
-      import("../../src/tools/context-compact.js"),
-      import("../../src/tools/index.js"),
-      import("../../src/tools/security.js"),
-      import("../../src/tools/mcp.js"),
-    ]);
+    const [{ agentLoop }, { withCompactRuntimeContext }, toolsModule, securityModule, mcpModule] =
+      await Promise.all([
+        import("../../src/agent-loop.js"),
+        import("../../src/tools/context-compact.js"),
+        import("../../src/tools/index.js"),
+        import("../../src/tools/security.js"),
+        import("../../src/tools/mcp.js"),
+      ]);
 
     const tools = await toolsModule.listTools();
     const externalTool = tools.find(
@@ -72,7 +75,10 @@ async function main(): Promise<void> {
     );
 
     const approval = JSON.parse(
-      await securityModule.runSecurityRequestApproval("mcp__demo__echo_upper", '{"text":"mixed round"}'),
+      await securityModule.runSecurityRequestApproval(
+        "mcp__demo__echo_upper",
+        '{"text":"mixed round"}',
+      ),
     ) as { request?: { request_id?: string } };
     await securityModule.runSecurityApprove(approval.request?.request_id);
 
@@ -135,7 +141,9 @@ async function main(): Promise<void> {
       },
     } as unknown as OpenAI;
 
-    const messages: ChatCompletionMessageParam[] = [{ role: "user", content: "run native and mcp in one round" }];
+    const messages: ChatCompletionMessageParam[] = [
+      { role: "user", content: "run native and mcp in one round" },
+    ];
     await withCompactRuntimeContext({ messages }, async () =>
       agentLoop({
         client,
@@ -170,9 +178,18 @@ async function main(): Promise<void> {
     };
     assert(typeof nativeOutput.id === "number", "task_create should produce a task id");
     assert(mcpOutput.echoed === "MIXED ROUND", "mcp tool should uppercase the payload");
-    assert(mcpOutput.secret === "token=[REDACTED_SECRET]", "mcp output should redact secret-like content");
-    assert(mcpOutput.hidden === "visibletext", "mcp output should remove hidden control characters");
-    assert(messages[messages.length - 1]?.role === "assistant", "assistant reply should be appended");
+    assert(
+      mcpOutput.secret === "token=[REDACTED_SECRET]",
+      "mcp output should redact secret-like content",
+    );
+    assert(
+      mcpOutput.hidden === "visibletext",
+      "mcp output should remove hidden control characters",
+    );
+    assert(
+      messages[messages.length - 1]?.role === "assistant",
+      "assistant reply should be appended",
+    );
     assert(
       typeof messages[messages.length - 1]?.content === "string" &&
         messages[messages.length - 1]?.content.includes("mixed round complete"),

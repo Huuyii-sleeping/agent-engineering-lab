@@ -42,7 +42,10 @@ import { CliTranscriptBrowserStore } from "./transcript.js";
 import type { CliWorkflowMode } from "./workflow.js";
 import { createClient, getStaticPromptSource } from "../config.js";
 import { summarizeDeliveryReport } from "../delivery/types.js";
-import { dropPendingApprovalReplay, popPendingApprovalReplay } from "../runtime/query-tool-approvals.js";
+import {
+  dropPendingApprovalReplay,
+  popPendingApprovalReplay,
+} from "../runtime/query-tool-approvals.js";
 import { analyzeToolOutput, markWriteSideEffect } from "../runtime/query-tool-results.js";
 import { parseToolArgs } from "../runtime/tool-runtime.js";
 import type { AgentRuntimeState } from "../runtime/query-types.js";
@@ -94,13 +97,17 @@ function createCliSession(): CliSessionRecord {
   return { ...record, changedPaths: new Set<string>() };
 }
 
-function createShellAppRuntime(
-  overrides: RunCliOverrides,
-): { app: AgentAppRuntimeDeps; startupIssue: Error | null } {
+function createShellAppRuntime(overrides: RunCliOverrides): {
+  app: AgentAppRuntimeDeps;
+  startupIssue: Error | null;
+} {
   try {
     return { app: createAgentAppRuntime(overrides), startupIssue: null };
   } catch (error) {
-    if (error instanceof Error && error.message.includes("Missing environment variable: MODEL_ID")) {
+    if (
+      error instanceof Error &&
+      error.message.includes("Missing environment variable: MODEL_ID")
+    ) {
       return {
         app: createAgentAppRuntime({
           ...overrides,
@@ -116,7 +123,12 @@ function createShellAppRuntime(
 }
 
 function toCliSessionSummary(
-  session: { id: string; busy: boolean; history: ChatCompletionMessageParam[]; messageCount?: number },
+  session: {
+    id: string;
+    busy: boolean;
+    history: ChatCompletionMessageParam[];
+    messageCount?: number;
+  },
   activeSessionId: string | null,
 ): { id: string; messageCount: number; busy: boolean; active: boolean } {
   return {
@@ -134,7 +146,11 @@ function formatError(error: unknown): string {
   return String(error);
 }
 
-function parseToolJson(raw: string): { ok: boolean; data: Record<string, unknown>; message: string } {
+function parseToolJson(raw: string): {
+  ok: boolean;
+  data: Record<string, unknown>;
+  message: string;
+} {
   try {
     const parsed = JSON.parse(raw) as { ok?: boolean; error?: { message?: unknown } };
     return {
@@ -157,8 +173,7 @@ export function renderAsyncCliEvent(opts: {
 }): void {
   const body = renderCliEvent({
     kind: "scheduled",
-    status:
-      opts.label.includes("error") ? "failed" : opts.label.includes("due") ? "due" : "done",
+    status: opts.label.includes("error") ? "failed" : opts.label.includes("due") ? "due" : "done",
     title: opts.label,
     detail: opts.content.trim() || undefined,
   });
@@ -250,22 +265,22 @@ async function runDaemonCli(opts: {
   const changedPathsBySessionId = new Map<string, Set<string>>();
   let activeSessionId = opts.service.listSessions().at(-1)?.id ?? null;
   let workflow: CliWorkflowMode = "agent";
-  let waitingForInput = false;
   const currentModel = "daemon-host";
   const toolRunner = getInteractiveCliToolRunner(opts.service);
 
   const getSessionSummaries = () =>
     opts.service.listSessions().map((session) => toCliSessionSummary(session, activeSessionId));
-  const getSessionHistory = (sessionId: string | null = activeSessionId): ChatCompletionMessageParam[] => {
+  const getSessionHistory = (
+    sessionId: string | null = activeSessionId,
+  ): ChatCompletionMessageParam[] => {
     if (!sessionId) {
       return [];
     }
-    return (
-      opts.service.listSessions().find((session) => session.id === sessionId)?.history ?? []
-    );
+    return opts.service.listSessions().find((session) => session.id === sessionId)?.history ?? [];
   };
-  const getActiveSessionChangedPaths = (): string[] =>
-    [...(changedPathsBySessionId.get(activeSessionId ?? "__shell__") ?? new Set<string>())];
+  const getActiveSessionChangedPaths = (): string[] => [
+    ...(changedPathsBySessionId.get(activeSessionId ?? "__shell__") ?? new Set<string>()),
+  ];
   const getComposeSessionId = (): string => activeSessionId ?? "__shell__";
   const ensureActiveSession = async (): Promise<string> => {
     if (activeSessionId) {
@@ -314,7 +329,6 @@ async function runDaemonCli(opts: {
     while (true) {
       let query = "";
       try {
-        waitingForInput = true;
         query = await rl.question(
           renderCliPrompt(activeSessionId, getComposerSnapshot(getComposeSessionId()), workflow),
         );
@@ -323,15 +337,16 @@ async function runDaemonCli(opts: {
           break;
         }
         throw error;
-      } finally {
-        waitingForInput = false;
       }
 
       const normalized = query.trim().toLowerCase();
       if (!query.trim() && !composer.isActive(getComposeSessionId())) {
         continue;
       }
-      if (!composer.isActive(getComposeSessionId()) && (normalized === "q" || normalized === "exit")) {
+      if (
+        !composer.isActive(getComposeSessionId()) &&
+        (normalized === "q" || normalized === "exit")
+      ) {
         opts.output.write(
           `${renderCliCloseout({
             sessionId: activeSessionId,
@@ -495,12 +510,26 @@ async function runDaemonCli(opts: {
             query,
           ),
         openPalette: (index) => paletteStore.open(activeSessionId, index),
-        showTranscript: (direction = "current") => transcriptBrowser.history(activeSessionId, getSessionHistory(activeSessionId), direction),
-        searchTranscript: (query) => transcriptBrowser.search(activeSessionId, getSessionHistory(activeSessionId), query),
-        moveTranscriptSearch: (direction) => transcriptBrowser.moveSearch(activeSessionId, getSessionHistory(activeSessionId), direction),
-        peekTranscript: (entryIndex) => transcriptBrowser.peek(activeSessionId, getSessionHistory(activeSessionId), entryIndex),
-        moveTranscriptPeek: (direction) => transcriptBrowser.peekRelative(activeSessionId, getSessionHistory(activeSessionId), direction),
-        tailTranscript: () => transcriptBrowser.tail(activeSessionId, getSessionHistory(activeSessionId)),
+        showTranscript: (direction = "current") =>
+          transcriptBrowser.history(activeSessionId, getSessionHistory(activeSessionId), direction),
+        searchTranscript: (query) =>
+          transcriptBrowser.search(activeSessionId, getSessionHistory(activeSessionId), query),
+        moveTranscriptSearch: (direction) =>
+          transcriptBrowser.moveSearch(
+            activeSessionId,
+            getSessionHistory(activeSessionId),
+            direction,
+          ),
+        peekTranscript: (entryIndex) =>
+          transcriptBrowser.peek(activeSessionId, getSessionHistory(activeSessionId), entryIndex),
+        moveTranscriptPeek: (direction) =>
+          transcriptBrowser.peekRelative(
+            activeSessionId,
+            getSessionHistory(activeSessionId),
+            direction,
+          ),
+        tailTranscript: () =>
+          transcriptBrowser.tail(activeSessionId, getSessionHistory(activeSessionId)),
         canCompactSession: () => false,
       });
       if (command.handled) {
@@ -533,7 +562,9 @@ async function runDaemonCli(opts: {
 
       if (query.trim().startsWith("!")) {
         if (!toolRunner) {
-          opts.output.write(`${renderCliError("shell unavailable", "daemon tool surface is unavailable")}\n\n`);
+          opts.output.write(
+            `${renderCliError("shell unavailable", "daemon tool surface is unavailable")}\n\n`,
+          );
           continue;
         }
         opts.output.write(`${await runCliShellShortcut(query.trim().slice(1), toolRunner)}\n\n`);
@@ -551,7 +582,9 @@ async function runDaemonCli(opts: {
         );
         continue;
       }
-      const nextSessionId = String((result.session as { id?: unknown } | undefined)?.id ?? sessionId);
+      const nextSessionId = String(
+        (result.session as { id?: unknown } | undefined)?.id ?? sessionId,
+      );
       activeSessionId = nextSessionId || sessionId;
       if (typeof result.assistant === "string" && result.assistant.trim()) {
         opts.output.write(`${renderCliSection("Assistant", result.assistant)}\n\n`);
@@ -563,7 +596,13 @@ async function runDaemonCli(opts: {
 }
 
 export async function runCli(options: RunCliOptions = {}): Promise<void> {
-  const { input: providedInput, output: providedOutput, service, resolveDaemonService, ...runtimeOverrides } = options;
+  const {
+    input: providedInput,
+    output: providedOutput,
+    service,
+    resolveDaemonService,
+    ...runtimeOverrides
+  } = options;
   const input = providedInput ?? stdin;
   const output = providedOutput ?? stdout;
   let daemonService = service ?? null;
@@ -606,7 +645,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<void> {
     input,
     output,
     completer: (line: string) =>
-        completeCliLine(line, {
+      completeCliLine(line, {
         sessions: [...sessions.values()].map((session) => ({
           id: session.id,
           messageCount: session.history.length,
@@ -704,7 +743,9 @@ export async function runCli(options: RunCliOptions = {}): Promise<void> {
       let query = "";
       try {
         waitingForInput = true;
-        query = await rl.question(renderCliPrompt(activeSessionId, getComposerSnapshot(activeSessionId), workflow));
+        query = await rl.question(
+          renderCliPrompt(activeSessionId, getComposerSnapshot(activeSessionId), workflow),
+        );
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ERR_USE_AFTER_CLOSE") {
           break;
@@ -785,7 +826,10 @@ export async function runCli(options: RunCliOptions = {}): Promise<void> {
           if (!replay) {
             return approvalRaw;
           }
-          const replayRaw = await app.toolService.runToolByName(replay.toolName, replay.argumentsJson);
+          const replayRaw = await app.toolService.runToolByName(
+            replay.toolName,
+            replay.argumentsJson,
+          );
           const replayAnalysis = analyzeToolOutput(replayRaw);
           if (replayAnalysis.ok) {
             const replayArgs = parseToolArgs(replay.argumentsJson);
@@ -900,11 +944,16 @@ export async function runCli(options: RunCliOptions = {}): Promise<void> {
             query,
           ),
         openPalette: (index) => paletteStore.open(activeSessionId, index),
-        showTranscript: (direction = "current") => transcriptBrowser.history(activeSessionId, getActiveSession().history, direction),
-        searchTranscript: (query) => transcriptBrowser.search(activeSessionId, getActiveSession().history, query),
-        moveTranscriptSearch: (direction) => transcriptBrowser.moveSearch(activeSessionId, getActiveSession().history, direction),
-        peekTranscript: (entryIndex) => transcriptBrowser.peek(activeSessionId, getActiveSession().history, entryIndex),
-        moveTranscriptPeek: (direction) => transcriptBrowser.peekRelative(activeSessionId, getActiveSession().history, direction),
+        showTranscript: (direction = "current") =>
+          transcriptBrowser.history(activeSessionId, getActiveSession().history, direction),
+        searchTranscript: (query) =>
+          transcriptBrowser.search(activeSessionId, getActiveSession().history, query),
+        moveTranscriptSearch: (direction) =>
+          transcriptBrowser.moveSearch(activeSessionId, getActiveSession().history, direction),
+        peekTranscript: (entryIndex) =>
+          transcriptBrowser.peek(activeSessionId, getActiveSession().history, entryIndex),
+        moveTranscriptPeek: (direction) =>
+          transcriptBrowser.peekRelative(activeSessionId, getActiveSession().history, direction),
         tailTranscript: () => transcriptBrowser.tail(activeSessionId, getActiveSession().history),
       });
       if (command.handled) {
@@ -936,7 +985,9 @@ export async function runCli(options: RunCliOptions = {}): Promise<void> {
       }
 
       if (query.trim().startsWith("!")) {
-        output.write(`${await runCliShellShortcut(query.trim().slice(1), app.toolService.runToolByName.bind(app.toolService))}\n\n`);
+        output.write(
+          `${await runCliShellShortcut(query.trim().slice(1), app.toolService.runToolByName.bind(app.toolService))}\n\n`,
+        );
         continue;
       }
 

@@ -4,7 +4,8 @@ import path from "node:path";
 import * as process from "node:process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-const fixtureServerPath = path.resolve(process.cwd(), "test/fixtures/mcp-demo-server.mjs");
+const fixtureServerPath = path.resolve(process.cwd(), "test/fixtures/mcp-demo-server.ts");
+const tsxCliPath = path.resolve(process.cwd(), "node_modules/tsx/dist/cli.mjs");
 let workspaceDir = "";
 let previousCwd = "";
 
@@ -20,7 +21,7 @@ async function writeMcpConfig(dir: string): Promise<void> {
           {
             name: "demo",
             command: process.execPath,
-            args: [fixtureServerPath],
+            args: [tsxCliPath, fixtureServerPath],
             trusted: true,
           },
         ],
@@ -61,7 +62,10 @@ describe("mcp capability bus", () => {
 
     const tools = await toolsModule.listTools();
     const names = tools
-      .filter((tool): tool is Extract<(typeof tools)[number], { type: "function" }> => tool.type === "function")
+      .filter(
+        (tool): tool is Extract<(typeof tools)[number], { type: "function" }> =>
+          tool.type === "function",
+      )
       .map((tool) => tool.function.name);
     expect(names).toContain("mcp__demo__echo_upper");
 
@@ -74,7 +78,9 @@ describe("mcp capability bus", () => {
     expect(String(echoRegistration?.provenance ?? "")).toContain(".codex");
     expect(echoRegistration?.credentialMode).toBe("none");
 
-    const blocked = JSON.parse(await toolsModule.runToolByName("mcp__demo__echo_upper", '{"text":"hello"}')) as {
+    const blocked = JSON.parse(
+      await toolsModule.runToolByName("mcp__demo__echo_upper", '{"text":"hello"}'),
+    ) as {
       ok?: boolean;
       error?: { code?: string };
     };
@@ -87,7 +93,9 @@ describe("mcp capability bus", () => {
     expect(approval.request?.request_id).toBeTruthy();
     await securityModule.runSecurityApprove(approval.request?.request_id);
 
-    const output = JSON.parse(await toolsModule.runToolByName("mcp__demo__echo_upper", '{"text":"hello"}')) as {
+    const output = JSON.parse(
+      await toolsModule.runToolByName("mcp__demo__echo_upper", '{"text":"hello"}'),
+    ) as {
       ok?: boolean;
       echoed?: string;
       secret?: string;
@@ -103,11 +111,16 @@ describe("mcp capability bus", () => {
     const observabilityModule = await import("../../src/observability/runtime.js");
 
     const approval = JSON.parse(
-      await securityModule.runSecurityRequestApproval("mcp__demo__fail_now", '{"reason":"fixture boom"}'),
+      await securityModule.runSecurityRequestApproval(
+        "mcp__demo__fail_now",
+        '{"reason":"fixture boom"}',
+      ),
     ) as { request?: { request_id?: string } };
     await securityModule.runSecurityApprove(approval.request?.request_id);
 
-    const output = JSON.parse(await toolsModule.runToolByName("mcp__demo__fail_now", '{"reason":"fixture boom"}')) as {
+    const output = JSON.parse(
+      await toolsModule.runToolByName("mcp__demo__fail_now", '{"reason":"fixture boom"}'),
+    ) as {
       ok?: boolean;
       error?: { code?: string; message?: string };
     };

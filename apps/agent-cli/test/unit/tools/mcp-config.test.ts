@@ -11,7 +11,11 @@ let previousCwd = "";
 
 async function writeConfig(content: unknown): Promise<void> {
   await mkdir(path.join(workspaceDir, ".codex"), { recursive: true });
-  await writeFile(path.join(workspaceDir, ".codex", "mcp.json"), `${JSON.stringify(content, null, 2)}\n`, "utf8");
+  await writeFile(
+    path.join(workspaceDir, ".codex", "mcp.json"),
+    `${JSON.stringify(content, null, 2)}\n`,
+    "utf8",
+  );
 }
 
 describe("tools/mcp-config", () => {
@@ -45,8 +49,8 @@ describe("tools/mcp-config", () => {
       servers: [
         {
           name: " demo ",
-          command: "node",
-          args: ["server.mjs", 42],
+          command: "tsx",
+          args: ["server.ts", 42],
           env: { TOKEN: 123, EMPTY: null },
           cwd: "nested",
           trusted: true,
@@ -66,8 +70,8 @@ describe("tools/mcp-config", () => {
     expect(await loadMcpServerConfigs()).toEqual([
       {
         name: "demo",
-        command: "node",
-        args: ["server.mjs", "42"],
+        command: "tsx",
+        args: ["server.ts", "42"],
         env: { TOKEN: "123", EMPTY: "" },
         cwd: path.resolve(process.cwd(), "nested"),
         enabled: true,
@@ -84,7 +88,9 @@ describe("tools/mcp-config", () => {
       servers: [{ name: "demo", command: "node", trusted: true, requestTimeoutMs: 50 }],
     });
 
-    expect((await loadMcpServerConfigs())[0]?.requestTimeoutMs).toBe(RUNTIME_CONFIG.mcpRequestTimeoutMs);
+    expect((await loadMcpServerConfigs())[0]?.requestTimeoutMs).toBe(
+      RUNTIME_CONFIG.mcpRequestTimeoutMs,
+    );
   });
 
   it("defaults servers to untrusted until the config opts in", async () => {

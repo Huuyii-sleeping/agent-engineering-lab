@@ -3,7 +3,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import * as process from "node:process";
 import type OpenAI from "openai";
-import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
+import type {
+  ChatCompletionMessageParam,
+  ChatCompletionTool,
+} from "openai/resources/chat/completions";
 import { agentLoop, type AgentRuntimeState } from "../../src/agent-loop.js";
 
 function assert(condition: unknown, message: string): void {
@@ -12,36 +15,47 @@ function assert(condition: unknown, message: string): void {
   }
 }
 
-function isSystemMessage(message: ChatCompletionMessageParam): message is { role: "system"; content: string } {
+function isSystemMessage(
+  message: ChatCompletionMessageParam,
+): message is { role: "system"; content: string } {
   return message.role === "system" && typeof message.content === "string";
 }
+
+const TSX_CLI_PATH = path.resolve(process.cwd(), "node_modules/tsx/dist/cli.mjs");
 
 async function createSmokeWorkspace(): Promise<string> {
   const root = await mkdtemp(path.join(tmpdir(), "prd14-hooks-"));
   await mkdir(path.join(root, ".codex"), { recursive: true });
   await writeFile(path.join(root, "allowed.txt"), "allowed hook content\n", "utf8");
   await writeFile(
-    path.join(root, "hook.mjs"),
+    path.join(root, "hook.ts"),
     `
 import process from "node:process";
 
 let raw = "";
-for await (const chunk of process.stdin) {
-  raw += chunk.toString();
+
+async function main() {
+  for await (const chunk of process.stdin) {
+    raw += chunk.toString();
+  }
+
+  const input = JSON.parse(raw || "{}");
+  if (input.event === "PreToolUse" && input.payload?.tool_name === "write_file") {
+    process.stdout.write(JSON.stringify({ action: "block", reason: "write_file blocked by smoke hook" }));
+    process.exit(0);
+  }
+
+  if (input.event === "PostToolUse" && input.payload?.tool_name === "read_file") {
+    process.stdout.write(JSON.stringify({ action: "append_message", message: "read_file reviewed by hook" }));
+    process.exit(0);
+  }
+
+  process.stdout.write(JSON.stringify({ action: "continue" }));
 }
 
-const input = JSON.parse(raw || "{}");
-if (input.event === "PreToolUse" && input.payload?.tool_name === "write_file") {
-  process.stdout.write(JSON.stringify({ action: "block", reason: "write_file blocked by smoke hook" }));
-  process.exit(0);
-}
-
-if (input.event === "PostToolUse" && input.payload?.tool_name === "read_file") {
-  process.stdout.write(JSON.stringify({ action: "append_message", message: "read_file reviewed by hook" }));
-  process.exit(0);
-}
-
-process.stdout.write(JSON.stringify({ action: "continue" }));
+main().catch(() => {
+  process.stdout.write(JSON.stringify({ action: "continue" }));
+});
 `,
     "utf8",
   );
@@ -53,16 +67,16 @@ process.stdout.write(JSON.stringify({ action: "continue" }));
           PreToolUse: [
             {
               type: "command",
-              command: "node",
-              args: ["./hook.mjs"],
+              command: process.execPath,
+              args: [TSX_CLI_PATH, "./hook.ts"],
               matcher: { tools: ["write_file"] },
             },
           ],
           PostToolUse: [
             {
               type: "command",
-              command: "node",
-              args: ["./hook.mjs"],
+              command: process.execPath,
+              args: [TSX_CLI_PATH, "./hook.ts"],
               matcher: { tools: ["read_file"] },
             },
           ],
@@ -97,7 +111,10 @@ function createMockClient(seenRequests: ChatCompletionMessageParam[][]): OpenAI 
                         type: "function",
                         function: {
                           name: "write_file",
-                          arguments: JSON.stringify({ path: "blocked.txt", content: "should not exist" }),
+                          arguments: JSON.stringify({
+                            path: "blocked.txt",
+                            content: "should not exist",
+                          }),
                         },
                       },
                       {
@@ -140,7 +157,9 @@ async function main(): Promise<void> {
   try {
     process.chdir(workspace);
     const client = createMockClient(seenRequests);
-    const messages: ChatCompletionMessageParam[] = [{ role: "user", content: "run prd14 hooks smoke" }];
+    const messages: ChatCompletionMessageParam[] = [
+      { role: "user", content: "run prd14 hooks smoke" },
+    ];
     const runtimeState: AgentRuntimeState = {
       sessionId: "session_prd14_smoke",
       roundsWithoutTodo: 0,
@@ -169,7 +188,10 @@ async function main(): Promise<void> {
     assert(runtimeState.roundCounter === 2, "agent loop should advance two rounds");
 
     const blockedToolMessage = messages.find(
-      (item) => item.role === "tool" && item.tool_call_id === "call_write" && String(item.content).includes("HOOK_BLOCKED"),
+      (item) =>
+        item.role === "tool" &&
+        item.tool_call_id === "call_write" &&
+        String(item.content).includes("HOOK_BLOCKED"),
     );
     assert(blockedToolMessage, "write_file should be blocked by PreToolUse hook");
 
@@ -182,7 +204,9 @@ async function main(): Promise<void> {
 
     const secondRequest = seenRequests[1] ?? [];
     assert(
-      secondRequest.some((item) => isSystemMessage(item) && item.content.includes("read_file reviewed by hook")),
+      secondRequest.some(
+        (item) => isSystemMessage(item) && item.content.includes("read_file reviewed by hook"),
+      ),
       "PostToolUse hook message should be injected into the next model request",
     );
 

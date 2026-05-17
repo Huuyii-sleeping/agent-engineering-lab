@@ -4,14 +4,15 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { McpServerConfig } from "../../../src/tools/mcp-config.js";
 import { McpServerClient } from "../../../src/tools/mcp-client.js";
 
-const fixtureServerPath = path.resolve(process.cwd(), "test/fixtures/mcp-demo-server.mjs");
+const fixtureServerPath = path.resolve(process.cwd(), "test/fixtures/mcp-demo-server.ts");
+const tsxCliPath = path.resolve(process.cwd(), "node_modules/tsx/dist/cli.mjs");
 let activeClient: McpServerClient | null = null;
 
 function createConfig(): McpServerConfig {
   return {
     name: "demo",
     command: process.execPath,
-    args: [fixtureServerPath],
+    args: [tsxCliPath, fixtureServerPath],
     env: {},
     cwd: process.cwd(),
     enabled: true,

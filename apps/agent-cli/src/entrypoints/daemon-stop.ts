@@ -10,7 +10,7 @@ type DaemonStopIo = {
   runtimeRoot?: string;
   timeoutMs?: number;
   pollIntervalMs?: number;
-  lock?: Pick<DaemonLock, "status">;
+  lock?: Pick<DaemonLock, "status"> & Partial<Pick<DaemonLock, "release">>;
   sendSignal?: (pid: number, signal: NodeJS.Signals) => void;
   sleep?: (ms: number) => Promise<void>;
 };
@@ -29,7 +29,8 @@ export async function runDaemonStop(io: DaemonStopIo = {}): Promise<number> {
     return 1;
   }
 
-  const sendSignal = io.sendSignal ?? ((pid: number, signal: NodeJS.Signals) => process.kill(pid, signal));
+  const sendSignal =
+    io.sendSignal ?? ((pid: number, signal: NodeJS.Signals) => process.kill(pid, signal));
   const sleep = io.sleep ?? delay;
   output.write(`agent-cli daemon stopping pid=${status.pid}\n`);
 
@@ -45,6 +46,11 @@ export async function runDaemonStop(io: DaemonStopIo = {}): Promise<number> {
   while (Date.now() < deadline) {
     await sleep(io.pollIntervalMs ?? DEFAULT_STOP_POLL_INTERVAL_MS);
     const next = await lock.status();
+    if (next.state === "stale") {
+      await lock.release?.();
+      output.write("agent-cli daemon not running\n");
+      return 0;
+    }
     if (next.state !== "running") {
       output.write(`${formatDaemonStatusLine(next)}\n`);
       return next.state === "not_running" ? 0 : 1;

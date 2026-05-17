@@ -256,7 +256,8 @@ const CLI_HELP_TOPICS = [
   {
     id: "workflow",
     title: "Workflow",
-    summary: "Switch the local CLI/TUI surface between general agent work and draw-oriented brief work.",
+    summary:
+      "Switch the local CLI/TUI surface between general agent work and draw-oriented brief work.",
     commands: [
       "/workflow       show the active local workflow",
       "/workflow agent switch to the general agent workflow surface",
@@ -317,7 +318,8 @@ function strong(value: string): string {
 }
 
 function stripAnsi(value: string): string {
-  return value.replace(/\u001b\[[0-9;]*m/g, "");
+  // eslint-disable-next-line no-control-regex
+  return value.replace(new RegExp("\\u001b\\[[0-9;]*m", "g"), "");
 }
 
 function visibleLength(value: string): number {
@@ -386,7 +388,10 @@ function padVisible(value: string, width: number): string {
 function renderRows(rows: Array<{ label: string; value: string }>, width?: number): string {
   const labelWidth = Math.max(...rows.map((row) => row.label.length), 0);
   return rows
-    .map((row) => `${muted(row.label.padEnd(labelWidth))}  ${truncate(row.value, width ? width - labelWidth - 2 : undefined)}`)
+    .map(
+      (row) =>
+        `${muted(row.label.padEnd(labelWidth))}  ${truncate(row.value, width ? width - labelWidth - 2 : undefined)}`,
+    )
     .join("\n");
 }
 
@@ -433,7 +438,10 @@ export function resolveCliHelpTopic(input?: string | null): CliHelpTopicId | nul
   if (normalized === "all") {
     return "all";
   }
-  return (CLI_HELP_TOPICS.find((topic) => topic.id === normalized)?.id as CliHelpTopicId | undefined) ?? null;
+  return (
+    (CLI_HELP_TOPICS.find((topic) => topic.id === normalized)?.id as CliHelpTopicId | undefined) ??
+    null
+  );
 }
 
 function renderCliHelpTopic(topicId: Exclude<CliHelpTopicId, "overview" | "all">): string {
@@ -465,7 +473,9 @@ export function renderCliGuideLines(input: {
     const composeLabel = workflow === "draw" ? "brief" : "draft";
     return [
       "help      /help draft or Ctrl+G",
-      workflow === "draw" ? "workflow  /workflow agent | /workflow draw" : "palette   /palette or Ctrl+K launches local actions",
+      workflow === "draw"
+        ? "workflow  /workflow agent | /workflow draw"
+        : "palette   /palette or Ctrl+K launches local actions",
       `${composeLabel.padEnd(9)} plain text appends to the current ${composeLabel}`,
       "review    /preview shows numbered draft lines",
       "edit      /pop or /pop 3 removes recent lines",
@@ -483,7 +493,9 @@ export function renderCliGuideLines(input: {
       "review    /preview inspects numbered brief lines",
       "browse    /history last /search bug /peek 12 /tail",
       "runtime   /status /model /permissions /architecture /skills /prompt /data",
-      input.pendingApprovals > 0 ? "approvals /approvals /approve <id> /reject <id>" : "workspace /doctor /add-dir /theme",
+      input.pendingApprovals > 0
+        ? "approvals /approvals /approve <id> /reject <id>"
+        : "workspace /doctor /add-dir /theme",
       "shell     !<cmd> runs a direct shell command",
     ];
   }
@@ -491,9 +503,13 @@ export function renderCliGuideLines(input: {
     "help      /help /help sessions /help palette",
     "workflow  /workflow agent | /workflow draw",
     "palette   /palette review /palette open 2",
-    input.sessionCount > 0 ? "session   /sessions /use 2 /next /prev" : "session   /clear creates the first local session",
+    input.sessionCount > 0
+      ? "session   /sessions /use 2 /next /prev"
+      : "session   /clear creates the first local session",
     "browse    /history last /search bug /peek 12 /tail",
-    input.startupIssue ? "startup   /model <id> reactivates local chat" : "runtime   /status /model /permissions /architecture /skills /prompt /data",
+    input.startupIssue
+      ? "startup   /model <id> reactivates local chat"
+      : "runtime   /status /model /permissions /architecture /skills /prompt /data",
     input.pendingApprovals > 0
       ? "approvals /approvals /approve <id> /reject <id>"
       : "workspace /doctor /add-dir /theme",
@@ -542,9 +558,15 @@ export function renderCliStatus(snapshot: CliStatusSnapshot): string {
       { label: "model", value: snapshot.model },
       { label: "session", value: snapshot.activeSessionId ?? "(none)" },
       { label: "sessions", value: String(snapshot.sessionCount) },
-      { label: "tools", value: `${snapshot.toolCount} total / ${snapshot.mcpToolCount} mcp / ${snapshot.mcpServerCount} servers` },
+      {
+        label: "tools",
+        value: `${snapshot.toolCount} total / ${snapshot.mcpToolCount} mcp / ${snapshot.mcpServerCount} servers`,
+      },
       { label: "hooks", value: String(snapshot.hookCount) },
-      { label: "permissions", value: `${snapshot.permissionMode} / ${snapshot.pendingApprovals} pending approvals` },
+      {
+        label: "permissions",
+        value: `${snapshot.permissionMode} / ${snapshot.pendingApprovals} pending approvals`,
+      },
       { label: "roots", value: snapshot.workspaceRoots.join(", ") },
       {
         label: "usage",
@@ -565,9 +587,20 @@ export function renderCliConfig(snapshot: CliConfigSnapshot): string {
     renderRows([
       { label: "model", value: snapshot.modelConfigured ? snapshot.model : "missing MODEL_ID" },
       { label: "base url", value: snapshot.openAiBaseUrl || "(default)" },
-      { label: "mcp", value: `${snapshot.mcpConfigured ? "configured" : "not configured"} @ ${snapshot.mcpConfigPath}` },
-      { label: "hooks", value: `${snapshot.hooksConfigured ? "configured" : "not configured"} @ ${snapshot.hooksConfigPath}` },
-      { label: "release", value: snapshot.releaseCheckConfigured ? "release:check available" : "release:check missing" },
+      {
+        label: "mcp",
+        value: `${snapshot.mcpConfigured ? "configured" : "not configured"} @ ${snapshot.mcpConfigPath}`,
+      },
+      {
+        label: "hooks",
+        value: `${snapshot.hooksConfigured ? "configured" : "not configured"} @ ${snapshot.hooksConfigPath}`,
+      },
+      {
+        label: "release",
+        value: snapshot.releaseCheckConfigured
+          ? "release:check available"
+          : "release:check missing",
+      },
       { label: "permissions", value: snapshot.permissionMode },
       { label: "roots", value: snapshot.workspaceRoots.join(", ") },
       { label: "theme", value: snapshot.theme },
@@ -581,7 +614,8 @@ export function renderCliArchitecture(): string {
     renderRows([
       {
         label: "reference",
-        value: "github.com/liuup/claude-code-analysis/blob/main/analysis/01-architecture-overview.md",
+        value:
+          "github.com/liuup/claude-code-analysis/blob/main/analysis/01-architecture-overview.md",
       },
       {
         label: "verdict",
@@ -635,7 +669,9 @@ export function renderCliUserDataGovernance(report: UserDataGovernanceReport): s
       "",
     ]),
     strong("Reserved Privacy Gaps"),
-    ...(report.privacyReservedGaps.length > 0 ? report.privacyReservedGaps.map((item) => `- ${item}`) : ["(none)"]),
+    ...(report.privacyReservedGaps.length > 0
+      ? report.privacyReservedGaps.map((item) => `- ${item}`)
+      : ["(none)"]),
     "",
     ...report.surfaces.flatMap((surface) => [
       strong(surface.title),
@@ -696,7 +732,10 @@ function renderPaletteCandidateLine(candidate: CliPaletteCandidate, index: numbe
   return `[${index + 1}] ${truncate(candidate.title, 52)} -> ${candidate.command}`;
 }
 
-function renderGroupedPaletteCandidateLines(candidates: CliPaletteCandidate[], maxEntries: number): string[] {
+function renderGroupedPaletteCandidateLines(
+  candidates: CliPaletteCandidate[],
+  maxEntries: number,
+): string[] {
   const visibleCandidates = candidates.slice(0, maxEntries);
   const lines: string[] = [];
   let currentGroup: CliPaletteCandidate["group"] | null = null;
@@ -720,7 +759,9 @@ export function renderCliPaletteLines(view: CliPaletteView, maxEntries = 8): str
     "open      /palette open <index>",
     "hints     grouped local actions",
     "",
-    ...(view.candidates.length > 0 ? renderGroupedPaletteCandidateLines(view.candidates, maxEntries) : ["No palette candidates found."]),
+    ...(view.candidates.length > 0
+      ? renderGroupedPaletteCandidateLines(view.candidates, maxEntries)
+      : ["No palette candidates found."]),
   ];
 }
 
@@ -740,7 +781,9 @@ function renderTranscriptContentLines(entry: CliTranscriptEntry, limit?: number)
   const lines = entry.content ? entry.content.split("\n") : ["(empty)"];
   const total = lines.length;
   const max = limit && limit > 0 ? Math.min(limit, total) : total;
-  const rendered = lines.slice(0, max).map((line, index) => `${String(index + 1).padStart(2, "0")}| ${line}`.trimEnd());
+  const rendered = lines
+    .slice(0, max)
+    .map((line, index) => `${String(index + 1).padStart(2, "0")}| ${line}`.trimEnd());
   if (max < total) {
     rendered.push(`... ${total - max} more line(s)`);
   }
@@ -771,9 +814,14 @@ export function renderCliTranscriptLines(view: CliTranscriptView, maxEntries = 1
       `browse    /search prev | /search next | /peek <n> | /tail`,
       "",
       ...(matches.length > 0
-        ? matches.map((entry, index) => `${index === view.selectedIndex ? ">" : " "} ${renderTranscriptEntrySummary(entry)}`)
+        ? matches.map(
+            (entry, index) =>
+              `${index === view.selectedIndex ? ">" : " "} ${renderTranscriptEntrySummary(entry)}`,
+          )
         : ["No transcript matches found."]),
-      ...(view.matches.length > matches.length ? [`... ${view.matches.length - matches.length} more match(es)`] : []),
+      ...(view.matches.length > matches.length
+        ? [`... ${view.matches.length - matches.length} more match(es)`]
+        : []),
     ];
   }
   return [
@@ -781,7 +829,9 @@ export function renderCliTranscriptLines(view: CliTranscriptView, maxEntries = 1
     `browse    /history first | /history prev | /history next | /history last`,
     `detail    /search <query> | /peek <n> | /tail`,
     "",
-    ...(view.entries.length > 0 ? view.entries.slice(0, maxEntries).map(renderTranscriptEntrySummary) : ["No transcript yet. Type a prompt or run /help."]),
+    ...(view.entries.length > 0
+      ? view.entries.slice(0, maxEntries).map(renderTranscriptEntrySummary)
+      : ["No transcript yet. Type a prompt or run /help."]),
   ];
 }
 
@@ -803,16 +853,23 @@ export function renderCliTools(tools: Array<Record<string, string>>): string {
   }
   return [
     strong("Tools"),
-    ...tools.map((tool) =>
-      `${accent(tool.name ?? "(unnamed)")} [${tool.target ?? "unknown"}] ${truncate(tool.description ?? "", 96)}`,
+    ...tools.map(
+      (tool) =>
+        `${accent(tool.name ?? "(unnamed)")} [${tool.target ?? "unknown"}] ${truncate(tool.description ?? "", 96)}`,
     ),
   ].join("\n");
 }
 
-export function renderCliSkills(skills: CliSkillSummary[], loadedNames: string[], missingNames: string[]): string {
+export function renderCliSkills(
+  skills: CliSkillSummary[],
+  loadedNames: string[],
+  missingNames: string[],
+): string {
   const lines = [strong("Skills")];
   if (skills.length === 0) {
-    lines.push(muted("No skills discovered. Add .codex/skills/**/SKILL.md or set AGENT_SKILL_ROOTS."));
+    lines.push(
+      muted("No skills discovered. Add .codex/skills/**/SKILL.md or set AGENT_SKILL_ROOTS."),
+    );
   } else {
     lines.push(
       ...skills.map((skill) => {
@@ -833,9 +890,10 @@ export function renderCliSkills(skills: CliSkillSummary[], loadedNames: string[]
 
 export function renderCliSkillDetail(skill: CliSkillDetail): string {
   const metadataEntries = Object.entries(skill.metadata);
-  const metadata = metadataEntries.length > 0
-    ? metadataEntries.map(([key, value]) => `${key}: ${value}`).join(", ")
-    : "(none)";
+  const metadata =
+    metadataEntries.length > 0
+      ? metadataEntries.map(([key, value]) => `${key}: ${value}`).join(", ")
+      : "(none)";
   return [
     strong(`Skill: ${skill.name}`),
     renderRows([
@@ -856,7 +914,12 @@ export function renderCliPromptDump(
 ): string {
   const protectedExportNotice =
     dump.inspectionMode === "protected" && dump.protectedExportPath
-      ? [``, strong("Protected Export"), dump.protectedExportPath, muted("Inline protected prompt content is suppressed in the terminal.")]
+      ? [
+          ``,
+          strong("Protected Export"),
+          dump.protectedExportPath,
+          muted("Inline protected prompt content is suppressed in the terminal."),
+        ]
       : [];
   return [
     strong("System Prompt"),
@@ -869,7 +932,8 @@ export function renderCliPromptDump(
       {
         label: "suppressed",
         value:
-          dump.suppressedCategories?.map((item) => `${item.id}:${item.reason}`).join(" | ") || "(none)",
+          dump.suppressedCategories?.map((item) => `${item.id}:${item.reason}`).join(" | ") ||
+          "(none)",
       },
       { label: "export", value: dump.protectedExportPath ?? "(inline only)" },
       { label: "persistence", value: dump.persistenceBlockedReason ?? "(allowed)" },
@@ -980,7 +1044,9 @@ export function renderCliComposerLines(preview: CliComposePreview, limit?: numbe
     rendered.push(`... ${startIndex} earlier line(s)`);
   }
   for (let index = startIndex; index < total; index += 1) {
-    rendered.push(`${String(index + 1).padStart(lineNumberWidth, "0")}| ${lines[index] ?? ""}`.trimEnd());
+    rendered.push(
+      `${String(index + 1).padStart(lineNumberWidth, "0")}| ${lines[index] ?? ""}`.trimEnd(),
+    );
   }
   return rendered;
 }
@@ -1002,7 +1068,10 @@ export function renderCliCompactSummary(summary: CliCompactSummary): string {
     strong("Compact"),
     renderRows([
       { label: "messages", value: `${summary.oldMessageCount} -> ${summary.newMessageCount}` },
-      { label: "tokens", value: `${summary.estimatedBefore} -> ${summary.estimatedAfter} (-${summary.reducedBy})` },
+      {
+        label: "tokens",
+        value: `${summary.estimatedBefore} -> ${summary.estimatedAfter} (-${summary.reducedBy})`,
+      },
       { label: "keep recent", value: String(summary.keptRecent) },
       { label: "before", value: summary.transcriptBeforePath },
       { label: "after", value: summary.transcriptAfterPath },
@@ -1025,7 +1094,8 @@ export function renderCliEvent(input: {
         : input.status === "info"
           ? accent(input.status)
           : danger(input.status);
-  const duration = input.durationMs && input.durationMs > 0 ? ` ${muted(`${input.durationMs}ms`)}` : "";
+  const duration =
+    input.durationMs && input.durationMs > 0 ? ` ${muted(`${input.durationMs}ms`)}` : "";
   const head = `${statusText} ${input.kind} ${accent(input.title)}${duration}`;
   if (!input.detail) {
     return head;
@@ -1034,7 +1104,8 @@ export function renderCliEvent(input: {
 }
 
 export function renderCliCloseout(input: CliCloseoutInput): string {
-  const changed = input.changedPaths.length > 0 ? input.changedPaths.join(", ") : "no workspace changes recorded";
+  const changed =
+    input.changedPaths.length > 0 ? input.changedPaths.join(", ") : "no workspace changes recorded";
   const lines = [
     strong("Closeout"),
     renderRows([
@@ -1080,7 +1151,9 @@ export function renderCliPanel(input: {
   while (wrappedLines.length < (input.minBodyLines ?? 0)) {
     wrappedLines.push("");
   }
-  const body = wrappedLines.map((line) => `| ${padVisible(truncate(line, innerWidth), innerWidth)} |`);
+  const body = wrappedLines.map(
+    (line) => `| ${padVisible(truncate(line, innerWidth), innerWidth)} |`,
+  );
   const footer = `+${"-".repeat(width - 2)}+`;
   return [header, ...body, footer];
 }

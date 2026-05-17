@@ -4,14 +4,15 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { McpServerConfig } from "../../../src/tools/mcp-config.js";
 import { McpRegistry } from "../../../src/tools/mcp-registry.js";
 
-const fixtureServerPath = path.resolve(process.cwd(), "test/fixtures/mcp-demo-server.mjs");
+const fixtureServerPath = path.resolve(process.cwd(), "test/fixtures/mcp-demo-server.ts");
+const tsxCliPath = path.resolve(process.cwd(), "node_modules/tsx/dist/cli.mjs");
 let activeRegistry: McpRegistry | null = null;
 
 function createRegistry(): McpRegistry {
   const config: McpServerConfig = {
     name: "demo",
     command: process.execPath,
-    args: [fixtureServerPath],
+    args: [tsxCliPath, fixtureServerPath],
     env: {},
     cwd: process.cwd(),
     enabled: true,
@@ -62,7 +63,7 @@ describe("tools/mcp-registry", () => {
     const config: McpServerConfig = {
       name: "demo",
       command: process.execPath,
-      args: [fixtureServerPath],
+      args: [tsxCliPath, fixtureServerPath],
       env: { TOKEN: "super-secret" },
       cwd: process.cwd(),
       enabled: true,
@@ -80,7 +81,9 @@ describe("tools/mcp-registry", () => {
   it("runs matching mcp tools and keeps missing aliases as null", async () => {
     const registry = createRegistry();
 
-    const output = JSON.parse((await registry.run("mcp__demo__echo_upper", { text: "hello" })) ?? "{}") as {
+    const output = JSON.parse(
+      (await registry.run("mcp__demo__echo_upper", { text: "hello" })) ?? "{}",
+    ) as {
       ok?: boolean;
       echoed?: string;
       secret?: string;
@@ -97,7 +100,9 @@ describe("tools/mcp-registry", () => {
   it("normalizes remote tool failures without throwing", async () => {
     const registry = createRegistry();
 
-    const output = JSON.parse((await registry.run("mcp__demo__fail_now", { reason: "fixture boom" })) ?? "{}") as {
+    const output = JSON.parse(
+      (await registry.run("mcp__demo__fail_now", { reason: "fixture boom" })) ?? "{}",
+    ) as {
       ok?: boolean;
       error?: { code?: string; message?: string };
     };

@@ -73,6 +73,51 @@ describe("entrypoints/daemon-stop", () => {
     expect(output.chunks.join("")).toContain("agent-cli daemon not running");
   });
 
+  it("treats stale status after SIGTERM as stopped", async () => {
+    const output = {
+      chunks: [] as string[],
+      write(chunk: string) {
+        this.chunks.push(String(chunk));
+        return true;
+      },
+    };
+    const sendSignal = vi.fn();
+    const release = vi.fn(async () => undefined);
+    const status = vi
+      .fn()
+      .mockResolvedValueOnce({
+        state: "running",
+        filePath: "/tmp/.runtime/daemon.lock",
+        pid: 4242,
+        cwd: "/workspace",
+        startedAt: 1,
+        detail: null,
+      })
+      .mockResolvedValueOnce({
+        state: "stale",
+        filePath: "/tmp/.runtime/daemon.lock",
+        pid: 4242,
+        cwd: "/workspace",
+        startedAt: 1,
+        detail: "recorded process is not running",
+      });
+
+    await expect(
+      runDaemonStop({
+        output: output as unknown as NodeJS.WritableStream,
+        lock: { status, release },
+        sendSignal,
+        sleep: async () => undefined,
+        timeoutMs: 500,
+        pollIntervalMs: 0,
+      }),
+    ).resolves.toBe(0);
+
+    expect(sendSignal).toHaveBeenCalledWith(4242, "SIGTERM");
+    expect(release).toHaveBeenCalledOnce();
+    expect(output.chunks.join("")).toContain("agent-cli daemon not running");
+  });
+
   it("returns non-zero when stop times out", async () => {
     const output = {
       chunks: [] as string[],

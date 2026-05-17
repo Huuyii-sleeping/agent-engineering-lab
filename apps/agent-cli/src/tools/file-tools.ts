@@ -1,6 +1,5 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import * as process from "node:process";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
 import {
@@ -8,7 +7,11 @@ import {
   reportSecretScan,
   scanTextForSecrets,
 } from "../security/secret-scanning.js";
-import { isWorkspacePathAllowed, listWorkspaceRoots, resolveWorkspacePath } from "../workspace-roots.js";
+import {
+  isWorkspacePathAllowed,
+  listWorkspaceRoots,
+  resolveWorkspacePath,
+} from "../workspace-roots.js";
 
 type FileToolErrorCode =
   | "PATH_OUT_OF_BOUNDS"
