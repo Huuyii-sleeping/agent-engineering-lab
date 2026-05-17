@@ -17,6 +17,7 @@ import {
   renderCliStatus,
   renderCliTranscript,
   renderCliTools,
+  renderCliUserDataGovernance,
   renderCliUsage,
   resolveCliHelpTopic,
   type CliHelpTopicId,
@@ -36,6 +37,7 @@ import type { CliPermissionMode } from "./permissions.js";
 import type { PromptDump } from "../prompt/inspect.js";
 import type { CliTranscriptView } from "./transcript.js";
 import type { CliWorkflowMode } from "./workflow.js";
+import { buildUserDataGovernanceReport } from "../governance/user-data.js";
 
 export type CliCommandResult =
   | { handled: false }
@@ -477,6 +479,9 @@ export async function dispatchCliCommand(
   }
   if (parsed.command === "architecture") {
     return { handled: true, output: renderCliArchitecture() };
+  }
+  if (parsed.command === "data") {
+    return { handled: true, output: renderCliUserDataGovernance(buildUserDataGovernanceReport()) };
   }
   if (parsed.command === "model") {
     const nextModel = parsed.args.join(" ").trim();

@@ -9,6 +9,7 @@ import type { CliPermissionMode } from "./permissions.js";
 import type { PromptDump } from "../prompt/inspect.js";
 import type { CliTranscriptEntry, CliTranscriptView } from "./transcript.js";
 import { getCliWorkflowLabel, type CliWorkflowMode } from "./workflow.js";
+import type { UserDataGovernanceReport } from "../governance/user-data.js";
 
 export type CliThemeName = "atlas" | "plain";
 
@@ -205,6 +206,7 @@ const CLI_HELP_TOPICS = [
       "/model      show or set model: /model gpt-5-mini",
       "/permissions show or set permission mode",
       "/architecture inspect the local runtime architecture coverage",
+      "/data       inspect the local user data governance surface",
       "/skills     list discovered local skills",
       "/skill <x>  inspect one local skill body",
       "/prompt     dump the current stable system prompt",
@@ -212,7 +214,7 @@ const CLI_HELP_TOPICS = [
       "/compact    compact current session history",
       "/redraw     clear screen and redraw banner",
     ],
-    examples: ["/status", "/architecture", "/skills", "/prompt"],
+    examples: ["/status", "/data", "/architecture", "/prompt"],
   },
   {
     id: "approvals",
@@ -480,7 +482,7 @@ export function renderCliGuideLines(input: {
       "brief     /compose starts a multi-line draw brief",
       "review    /preview inspects numbered brief lines",
       "browse    /history last /search bug /peek 12 /tail",
-      "runtime   /status /model /permissions /architecture /skills /prompt",
+      "runtime   /status /model /permissions /architecture /skills /prompt /data",
       input.pendingApprovals > 0 ? "approvals /approvals /approve <id> /reject <id>" : "workspace /doctor /add-dir /theme",
       "shell     !<cmd> runs a direct shell command",
     ];
@@ -491,7 +493,7 @@ export function renderCliGuideLines(input: {
     "palette   /palette review /palette open 2",
     input.sessionCount > 0 ? "session   /sessions /use 2 /next /prev" : "session   /clear creates the first local session",
     "browse    /history last /search bug /peek 12 /tail",
-    input.startupIssue ? "startup   /model <id> reactivates local chat" : "runtime   /status /model /permissions /architecture /skills /prompt",
+    input.startupIssue ? "startup   /model <id> reactivates local chat" : "runtime   /status /model /permissions /architecture /skills /prompt /data",
     input.pendingApprovals > 0
       ? "approvals /approvals /approve <id> /reject <id>"
       : "workspace /doctor /add-dir /theme",
@@ -608,6 +610,39 @@ export function renderCliArchitecture(): string {
   ].join("\n");
 }
 
+export function renderCliUserDataGovernance(report: UserDataGovernanceReport): string {
+  return [
+    strong("User Data Governance"),
+    renderRows([
+      { label: "reference", value: report.reference },
+      { label: "surfaces", value: String(report.surfaces.length) },
+      {
+        label: "legend",
+        value: Object.entries(report.statusLabels)
+          .map(([key, label]) => `${key}=${label}`)
+          .join(" | "),
+      },
+    ]),
+    "",
+    ...report.surfaces.flatMap((surface) => [
+      strong(surface.title),
+      renderRows([
+        { label: "id", value: surface.id },
+        { label: "status", value: `${surface.status} / ${report.statusLabels[surface.status]}` },
+        { label: "boundary", value: surface.boundary },
+        { label: "default", value: surface.defaultState },
+        { label: "summary", value: surface.summary },
+        { label: "sources", value: surface.sources.join(" | ") },
+        { label: "uses", value: surface.uses.join(" | ") },
+        { label: "retention", value: surface.retention },
+        { label: "export", value: surface.exportDelete },
+        { label: "notes", value: surface.notes.join(" | ") || "(none)" },
+      ]),
+      "",
+    ]),
+  ].join("\n");
+}
+
 export function renderCliHelp(topic: CliHelpTopicId = "overview"): string {
   if (topic === "all") {
     return [
@@ -627,7 +662,7 @@ export function renderCliHelp(topic: CliHelpTopicId = "overview"): string {
     "sessions   /sessions /use /next /prev /clear",
     "workflow   /workflow agent | /workflow draw",
     "browse     /history /search /peek /tail",
-    "runtime    /status /config /model /permissions /architecture /skills /skill /prompt /cost /compact /redraw",
+    "runtime    /status /config /model /permissions /architecture /skills /skill /prompt /data /cost /compact /redraw",
     "approvals  /approvals /approve /reject /doctor /add-dir /tools /theme",
     "shell      !<cmd> | /exit",
     "TUI keys    Ctrl+G help | Ctrl+K palette | Ctrl+N next | Ctrl+P prev | Ctrl+L redraw | Esc cancel draft",
@@ -637,6 +672,7 @@ export function renderCliHelp(topic: CliHelpTopicId = "overview"): string {
     "- /palette review",
     "- /help sessions",
     "- /search hook blocked",
+    "- /data",
     "- /architecture",
     "- /model gpt-5-mini",
     "- /permissions plan",

@@ -227,6 +227,14 @@ function staticPaletteCandidates(context: CliPaletteContext): CliPaletteCandidat
       keywords: ["architecture", "overview", "runtime", "layers", "claude", "compare"],
     },
     {
+      id: "runtime-data-governance",
+      group: "runtime",
+      title: "Inspect user data governance",
+      summary: "Review what enters the model, what stays local, and which data planes are still reserved gaps.",
+      command: "/data",
+      keywords: ["data", "privacy", "governance", "telemetry", "memory", "bridge"],
+    },
+    {
       id: "runtime-skills",
       group: "runtime",
       title: "List discovered skills",

@@ -118,6 +118,12 @@ function fromPersistedSessionEnvelope(input: PersistedSessionEnvelope): AgentSes
   return fromPersistedSessionRecord(input.session);
 }
 
+function isPersistedSessionEnvelope(
+  input: PersistedSessionRecord | PersistedSessionEnvelope,
+): input is PersistedSessionEnvelope {
+  return "kind" in input && input.kind === "session";
+}
+
 export class SessionStore {
   private readonly pendingWrites = new Map<string, Promise<void>>();
 
@@ -199,7 +205,7 @@ export class SessionStore {
       return null;
     }
     const parsed = JSON.parse(raw) as PersistedSessionRecord | PersistedSessionEnvelope;
-    if ("kind" in parsed && parsed.kind === "session") {
+    if (isPersistedSessionEnvelope(parsed)) {
       if (isExpired(parsed.expiresAt ?? null)) {
         await rm(target, { force: true }).catch(() => {});
         return null;
@@ -224,7 +230,7 @@ export class SessionStore {
         }
         const raw = await readFile(full, "utf8");
         const parsed = JSON.parse(raw) as PersistedSessionRecord | PersistedSessionEnvelope;
-        if ("kind" in parsed && parsed.kind === "session") {
+        if (isPersistedSessionEnvelope(parsed)) {
           return fromPersistedSessionEnvelope(parsed);
         }
         return fromPersistedSessionRecord(parsed);

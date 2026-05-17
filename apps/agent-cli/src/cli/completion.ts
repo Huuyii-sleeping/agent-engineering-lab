@@ -18,6 +18,7 @@ const CLI_COMMANDS = [
   "status",
   "config",
   "architecture",
+  "data",
   "model",
   "permissions",
   "approvals",
@@ -55,7 +56,7 @@ const PERMISSION_MODES = ["default", "accept-edits", "plan"];
 const THEMES = ["atlas", "plain"];
 const WORKFLOWS = ["agent", "draw"];
 const KNOWN_MODELS = ["gpt-5", "gpt-5-mini", "gpt-4o", "gpt-4o-mini"];
-const PALETTE_QUERIES = ["review", "session", "history", "help", "runtime", "approval", "draft", "workflow", "draw", "architecture"];
+const PALETTE_QUERIES = ["review", "session", "history", "help", "runtime", "approval", "draft", "workflow", "draw", "architecture", "data"];
 
 function uniqueValues(values: string[]): string[] {
   return [...new Set(values.filter(Boolean))];

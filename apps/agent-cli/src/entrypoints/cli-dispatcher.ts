@@ -13,6 +13,7 @@ type CliMode =
   | "mcp-server"
   | "tui"
   | "architecture"
+  | "data-usage"
   | "dump-system-prompt";
 
 export type CliInvocation =
@@ -27,6 +28,7 @@ export type CliInvocation =
   | { mode: "mcp-server" }
   | { mode: "tui" }
   | { mode: "architecture" }
+  | { mode: "data-usage" }
   | { mode: "dump-system-prompt" };
 
 export type CliIo = {
@@ -60,6 +62,7 @@ export function renderCliHelp(): string {
     "  agent-cli mcp-server            Start stdio MCP server",
     "  agent-cli tui                   Start terminal TUI console",
     "  agent-cli architecture          Print the local architecture overview",
+    "  agent-cli data-usage            Print the local user data governance overview",
     "  agent-cli dump-system-prompt    Print the current stable system prompt",
     "  agent-cli --version             Print version",
     "  agent-cli --help                Print help",
@@ -100,6 +103,9 @@ export function parseCliInvocation(argv: string[]): CliInvocation {
   }
   if (normalized === "--architecture" || normalized === "architecture") {
     return { mode: "architecture" };
+  }
+  if (normalized === "--data-usage" || normalized === "data-usage") {
+    return { mode: "data-usage" };
   }
   if (normalized === "--dump-system-prompt" || normalized === "dump-system-prompt") {
     return { mode: "dump-system-prompt" };
@@ -174,6 +180,11 @@ export async function dispatchCli(
   if (invocation.mode === "architecture") {
     const { runArchitectureOverview } = await import("./architecture.js");
     await runArchitectureOverview({ output: io.stdout });
+    return 0;
+  }
+  if (invocation.mode === "data-usage") {
+    const { runUserDataUsageOverview } = await import("./data-usage.js");
+    await runUserDataUsageOverview({ output: io.stdout });
     return 0;
   }
   if (invocation.mode === "dump-system-prompt") {

@@ -25,6 +25,7 @@ describe("cli-palette", () => {
     expect(candidates.some((candidate) => candidate.command === "/approvals")).toBe(true);
     expect(candidates.some((candidate) => candidate.command === "/workflow draw")).toBe(true);
     expect(candidates.some((candidate) => candidate.command === "/architecture")).toBe(true);
+    expect(candidates.some((candidate) => candidate.command === "/data")).toBe(true);
   });
 
   it("fuzzy-searches local palette candidates", () => {

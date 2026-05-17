@@ -24,11 +24,13 @@ import {
   renderCliStatus,
   renderCliTranscript,
   renderCliTranscriptLines,
+  renderCliUserDataGovernance,
   renderCliUsage,
   resetCliUiForTest,
   resolveCliHelpTopic,
   setCliUiColorEnabled,
 } from "../../src/cli/ui.js";
+import { buildUserDataGovernanceReport } from "../../src/governance/user-data.js";
 
 afterEach(() => {
   resetCliUiForTest();
@@ -180,6 +182,7 @@ describe("cli-ui", () => {
     expect(renderCliHelp()).toContain("/palette");
     expect(renderCliHelp()).toContain("/skills");
     expect(renderCliHelp()).toContain("/prompt");
+    expect(renderCliHelp()).toContain("/data");
     expect(renderCliHelp()).toContain("/architecture");
     expect(renderCliHelp()).toContain("Ctrl+G help");
     expect(renderCliHelp()).toContain("Ctrl+K palette");
@@ -271,6 +274,9 @@ describe("cli-ui", () => {
     expect(renderCliArchitecture()).toContain("Architecture");
     expect(renderCliArchitecture()).toContain("Stronger Here");
     expect(renderCliArchitecture()).toContain("remote/bridge/daemon");
+    expect(renderCliUserDataGovernance(buildUserDataGovernanceReport())).toContain("User Data Governance");
+    expect(renderCliUserDataGovernance(buildUserDataGovernanceReport())).toContain("model_input");
+    expect(renderCliUserDataGovernance(buildUserDataGovernanceReport())).toContain("reserved_gap");
     expect(
       renderCliShortcutLines({
         composerActive: false,
