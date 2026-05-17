@@ -2,7 +2,6 @@
 
 ## Purpose
 定义 Agent 的统一可观测性、结构化事件日志、指标快照与轨迹回放能力，支持问题定位、回归排查和安全 replay。
-
 ## Requirements
 ### Requirement: Agent SHALL emit structured observability events
 系统 SHALL 为主循环、工具调用、异步通知和错误结果写入结构化观测事件到 `.observability/events.jsonl`。
@@ -52,3 +51,17 @@ observability 与 audit payload MUST 在落盘前统一执行隐藏字符清洗�
 #### Scenario: observability payload 包含 MCP 标识
 - **WHEN** 系统写入与 MCP 工具相关的 observability payload
 - **THEN** 事件日志与聚合指标不得直接暴露私有 MCP server 名称
+
+### Requirement: Telemetry governance MUST distinguish local observability from remote analytics
+observability 与 telemetry 相关 surface MUST 明确区分当前本地 observability 数据面，与未来可能存在的 remote analytics / export 数据面，避免把二者混为一个默认启用的能力。
+
+#### Scenario: Local observability is inspected
+- **WHEN** 用户检查 observability / telemetry 数据治理信息
+- **THEN** 系统明确标识当前本地事件、指标与 replay 数据面属于本地 observability
+- **AND** 说明这些数据默认不等于远端 analytics 上传
+
+#### Scenario: Remote analytics is not implemented
+- **WHEN** 当前仓库没有 remote analytics sink 或组织级 telemetry 上报能力
+- **THEN** 系统将对应数据面标记为 `保留缺口`、`未启用` 或等价状态
+- **AND** 不把本地 `.observability` 误描述成远端遥测产品面
+
