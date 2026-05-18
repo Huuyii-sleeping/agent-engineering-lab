@@ -23,6 +23,7 @@ function createToolService(output: string): ToolServiceLike {
     listTools: async () => [],
     listToolRegistrations: async () => [],
     listToolMetadata: async () => [],
+    getToolRegistration: vi.fn(async () => null),
     previewToolCall: vi.fn((name: string) => `preview:${name}`),
     runToolByName: vi.fn(async () => output),
   };

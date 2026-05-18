@@ -25,8 +25,15 @@ describe("tools/registry", () => {
 
     expect(readFile?.target).toBe("base");
     expect(readFile?.allowDuringReplay).toBe(true);
+    expect(readFile?.execution).toMatchObject({
+      readOnly: true,
+      mutatesWorkspace: false,
+      parallelSafe: true,
+      riskLevel: "low",
+    });
     expect(spawn?.target).toBe("subagent");
     expect(spawn?.allowDuringReplay).toBe(false);
+    expect(spawn?.execution.parallelSafe).toBe(false);
     expect(registrations.some((tool) => tool.name === "task_create")).toBe(true);
   });
 

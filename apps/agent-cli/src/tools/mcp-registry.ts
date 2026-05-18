@@ -62,6 +62,12 @@ export class McpRegistry {
             parameters: tool.inputSchema,
             target: "mcp",
             allowDuringReplay: false,
+            execution: {
+              readOnly: false,
+              mutatesWorkspace: false,
+              parallelSafe: false,
+              riskLevel: "medium",
+            },
             trust: "trusted",
             provenance: server.provenance,
             credentialMode: server.credentialMode,

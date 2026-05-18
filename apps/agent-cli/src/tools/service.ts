@@ -7,6 +7,7 @@ export type ToolServiceLike = {
   listTools(): Promise<ChatCompletionTool[]>;
   listToolRegistrations(): Promise<ToolRegistration[]>;
   listToolMetadata(): Promise<Array<Record<string, string>>>;
+  getToolRegistration?(name: string): Promise<ToolRegistration | null>;
   previewToolCall(name: string, argumentsJson: string): string;
   runToolByName(name: string, argumentsJson: string): Promise<string>;
 };
@@ -27,6 +28,12 @@ export class ToolService implements ToolServiceLike {
 
   async listToolMetadata(): Promise<Array<Record<string, string>>> {
     return this.catalog.listToolMetadata();
+  }
+
+  async getToolRegistration(name: string): Promise<ToolRegistration | null> {
+    return this.catalog.getToolRegistration
+      ? this.catalog.getToolRegistration(name)
+      : (await this.catalog.listToolRegistrations()).find((tool) => tool.name === name) ?? null;
   }
 
   previewToolCall(name: string, argumentsJson: string): string {

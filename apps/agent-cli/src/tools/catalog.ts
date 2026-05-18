@@ -11,6 +11,7 @@ export type ToolCatalogLike = {
   listTools(): Promise<ChatCompletionTool[]>;
   listToolRegistrations(): Promise<ToolRegistration[]>;
   listToolMetadata(): Promise<Array<Record<string, string>>>;
+  getToolRegistration?(name: string): Promise<ToolRegistration | null>;
 };
 
 export class ToolCatalog implements ToolCatalogLike {
@@ -24,6 +25,10 @@ export class ToolCatalog implements ToolCatalogLike {
 
   async listToolMetadata(): Promise<Array<Record<string, string>>> {
     return (await this.listToolRegistrations()).map(toToolMetadata);
+  }
+
+  async getToolRegistration(name: string): Promise<ToolRegistration | null> {
+    return (await this.listToolRegistrations()).find((tool) => tool.name === name) ?? null;
   }
 }
 

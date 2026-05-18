@@ -1,6 +1,15 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 
 export type ToolRegistrationTarget = "base" | "subagent" | "mcp";
+export type ToolRiskLevel = "low" | "medium" | "high";
+
+export type ToolExecutionProfile = {
+  readOnly: boolean;
+  mutatesWorkspace: boolean;
+  parallelSafe: boolean;
+  riskLevel: ToolRiskLevel;
+  timeoutMs?: number;
+};
 
 export type ToolRegistration = {
   name: string;
@@ -8,6 +17,7 @@ export type ToolRegistration = {
   parameters: Record<string, unknown>;
   target: ToolRegistrationTarget;
   allowDuringReplay: boolean;
+  execution: ToolExecutionProfile;
   serverName?: string;
   remoteName?: string;
   trust?: "trusted" | "untrusted";
@@ -42,7 +52,14 @@ export function toToolMetadata(registration: ToolRegistration): Record<string, s
     description: registration.description,
     target: registration.target,
     replaySafe: registration.allowDuringReplay ? "true" : "false",
+    readOnly: registration.execution.readOnly ? "true" : "false",
+    mutatesWorkspace: registration.execution.mutatesWorkspace ? "true" : "false",
+    parallelSafe: registration.execution.parallelSafe ? "true" : "false",
+    riskLevel: registration.execution.riskLevel,
   };
+  if (registration.execution.timeoutMs !== undefined) {
+    metadata.timeoutMs = String(registration.execution.timeoutMs);
+  }
   if (registration.serverName) {
     metadata.serverName = registration.serverName;
   }

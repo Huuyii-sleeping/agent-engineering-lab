@@ -23,6 +23,12 @@ describe("tools/service", () => {
           parameters: { type: "object", properties: {} },
           target: "base",
           allowDuringReplay: true,
+          execution: {
+            readOnly: true,
+            mutatesWorkspace: false,
+            parallelSafe: true,
+            riskLevel: "low",
+          },
         },
       ]),
       listToolMetadata: vi.fn(async () => [{ name: "read_file", target: "base" }]),
@@ -39,6 +45,8 @@ describe("tools/service", () => {
       expect.objectContaining({ name: "read_file", target: "base" }),
     ]);
     expect(await service.listToolMetadata()).toEqual([{ name: "read_file", target: "base" }]);
+    expect(await service.getToolRegistration("read_file")).toEqual(expect.objectContaining({ name: "read_file" }));
+    expect(await service.getToolRegistration("missing")).toBeNull();
     expect(service.previewToolCall("read_file", '{"path":"README.md"}')).toBe("read_file README.md");
     expect(await service.runToolByName("read_file", '{"path":"README.md"}')).toBe("file contents");
     expect(catalog.listTools).toHaveBeenCalledTimes(1);

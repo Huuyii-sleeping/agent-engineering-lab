@@ -1,7 +1,7 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { parseToolArgs } from "../runtime/tool-runtime.js";
 import { BASE_TOOLS, previewBaseToolCall, resolveBaseToolHandler } from "./base.js";
-import { isFunctionTool, toChatCompletionTool, type ToolRegistration } from "./protocol.js";
+import { isFunctionTool, toChatCompletionTool, type ToolExecutionProfile, type ToolRegistration } from "./protocol.js";
 import {
   SUBAGENT_TOOLS,
   runSubagentClose,
@@ -32,6 +32,48 @@ const SUBAGENT_HANDLERS: Record<string, ToolHandler> = {
 
 export const BUILTIN_SUBAGENT_TOOL_NAMES = new Set(Object.keys(SUBAGENT_HANDLERS));
 
+const READ_ONLY_BASE_TOOLS = new Set([
+  "read_file",
+  "memory_search",
+  "memory_list",
+  "memory_explain",
+  "memory_doctor",
+  "task_list",
+  "task_get",
+  "estimate_tokens",
+  "security_check",
+  "security_list_approvals",
+  "worktree_list",
+  "team_list_teammates",
+  "team_read_inbox",
+  "team_list_requests",
+  "check_background",
+  "list_skills",
+  "load_skill",
+]);
+
+const HIGH_RISK_BASE_TOOLS = new Set(["bash", "write_file", "edit_file", "worktree_remove", "worktree_closeout"]);
+
+function executionProfileForBaseTool(name: string, allowDuringReplay: boolean): ToolExecutionProfile {
+  const readOnly = READ_ONLY_BASE_TOOLS.has(name) || allowDuringReplay;
+  const highRisk = HIGH_RISK_BASE_TOOLS.has(name);
+  return {
+    readOnly,
+    mutatesWorkspace: !readOnly,
+    parallelSafe: readOnly && !highRisk,
+    riskLevel: highRisk ? "high" : readOnly ? "low" : "medium",
+  };
+}
+
+function executionProfileForSubagentTool(name: string): ToolExecutionProfile {
+  return {
+    readOnly: name === "subagent_list",
+    mutatesWorkspace: false,
+    parallelSafe: false,
+    riskLevel: name === "subagent_list" ? "low" : "medium",
+  };
+}
+
 function buildBaseRegistrations(): BuiltinToolRegistration[] {
   return BASE_TOOLS.filter(isFunctionTool)
     .map((tool) => {
@@ -42,6 +84,7 @@ function buildBaseRegistrations(): BuiltinToolRegistration[] {
         parameters: (tool.function.parameters as Record<string, unknown> | undefined) ?? { type: "object", properties: {} },
         target: "base",
         allowDuringReplay: resolved?.allowDuringReplay ?? false,
+        execution: executionProfileForBaseTool(tool.function.name, resolved?.allowDuringReplay ?? false),
       } satisfies BuiltinToolRegistration;
     })
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -58,6 +101,7 @@ function buildSubagentRegistrations(): BuiltinToolRegistration[] {
             (tool.function.parameters as Record<string, unknown> | undefined) ?? { type: "object", properties: {} },
           target: "subagent",
           allowDuringReplay: false,
+          execution: executionProfileForSubagentTool(tool.function.name),
         }) satisfies BuiltinToolRegistration,
     )
     .sort((a, b) => a.name.localeCompare(b.name));

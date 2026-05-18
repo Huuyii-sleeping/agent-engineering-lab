@@ -9,7 +9,11 @@ vi.mock("../../../src/tools/security.js", () => ({
 }));
 
 import { isReplayDryRun } from "../../../src/observability/runtime.js";
-import { executeProtectedToolHandler, resolveToolExecution } from "../../../src/runtime/tool-runtime.js";
+import {
+  executeProtectedToolHandler,
+  resolveToolExecution,
+  validateToolInput,
+} from "../../../src/runtime/tool-runtime.js";
 import { enforceSecurityGate } from "../../../src/tools/security.js";
 
 describe("runtime/tool-runtime", () => {
@@ -37,6 +41,32 @@ describe("runtime/tool-runtime", () => {
 
     expect(execution.target).toBe("base");
     expect(execution.args.path).toBe("tmp/a.txt");
+  });
+
+  it("keeps malformed JSON as a parse error instead of silently using empty args", () => {
+    const execution = resolveToolExecution("read_file", '{"path":', new Set());
+
+    expect(execution.args).toEqual({});
+    expect(execution.parseError).toContain("Invalid JSON");
+  });
+
+  it("validates required, enum, and primitive argument schema before execution", () => {
+    const schema = {
+      type: "object",
+      required: ["path", "mode"],
+      properties: {
+        path: { type: "string" },
+        mode: { type: "string", enum: ["read", "write"] },
+        limit: { type: "integer" },
+      },
+    };
+
+    expect(validateToolInput(schema, { path: "README.md", mode: "read", limit: 10 })).toEqual([]);
+    expect(validateToolInput(schema, { path: 7, mode: "delete" })).toEqual([
+      "path must be string",
+      "mode must be one of read, write",
+    ]);
+    expect(validateToolInput(schema, { path: "README.md" })).toEqual(["mode is required"]);
   });
 
   it("blocks tool handlers during replay by default", async () => {

@@ -25,6 +25,12 @@ describe("tools/catalog", () => {
         trust: "trusted",
         provenance: ".codex/mcp.json#demo",
         credentialMode: "configured",
+        execution: {
+          readOnly: true,
+          mutatesWorkspace: false,
+          parallelSafe: true,
+          riskLevel: "low",
+        },
       },
     ]);
 
@@ -57,6 +63,12 @@ describe("tools/catalog", () => {
         trust: "trusted",
         provenance: ".codex/mcp.json#demo",
         credentialMode: "configured",
+        execution: {
+          readOnly: true,
+          mutatesWorkspace: false,
+          parallelSafe: true,
+          riskLevel: "low",
+        },
       },
     ]);
 
@@ -83,6 +95,10 @@ describe("tools/catalog", () => {
         trust: "trusted",
         provenance: ".codex/mcp.json#demo",
         credentialMode: "configured",
+        readOnly: "true",
+        parallelSafe: "true",
+        mutatesWorkspace: "false",
+        riskLevel: "low",
       }),
     );
   });

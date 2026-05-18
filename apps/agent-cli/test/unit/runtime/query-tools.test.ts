@@ -1,9 +1,11 @@
 import OpenAI from "openai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { setTimeout as sleep } from "node:timers/promises";
 import type { AgentRuntimeState } from "../../../src/agent-loop.js";
 import type { HookServiceLike } from "../../../src/services/hook-service.js";
 import type { ObservabilityServiceLike } from "../../../src/services/observability-service.js";
 import { runQueryToolStage } from "../../../src/runtime/query-tools.js";
+import type { ToolRegistration } from "../../../src/tools/protocol.js";
 import type { ToolServiceLike } from "../../../src/tools/service.js";
 
 function createRuntimeState(): AgentRuntimeState {
@@ -23,8 +25,20 @@ function createToolService(): ToolServiceLike {
     listTools: async () => [],
     listToolRegistrations: async () => [],
     listToolMetadata: async () => [],
+    getToolRegistration: vi.fn(async () => null),
     previewToolCall: vi.fn((name: string) => `preview:${name}`),
     runToolByName: vi.fn(),
+  };
+}
+
+function registration(name: string, execution: ToolRegistration["execution"]): ToolRegistration {
+  return {
+    name,
+    description: name,
+    parameters: { type: "object", properties: {} },
+    target: "base",
+    allowDuringReplay: execution.readOnly,
+    execution,
   };
 }
 
@@ -235,5 +249,89 @@ describe("runtime/query-tools", () => {
       }),
     );
     expect(runtimeState.activeTaskId).toBeNull();
+  });
+
+  it("runs read-only parallel-safe tool calls concurrently while appending results in original order", async () => {
+    const runtimeState = createRuntimeState();
+    const messages = [] as Array<{ role: string; content?: string; tool_call_id?: string }>;
+    const toolService = createToolService();
+    const hookService = createHookService();
+    const observabilityService = createObservabilityService();
+    let active = 0;
+    let maxActive = 0;
+    vi.mocked(toolService.getToolRegistration).mockImplementation(async (name: string) =>
+      registration(name, {
+        readOnly: true,
+        mutatesWorkspace: false,
+        parallelSafe: true,
+        riskLevel: "low",
+      }),
+    );
+    vi.mocked(toolService.runToolByName).mockImplementation(async (name: string) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await sleep(name === "read_file" ? 30 : 5);
+      active -= 1;
+      return JSON.stringify({ ok: true, name });
+    });
+
+    await runQueryToolStage({
+      message: createMessage([
+        { id: "call_read", name: "read_file", argumentsJson: JSON.stringify({ path: "README.md" }) },
+        { id: "call_list", name: "task_list", argumentsJson: "{}" },
+      ]),
+      messages,
+      runtimeState,
+      traceId: "trace-parallel",
+      toolService,
+      hookService,
+      observabilityService,
+    });
+
+    expect(maxActive).toBe(2);
+    expect(messages.map((message) => message.tool_call_id)).toEqual(["call_read", "call_list"]);
+    expect(String(messages[0]?.content)).toContain('"name":"read_file"');
+    expect(String(messages[1]?.content)).toContain('"name":"task_list"');
+  });
+
+  it("keeps write-capable tool calls serial even when adjacent", async () => {
+    const runtimeState = createRuntimeState();
+    const messages = [] as Array<{ role: string; content?: string; tool_call_id?: string }>;
+    const toolService = createToolService();
+    const hookService = createHookService();
+    const observabilityService = createObservabilityService();
+    let active = 0;
+    let maxActive = 0;
+    vi.mocked(toolService.getToolRegistration).mockImplementation(async (name: string) =>
+      registration(name, {
+        readOnly: false,
+        mutatesWorkspace: true,
+        parallelSafe: false,
+        riskLevel: "medium",
+      }),
+    );
+    vi.mocked(toolService.runToolByName).mockImplementation(async (name: string) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await sleep(5);
+      active -= 1;
+      return JSON.stringify({ ok: true, name });
+    });
+
+    await runQueryToolStage({
+      message: createMessage([
+        { id: "call_write_a", name: "write_file", argumentsJson: JSON.stringify({ path: "a", content: "a" }) },
+        { id: "call_write_b", name: "edit_file", argumentsJson: JSON.stringify({ path: "b", old_text: "b", new_text: "c" }) },
+      ]),
+      messages,
+      runtimeState,
+      traceId: "trace-serial",
+      toolService,
+      hookService,
+      observabilityService,
+    });
+
+    expect(maxActive).toBe(1);
+    expect(messages.map((message) => message.tool_call_id)).toEqual(["call_write_a", "call_write_b"]);
   });
 });
