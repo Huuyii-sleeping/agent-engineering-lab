@@ -12,6 +12,21 @@ import {
 } from "./mcp-protocol.js";
 import { toChatCompletionTool } from "./protocol.js";
 
+export type McpRegistryServerStatus = {
+  name: string;
+  trusted: boolean;
+  provenance: string;
+  credentialMode: "none" | "configured";
+  toolCount: number;
+  authFailed: boolean;
+  authFailureMessage?: string;
+  activeCalls: number;
+  queuedCalls: number;
+  maxConcurrentCalls: number;
+  allowedTools: string[];
+  disabledTools: string[];
+};
+
 export class McpRegistry {
   private readonly clients = new Map<string, McpServerClient>();
   private readonly activeCalls = new Map<string, number>();
@@ -150,6 +165,36 @@ export class McpRegistry {
     return registrations.map(toChatCompletionTool);
   }
 
+  getStatus(): McpRegistryServerStatus[] {
+    const registrations = this.registrationsCache ?? [];
+    return this.servers.map((server) => {
+      const authFailureMessage = this.authFailures.get(server.name);
+      const status: McpRegistryServerStatus = {
+        name: server.name,
+        trusted: server.trusted,
+        provenance: server.provenance,
+        credentialMode: server.credentialMode,
+        toolCount: registrations.filter((tool) => tool.serverName === server.name).length,
+        authFailed: Boolean(authFailureMessage),
+        activeCalls: this.activeCalls.get(server.name) ?? 0,
+        queuedCalls: this.waitQueues.get(server.name)?.length ?? 0,
+        maxConcurrentCalls: server.maxConcurrentCalls ?? 4,
+        allowedTools: server.allowedTools ?? [],
+        disabledTools: server.disabledTools ?? [],
+      };
+      if (authFailureMessage) {
+        status.authFailureMessage = authFailureMessage;
+      }
+      return status;
+    });
+  }
+
+  resetAuthFailures(): { cleared: number } {
+    const cleared = this.authFailures.size;
+    this.authFailures.clear();
+    return { cleared };
+  }
+
   async run(alias: string, args: Record<string, unknown>): Promise<string | null> {
     const registrations = await this.listRegistrations();
     const tool = registrations.find((item) => item.name === alias);
@@ -170,7 +215,8 @@ export class McpRegistry {
     }
     const server = this.servers.find((item) => item.name === tool.serverName);
 
-    const maxAttempts = Math.max(1, RUNTIME_CONFIG.mcpToolRetryMaxAttempts + 1);
+    const normalMaxAttempts = Math.max(1, RUNTIME_CONFIG.mcpToolRetryMaxAttempts + 1);
+    const maxAttempts = Math.max(normalMaxAttempts, 2);
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       const release = await this.acquireServerSlot(tool.serverName, server?.maxConcurrentCalls ?? 4);
       try {
@@ -190,10 +236,13 @@ export class McpRegistry {
         );
         return output;
       } catch (error) {
-        client.close("call_failed");
         const message = error instanceof Error ? error.message : String(error);
         const code = classifyMcpErrorCode(message);
-        const retryable = code !== "MCP_AUTH_REQUIRED" && attempt < maxAttempts;
+        client.close(code === "MCP_SESSION_EXPIRED" ? "session_expired" : "call_failed");
+        const retryable =
+          code === "MCP_SESSION_EXPIRED"
+            ? attempt < 2
+            : code !== "MCP_AUTH_REQUIRED" && attempt < normalMaxAttempts;
         const context = getExecutionContext();
         await recordObservabilityEvent(
           "mcp_call",

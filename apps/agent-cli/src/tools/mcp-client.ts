@@ -42,7 +42,14 @@ export class McpServerClient {
     return String(error);
   }
 
-  private handleExit(code: number | null, signal: NodeJS.Signals | null): void {
+  private handleExit(
+    child: ChildProcessWithoutNullStreams,
+    code: number | null,
+    signal: NodeJS.Signals | null,
+  ): void {
+    if (this.processRef !== child) {
+      return;
+    }
     const message =
       code === null
         ? `mcp server ${this.config.name} exited with signal ${signal ?? "unknown"}`
@@ -125,8 +132,11 @@ export class McpServerClient {
     child.stderr.on("data", (chunk: Buffer) => {
       this.stderrTail = `${this.stderrTail}${chunk.toString("utf8")}`.slice(-2000);
     });
-    child.on("exit", (code, signal) => this.handleExit(code, signal));
+    child.on("exit", (code, signal) => this.handleExit(child, code, signal));
     child.on("error", (error) => {
+      if (this.processRef !== child) {
+        return;
+      }
       for (const pending of this.pending.values()) {
         clearTimeout(pending.timer);
         pending.reject(error);

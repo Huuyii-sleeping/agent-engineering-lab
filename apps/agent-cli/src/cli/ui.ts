@@ -62,6 +62,25 @@ export type CliConfigSnapshot = {
   workspaceRoots: string[];
 };
 
+export type CliMcpServerStatus = {
+  name: string;
+  trusted: boolean;
+  provenance: string;
+  credentialMode: "none" | "configured";
+  toolCount: number;
+  authFailed: boolean;
+  authFailureMessage?: string;
+  activeCalls: number;
+  queuedCalls: number;
+  maxConcurrentCalls: number;
+  allowedTools: string[];
+  disabledTools: string[];
+};
+
+export type CliMcpResetSummary = {
+  cleared: number;
+};
+
 export type CliDoctorSeverity = "pass" | "warn" | "error";
 
 export type CliDoctorCheck = {
@@ -213,6 +232,8 @@ const CLI_HELP_TOPICS = [
       "/permissions show or set permission mode",
       "/architecture inspect the local runtime architecture coverage",
       "/data       inspect the local user data governance surface",
+      "/mcp        show MCP server status",
+      "/mcp reset  clear cached MCP auth failures",
       "/skills     list discovered local skills",
       "/skill <x>  inspect one local skill body",
       "/prompt     dump the current stable system prompt",
@@ -614,6 +635,47 @@ export function renderCliConfig(snapshot: CliConfigSnapshot): string {
   ].join("\n");
 }
 
+export function renderCliMcpStatus(
+  servers: CliMcpServerStatus[],
+  reset?: CliMcpResetSummary,
+): string {
+  const lines = [strong("MCP")];
+  if (reset) {
+    lines.push(`reset     cleared ${reset.cleared} cached auth failure(s)`);
+  }
+  if (servers.length === 0) {
+    lines.push(muted("No MCP servers configured."));
+    return lines.join("\n");
+  }
+  for (const server of servers) {
+    const auth = server.authFailed ? "failed" : "ok";
+    const filters = [
+      server.allowedTools.length > 0 ? `allow=${server.allowedTools.join(",")}` : "allow=*",
+      server.disabledTools.length > 0 ? `deny=${server.disabledTools.join(",")}` : "deny=(none)",
+    ].join(" ");
+    lines.push(
+      "",
+      strong(server.name),
+      renderRows([
+        { label: "trust", value: server.trusted ? "trusted" : "untrusted" },
+        { label: "tools", value: String(server.toolCount) },
+        {
+          label: "calls",
+          value: `${server.activeCalls} active / ${server.queuedCalls} queued / max ${server.maxConcurrentCalls}`,
+        },
+        { label: "auth", value: auth },
+        { label: "filters", value: filters },
+        { label: "credentials", value: server.credentialMode },
+        { label: "source", value: server.provenance },
+      ]),
+    );
+    if (server.authFailureMessage) {
+      lines.push(`auth msg  ${truncate(server.authFailureMessage, 96)}`);
+    }
+  }
+  return lines.join("\n");
+}
+
 export function renderCliArchitecture(): string {
   return [
     strong("Architecture"),
@@ -717,7 +779,7 @@ export function renderCliHelp(topic: CliHelpTopicId = "overview"): string {
     "sessions   /sessions /use /next /prev /clear",
     "workflow   /workflow agent | /workflow draw",
     "browse     /history /search /peek /tail",
-    "runtime    /status /config /model /permissions /architecture /skills /skill /prompt /data /cost /compact /redraw",
+    "runtime    /status /config /model /permissions /architecture /skills /skill /prompt /mcp /data /cost /compact /redraw",
     "approvals  /approvals /approve /reject /doctor /add-dir /tools /theme",
     "shell      !<cmd> | /exit",
     "TUI keys    Ctrl+G help | Ctrl+K palette | Ctrl+N next | Ctrl+P prev | Ctrl+L redraw | Esc cancel draft",

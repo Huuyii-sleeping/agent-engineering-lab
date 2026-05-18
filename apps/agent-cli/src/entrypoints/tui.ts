@@ -51,6 +51,10 @@ import { CliTranscriptBrowserStore } from "../cli/transcript.js";
 import type { CliWorkflowMode } from "../cli/workflow.js";
 import { getSkillCatalog, loadSkill } from "../skills/loader.js";
 import { compactMessages } from "../tools/context-compact.js";
+import {
+  getMcpRegistryStatus,
+  resetMcpRegistryAuthFailures,
+} from "../tools/mcp.js";
 import { addWorkspaceRoot } from "../workspace-roots.js";
 
 export type TerminalTuiServiceLike = {
@@ -596,6 +600,8 @@ export async function handleTerminalTuiCommand(input: {
           model: input.model,
         }),
       getConfig: () => collectCliConfigSnapshot({ model: input.model }),
+      getMcpStatus: getMcpRegistryStatus,
+      resetMcpAuthFailures: resetMcpRegistryAuthFailures,
       getPermissions: collectCliPermissionSnapshot,
       setPermissionMode: (mode) => {
         setCliPermissionMode(mode);

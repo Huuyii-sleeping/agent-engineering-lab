@@ -87,6 +87,23 @@ function createContext(input: {
       permissionMode: "default",
       workspaceRoots: ["/repo"],
     })),
+    getMcpStatus: vi.fn(async () => [
+      {
+        name: "demo",
+        trusted: true,
+        provenance: ".codex/mcp.json#demo",
+        credentialMode: "none",
+        toolCount: 5,
+        authFailed: true,
+        authFailureMessage: "authentication required",
+        activeCalls: 0,
+        queuedCalls: 0,
+        maxConcurrentCalls: 4,
+        allowedTools: [],
+        disabledTools: [],
+      },
+    ]),
+    resetMcpAuthFailures: vi.fn(async () => ({ cleared: 1 })),
     getPermissions: vi.fn(async () => ({
       mode: "default",
       pendingApprovals: 0,
@@ -348,6 +365,9 @@ describe("cli-commands", () => {
     expect((await dispatchCliCommand("/prompt", context)).output).toContain("System Prompt");
     expect((await dispatchCliCommand("/prompt full", context)).output).toContain(".security/prompt-dumps/prompt_dump_123.json");
     expect((await dispatchCliCommand("/prompt full", context)).output).not.toContain("runtime details");
+    expect((await dispatchCliCommand("/mcp", context)).output).toContain("demo");
+    expect((await dispatchCliCommand("/mcp reset", context)).output).toContain("cleared 1");
+    expect((await dispatchCliCommand("/mcp nope", context)).output).toContain("unknown mcp action");
     expect((await dispatchCliCommand("/cost", context)).output).toContain("Usage");
     expect((await dispatchCliCommand("/compact 5", context)).output).toContain("Compact");
     expect((await dispatchCliCommand("/add-dir /tmp/demo", context)).output).toContain("added workspace root /tmp/demo");

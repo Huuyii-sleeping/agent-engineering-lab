@@ -12,6 +12,7 @@ import {
   renderCliError,
   renderCliGuideLines,
   renderCliHelp,
+  renderCliMcpStatus,
   renderCliPalette,
   renderCliPaletteLines,
   renderCliPermissions,
@@ -182,6 +183,7 @@ describe("cli-ui", () => {
     expect(renderCliHelp()).toContain("/palette");
     expect(renderCliHelp()).toContain("/skills");
     expect(renderCliHelp()).toContain("/prompt");
+    expect(renderCliHelp()).toContain("/mcp");
     expect(renderCliHelp()).toContain("/data");
     expect(renderCliHelp()).toContain("/architecture");
     expect(renderCliHelp()).toContain("Ctrl+G help");
@@ -274,6 +276,27 @@ describe("cli-ui", () => {
     expect(renderCliArchitecture()).toContain("Architecture");
     expect(renderCliArchitecture()).toContain("Stronger Here");
     expect(renderCliArchitecture()).toContain("remote/bridge/daemon");
+    expect(
+      renderCliMcpStatus(
+        [
+          {
+            name: "demo",
+            trusted: true,
+            provenance: ".codex/mcp.json#demo",
+            credentialMode: "none",
+            toolCount: 5,
+            authFailed: true,
+            authFailureMessage: "authentication required",
+            activeCalls: 0,
+            queuedCalls: 0,
+            maxConcurrentCalls: 4,
+            allowedTools: [],
+            disabledTools: ["danger"],
+          },
+        ],
+        { cleared: 1 },
+      ),
+    ).toContain("cleared 1");
     expect(renderCliUserDataGovernance(buildUserDataGovernanceReport())).toContain("User Data Governance");
     expect(renderCliUserDataGovernance(buildUserDataGovernanceReport())).toContain("model_input");
     expect(renderCliUserDataGovernance(buildUserDataGovernanceReport())).toContain("reserved_gap");

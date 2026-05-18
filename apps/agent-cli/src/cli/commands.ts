@@ -8,6 +8,7 @@ import {
   renderCliDoctor,
   renderCliError,
   renderCliHelp,
+  renderCliMcpStatus,
   renderCliPalette,
   renderCliPermissions,
   renderCliPromptDump,
@@ -23,6 +24,8 @@ import {
   type CliHelpTopicId,
   type CliCompactSummary,
   type CliConfigSnapshot,
+  type CliMcpResetSummary,
+  type CliMcpServerStatus,
   type CliPermissionSnapshot,
   type CliSessionSummary,
   type CliSkillDetail,
@@ -61,6 +64,8 @@ export type CliCommandContext = {
   listTools(): Promise<Array<Record<string, string>>>;
   getStatus(): Promise<CliStatusSnapshot>;
   getConfig(): Promise<CliConfigSnapshot>;
+  getMcpStatus(): Promise<CliMcpServerStatus[]>;
+  resetMcpAuthFailures(): Promise<CliMcpResetSummary>;
   getPermissions(): Promise<CliPermissionSnapshot>;
   setPermissionMode(mode: CliPermissionMode): boolean;
   listApprovals(status?: "pending" | "approved" | "rejected" | "expired" | "consumed"): Promise<string>;
@@ -476,6 +481,27 @@ export async function dispatchCliCommand(
   }
   if (parsed.command === "config") {
     return { handled: true, output: renderCliConfig(await context.getConfig()) };
+  }
+  if (parsed.command === "mcp") {
+    const action = parsed.args[0]?.trim().toLowerCase();
+    if (!action) {
+      return { handled: true, output: renderCliMcpStatus(await context.getMcpStatus()) };
+    }
+    if (action === "reset" && parsed.args.length === 1) {
+      const reset = await context.resetMcpAuthFailures();
+      return {
+        handled: true,
+        output: renderCliMcpStatus(await context.getMcpStatus(), reset),
+      };
+    }
+    return {
+      handled: true,
+      output: renderCliError(
+        "unknown mcp action",
+        `unsupported mcp action: ${parsed.args.join(" ")}`,
+        "use /mcp or /mcp reset",
+      ),
+    };
   }
   if (parsed.command === "architecture") {
     return { handled: true, output: renderCliArchitecture() };

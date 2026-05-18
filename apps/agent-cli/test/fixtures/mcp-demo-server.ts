@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { Buffer } from "node:buffer";
+import { existsSync, writeFileSync } from "node:fs";
 import process from "node:process";
 import { setTimeout as sleep } from "node:timers/promises";
 
@@ -16,6 +17,23 @@ type JsonRpcMessage = {
 };
 
 let buffer = Buffer.alloc(0);
+let expireOnceFailed = false;
+
+function shouldFailExpireOnce(): boolean {
+  const markerPath = process.env.MCP_DEMO_EXPIRE_ONCE_MARKER?.trim();
+  if (!markerPath) {
+    if (expireOnceFailed) {
+      return false;
+    }
+    expireOnceFailed = true;
+    return true;
+  }
+  if (existsSync(markerPath)) {
+    return false;
+  }
+  writeFileSync(markerPath, "failed", "utf8");
+  return true;
+}
 
 function isJsonRecord(value: unknown): value is JsonRecord {
   return typeof value === "object" && value !== null;
@@ -97,6 +115,16 @@ async function handleMessage(message: unknown): Promise<void> {
               properties: {},
             },
           },
+          {
+            name: "expire_once",
+            description: "Fail once with a session-expired error and then succeed.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                text: { type: "string" },
+              },
+            },
+          },
         ],
       },
     });
@@ -161,6 +189,31 @@ async function handleMessage(message: unknown): Promise<void> {
         error: {
           code: 401,
           message: "authentication required",
+        },
+      });
+      return;
+    }
+    if (toolName === "expire_once") {
+      if (shouldFailExpireOnce()) {
+        send({
+          jsonrpc: "2.0",
+          id,
+          error: {
+            code: -32001,
+            message: "session expired",
+          },
+        });
+        return;
+      }
+      send({
+        jsonrpc: "2.0",
+        id,
+        result: {
+          structuredContent: {
+            ok: true,
+            recovered: true,
+            echoed: String(args.text ?? ""),
+          },
         },
       });
       return;

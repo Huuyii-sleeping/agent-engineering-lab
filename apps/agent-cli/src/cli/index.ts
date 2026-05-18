@@ -55,6 +55,10 @@ import type { RuntimeCoordinationServiceLike } from "../services/index.js";
 import { runCliShellShortcut } from "./shell.js";
 import { getSkillCatalog, loadSkill } from "../skills/loader.js";
 import { compactMessages, withCompactRuntimeContext } from "../tools/context-compact.js";
+import {
+  getMcpRegistryStatus,
+  resetMcpRegistryAuthFailures,
+} from "../tools/mcp.js";
 import { addWorkspaceRoot } from "../workspace-roots.js";
 
 type LineEditor = {
@@ -382,6 +386,8 @@ async function runDaemonCli(opts: {
             model: currentModel,
           }),
         getConfig: () => collectCliConfigSnapshot({ model: process.env.MODEL_ID?.trim() }),
+        getMcpStatus: getMcpRegistryStatus,
+        resetMcpAuthFailures: resetMcpRegistryAuthFailures,
         getPermissions: collectCliPermissionSnapshot,
         setPermissionMode: (mode) => {
           setCliPermissionMode(mode);
@@ -808,6 +814,8 @@ export async function runCli(options: RunCliOptions = {}): Promise<void> {
             model: app.model,
           }),
         getConfig: () => collectCliConfigSnapshot({ model: app.model }),
+        getMcpStatus: getMcpRegistryStatus,
+        resetMcpAuthFailures: resetMcpRegistryAuthFailures,
         getPermissions: collectCliPermissionSnapshot,
         setPermissionMode: (mode) => {
           setCliPermissionMode(mode);

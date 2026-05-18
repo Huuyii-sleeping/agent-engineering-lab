@@ -1,5 +1,7 @@
 import path from "node:path";
 import * as process from "node:process";
+import { rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { performance } from "node:perf_hooks";
 import { afterEach, describe, expect, it } from "vitest";
 import type { McpServerConfig } from "../../../src/tools/mcp-config.js";
@@ -8,13 +10,14 @@ import { McpRegistry } from "../../../src/tools/mcp-registry.js";
 const fixtureServerPath = path.resolve(process.cwd(), "test/fixtures/mcp-demo-server.ts");
 const tsxCliPath = path.resolve(process.cwd(), "node_modules/tsx/dist/cli.mjs");
 let activeRegistry: McpRegistry | null = null;
+let cleanupPaths: string[] = [];
 
-function createRegistry(): McpRegistry {
+function createRegistry(input: { env?: Record<string, string> } = {}): McpRegistry {
   const config: McpServerConfig = {
     name: "demo",
     command: process.execPath,
     args: [tsxCliPath, fixtureServerPath],
-    env: {},
+    env: input.env ?? {},
     cwd: process.cwd(),
     enabled: true,
     trusted: true,
@@ -32,7 +35,9 @@ function createRegistry(): McpRegistry {
 describe("tools/mcp-registry", () => {
   afterEach(async () => {
     await activeRegistry?.close();
+    await Promise.all(cleanupPaths.map((item) => rm(item, { force: true }).catch(() => undefined)));
     activeRegistry = null;
+    cleanupPaths = [];
   });
 
   it("builds cached mcp registrations and OpenAI tool schemas", async () => {
@@ -153,6 +158,45 @@ describe("tools/mcp-registry", () => {
     expect(first.error?.code).toBe("MCP_AUTH_REQUIRED");
     expect(second.ok).toBe(false);
     expect(second.error?.code).toBe("MCP_AUTH_REQUIRED");
+  });
+
+  it("recovers from a session-expired error by reconnecting and retrying once", async () => {
+    const markerPath = path.join(
+      tmpdir(),
+      `agent-cli-mcp-expire-once-${process.pid}-${Date.now()}.marker`,
+    );
+    cleanupPaths.push(markerPath);
+    const registry = createRegistry({ env: { MCP_DEMO_EXPIRE_ONCE_MARKER: markerPath } });
+    await registry.listRegistrations();
+
+    const output = JSON.parse((await registry.run("mcp__demo__expire_once", { text: "ok" })) ?? "{}") as {
+      ok?: boolean;
+      recovered?: boolean;
+      echoed?: string;
+    };
+
+    expect(output.ok).toBe(true);
+    expect(output.recovered).toBe(true);
+    expect(output.echoed).toBe("ok");
+  });
+
+  it("reports registry status and clears cached auth failures", async () => {
+    const registry = createRegistry();
+    await registry.listRegistrations();
+    await registry.run("mcp__demo__auth_fail", {});
+
+    expect(registry.getStatus()).toContainEqual(
+      expect.objectContaining({
+        name: "demo",
+        trusted: true,
+        toolCount: 5,
+        authFailed: true,
+        maxConcurrentCalls: 4,
+      }),
+    );
+
+    expect(registry.resetAuthFailures()).toEqual({ cleared: 1 });
+    expect(registry.getStatus()[0]?.authFailed).toBe(false);
   });
 
   it("runs matching mcp tools and keeps missing aliases as null", async () => {

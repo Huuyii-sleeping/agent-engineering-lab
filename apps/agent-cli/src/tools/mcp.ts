@@ -2,7 +2,7 @@ import * as process from "node:process";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { loadMcpServerConfigs } from "./mcp-config.js";
 import type { McpToolRegistration } from "./mcp-protocol.js";
-import { McpRegistry } from "./mcp-registry.js";
+import { McpRegistry, type McpRegistryServerStatus } from "./mcp-registry.js";
 
 let ACTIVE_REGISTRY: { key: string; registry: McpRegistry } | null = null;
 
@@ -43,6 +43,16 @@ export async function listMcpToolRegistrations(): Promise<McpToolRegistration[]>
 
 export async function runMcpToolByName(name: string, args: Record<string, unknown>): Promise<string | null> {
   return (await getRegistry()).run(name, args);
+}
+
+export async function getMcpRegistryStatus(): Promise<McpRegistryServerStatus[]> {
+  const registry = await getRegistry();
+  await registry.listRegistrations();
+  return registry.getStatus();
+}
+
+export async function resetMcpRegistryAuthFailures(): Promise<{ cleared: number }> {
+  return (await getRegistry()).resetAuthFailures();
 }
 
 export async function resetMcpRegistryForTest(): Promise<void> {
