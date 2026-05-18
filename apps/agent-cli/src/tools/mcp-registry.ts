@@ -4,6 +4,7 @@ import { RUNTIME_CONFIG } from "../runtime-config.js";
 import type { McpServerConfig } from "./mcp-config.js";
 import { McpServerClient } from "./mcp-client.js";
 import {
+  classifyMcpErrorCode,
   formatMcpFailure,
   makeToolAlias,
   normalizeMcpCallOutput,
@@ -13,6 +14,9 @@ import { toChatCompletionTool } from "./protocol.js";
 
 export class McpRegistry {
   private readonly clients = new Map<string, McpServerClient>();
+  private readonly activeCalls = new Map<string, number>();
+  private readonly waitQueues = new Map<string, Array<() => void>>();
+  private readonly authFailures = new Map<string, string>();
   private registrationsCache: McpToolRegistration[] | null = null;
 
   constructor(private readonly servers: McpServerConfig[]) {
@@ -26,6 +30,48 @@ export class McpRegistry {
       client.close("registry_reset");
     }
     this.registrationsCache = null;
+    this.activeCalls.clear();
+    this.waitQueues.clear();
+    this.authFailures.clear();
+  }
+
+  private toolAllowed(server: McpServerConfig, remoteName: string): boolean {
+    const normalized = remoteName.trim().toLowerCase();
+    const allowedTools = server.allowedTools ?? [];
+    const disabledTools = server.disabledTools ?? [];
+    if (disabledTools.includes(normalized)) {
+      return false;
+    }
+    return allowedTools.length === 0 || allowedTools.includes(normalized);
+  }
+
+  private async acquireServerSlot(serverName: string, maxConcurrentCalls: number): Promise<() => void> {
+    const limit = Math.max(1, maxConcurrentCalls);
+    const active = this.activeCalls.get(serverName) ?? 0;
+    if (active >= limit) {
+      await new Promise<void>((resolve) => {
+        const queue = this.waitQueues.get(serverName) ?? [];
+        queue.push(resolve);
+        this.waitQueues.set(serverName, queue);
+      });
+    }
+    this.activeCalls.set(serverName, (this.activeCalls.get(serverName) ?? 0) + 1);
+    return () => {
+      const nextActive = Math.max(0, (this.activeCalls.get(serverName) ?? 1) - 1);
+      if (nextActive === 0) {
+        this.activeCalls.delete(serverName);
+      } else {
+        this.activeCalls.set(serverName, nextActive);
+      }
+      const queue = this.waitQueues.get(serverName) ?? [];
+      const next = queue.shift();
+      if (queue.length === 0) {
+        this.waitQueues.delete(serverName);
+      } else {
+        this.waitQueues.set(serverName, queue);
+      }
+      next?.();
+    };
   }
 
   private async buildRegistrations(): Promise<McpToolRegistration[]> {
@@ -54,6 +100,9 @@ export class McpRegistry {
       try {
         const tools = await client.listTools();
         for (const tool of tools) {
+          if (!this.toolAllowed(server, tool.name)) {
+            continue;
+          }
           registrations.push({
             name: makeToolAlias(server.name, tool.name, usedAliases),
             serverName: server.name,
@@ -113,9 +162,17 @@ export class McpRegistry {
         server: tool.serverName,
       });
     }
+    const authFailure = this.authFailures.get(tool.serverName);
+    if (authFailure) {
+      return formatMcpFailure("MCP_AUTH_REQUIRED", authFailure, {
+        server: tool.serverName,
+      });
+    }
+    const server = this.servers.find((item) => item.name === tool.serverName);
 
     const maxAttempts = Math.max(1, RUNTIME_CONFIG.mcpToolRetryMaxAttempts + 1);
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const release = await this.acquireServerSlot(tool.serverName, server?.maxConcurrentCalls ?? 4);
       try {
         const result = await client.callTool(tool.remoteName, args);
         const output = normalizeMcpCallOutput(tool.serverName, tool.remoteName, result);
@@ -135,7 +192,8 @@ export class McpRegistry {
       } catch (error) {
         client.close("call_failed");
         const message = error instanceof Error ? error.message : String(error);
-        const retryable = attempt < maxAttempts;
+        const code = classifyMcpErrorCode(message);
+        const retryable = code !== "MCP_AUTH_REQUIRED" && attempt < maxAttempts;
         const context = getExecutionContext();
         await recordObservabilityEvent(
           "mcp_call",
@@ -150,18 +208,22 @@ export class McpRegistry {
           },
           context ?? undefined,
         );
+        if (code === "MCP_AUTH_REQUIRED") {
+          this.authFailures.set(tool.serverName, message);
+          return formatMcpFailure(code, message, {
+            server: tool.serverName,
+            remoteTool: tool.remoteName,
+          });
+        }
         if (retryable) {
           continue;
         }
-        const code = /timed out/i.test(message)
-          ? "MCP_REQUEST_TIMEOUT"
-          : /not writable|invalid|failed|exited|spawn/i.test(message)
-            ? "MCP_PROTOCOL_ERROR"
-            : "MCP_TOOL_CALL_FAILED";
         return formatMcpFailure(code, message, {
           server: tool.serverName,
           remoteTool: tool.remoteName,
         });
+      } finally {
+        release();
       }
     }
     return formatMcpFailure("MCP_TOOL_CALL_FAILED", `mcp tool ${alias} failed`, {

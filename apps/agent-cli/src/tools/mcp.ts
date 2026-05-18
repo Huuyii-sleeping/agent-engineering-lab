@@ -17,6 +17,9 @@ async function getRegistry(): Promise<McpRegistry> {
       env: server.env,
       cwd: server.cwd,
       requestTimeoutMs: server.requestTimeoutMs,
+      allowedTools: server.allowedTools,
+      disabledTools: server.disabledTools,
+      maxConcurrentCalls: server.maxConcurrentCalls,
     })),
   });
   if (ACTIVE_REGISTRY?.key === key) {

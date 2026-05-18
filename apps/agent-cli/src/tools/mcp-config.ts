@@ -14,6 +14,9 @@ export type McpServerConfig = {
   provenance: string;
   credentialMode: "none" | "configured";
   requestTimeoutMs: number;
+  allowedTools?: string[];
+  disabledTools?: string[];
+  maxConcurrentCalls?: number;
 };
 
 function parseConfigObject(raw: string): { schemaVersion?: unknown; servers?: unknown } {
@@ -33,6 +36,21 @@ function normalizeStringMap(value: unknown): Record<string, string> {
   );
 }
 
+function normalizeStringList(value: unknown): string[] {
+  const rawItems = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? value.split(",")
+      : [];
+  return [
+    ...new Set(
+      rawItems
+        .map((item) => String(item ?? "").trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ];
+}
+
 function normalizeServerConfig(item: unknown, configPath: string): McpServerConfig | null {
   if (!item || typeof item !== "object") {
     return null;
@@ -46,6 +64,7 @@ function normalizeServerConfig(item: unknown, configPath: string): McpServerConf
   const args = Array.isArray(input.args) ? input.args.map((value) => String(value)) : [];
   const cwd = input.cwd ? path.resolve(process.cwd(), String(input.cwd)) : process.cwd();
   const timeoutOverride = Number(input.requestTimeoutMs);
+  const maxConcurrentCalls = Number(input.maxConcurrentCalls);
   return {
     name,
     command,
@@ -60,6 +79,12 @@ function normalizeServerConfig(item: unknown, configPath: string): McpServerConf
       Number.isFinite(timeoutOverride) && timeoutOverride >= 100
         ? Math.trunc(timeoutOverride)
         : RUNTIME_CONFIG.mcpRequestTimeoutMs,
+    allowedTools: normalizeStringList(input.allowedTools),
+    disabledTools: normalizeStringList(input.disabledTools),
+    maxConcurrentCalls:
+      Number.isFinite(maxConcurrentCalls) && maxConcurrentCalls >= 1
+        ? Math.trunc(maxConcurrentCalls)
+        : 4,
   };
 }
 

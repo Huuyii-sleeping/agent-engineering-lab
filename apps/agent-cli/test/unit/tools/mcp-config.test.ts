@@ -55,6 +55,9 @@ describe("tools/mcp-config", () => {
           cwd: "nested",
           trusted: true,
           requestTimeoutMs: 250.9,
+          allowedTools: ["Echo_Upper", "echo_upper", 7],
+          disabledTools: "Fail_Now, fail_now",
+          maxConcurrentCalls: 2.9,
         },
         {
           name: "disabled",
@@ -79,6 +82,9 @@ describe("tools/mcp-config", () => {
         provenance: `${path.join(process.cwd(), ".codex", "mcp.json")}#demo`,
         credentialMode: "configured",
         requestTimeoutMs: 250,
+        allowedTools: ["echo_upper", "7"],
+        disabledTools: ["fail_now"],
+        maxConcurrentCalls: 2,
       },
     ]);
   });

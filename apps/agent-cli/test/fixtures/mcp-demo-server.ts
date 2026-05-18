@@ -2,6 +2,7 @@
 
 import { Buffer } from "node:buffer";
 import process from "node:process";
+import { setTimeout as sleep } from "node:timers/promises";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -26,7 +27,7 @@ function send(message: unknown): void {
   process.stdout.write(`${header}${body}`);
 }
 
-function handleMessage(message: unknown): void {
+async function handleMessage(message: unknown): Promise<void> {
   if (!isJsonRecord(message)) {
     return;
   }
@@ -77,6 +78,25 @@ function handleMessage(message: unknown): void {
               },
             },
           },
+          {
+            name: "delay_echo",
+            description: "Return input text after a delay.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                text: { type: "string" },
+                delayMs: { type: "number" },
+              },
+            },
+          },
+          {
+            name: "auth_fail",
+            description: "Return a JSON-RPC authentication failure.",
+            inputSchema: {
+              type: "object",
+              properties: {},
+            },
+          },
         ],
       },
     });
@@ -115,6 +135,32 @@ function handleMessage(message: unknown): void {
         result: {
           isError: true,
           content: [{ type: "text", text: String(args.reason ?? "fixture failure") }],
+        },
+      });
+      return;
+    }
+    if (toolName === "delay_echo") {
+      const delayMs = Math.max(0, Math.min(500, Number(args.delayMs ?? 0)));
+      await sleep(delayMs);
+      send({
+        jsonrpc: "2.0",
+        id,
+        result: {
+          structuredContent: {
+            ok: true,
+            echoed: String(args.text ?? ""),
+          },
+        },
+      });
+      return;
+    }
+    if (toolName === "auth_fail") {
+      send({
+        jsonrpc: "2.0",
+        id,
+        error: {
+          code: 401,
+          message: "authentication required",
         },
       });
       return;
@@ -159,7 +205,7 @@ process.stdin.on("data", (chunk: Buffer) => {
     const body = buffer.slice(headerEnd + 4, frameEnd).toString("utf8");
     buffer = buffer.slice(frameEnd);
     try {
-      handleMessage(JSON.parse(body) as unknown);
+      void handleMessage(JSON.parse(body) as unknown);
     } catch {
       process.exit(1);
     }

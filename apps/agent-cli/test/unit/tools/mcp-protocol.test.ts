@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatMcpFailure,
   makeToolAlias,
+  MCP_TOOL_DESCRIPTION_MAX_CHARS,
   normalizeMcpCallOutput,
   parseCallResult,
   parseToolsList,
@@ -37,6 +38,21 @@ describe("tools/mcp-protocol", () => {
         inputSchema: { type: "object", properties: {} },
       },
     ]);
+  });
+
+  it("sanitizes and truncates remote tool descriptions before registration", () => {
+    const [tool] = parseToolsList({
+      tools: [
+        {
+          name: "long_description",
+          description: `prefix token=sk-demo-secret-12345678901234567890 ${"x".repeat(2000)}`,
+          inputSchema: {},
+        },
+      ],
+    });
+
+    expect(tool?.description).toContain("[REDACTED_SECRET]");
+    expect(tool?.description.length).toBeLessThanOrEqual(MCP_TOOL_DESCRIPTION_MAX_CHARS);
   });
 
   it("normalizes structured and text call outputs without changing shape", () => {

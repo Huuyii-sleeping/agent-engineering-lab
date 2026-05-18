@@ -32,8 +32,17 @@ export type McpToolRegistration = ToolRegistration & {
   remoteName: string;
 };
 
+export const MCP_TOOL_DESCRIPTION_MAX_CHARS = 800;
+
 function fail(code: string, message: string, extra?: Record<string, unknown>): string {
   return JSON.stringify({ ok: false, error: { code, message }, ...(extra ?? {}) }, null, 2);
+}
+
+function truncateText(value: string, maxChars: number): string {
+  if (value.length <= maxChars) {
+    return value;
+  }
+  return `${value.slice(0, Math.max(0, maxChars - 3))}...`;
 }
 
 function sanitizeSegment(value: string): string {
@@ -91,7 +100,10 @@ export function parseToolsList(result: unknown): McpToolDescriptor[] {
       }
       return {
         name,
-        description: sanitizeAndRedactText(String(tool.description ?? "")),
+        description: truncateText(
+          sanitizeAndRedactText(String(tool.description ?? "")),
+          MCP_TOOL_DESCRIPTION_MAX_CHARS,
+        ),
         inputSchema: normalizeInputSchema(tool.inputSchema),
       } satisfies McpToolDescriptor;
     })
@@ -107,6 +119,22 @@ export function parseCallResult(result: unknown): McpCallResult {
 
 export function formatMcpFailure(code: string, message: string, extra?: Record<string, unknown>): string {
   return fail(code, message, extra);
+}
+
+export function classifyMcpErrorCode(message: string): string {
+  if (/\b(401|403)\b|unauthori[sz]ed|authentication required|invalid token|forbidden/i.test(message)) {
+    return "MCP_AUTH_REQUIRED";
+  }
+  if (/session expired|session_expired|invalid session|expired session/i.test(message)) {
+    return "MCP_SESSION_EXPIRED";
+  }
+  if (/timed out/i.test(message)) {
+    return "MCP_REQUEST_TIMEOUT";
+  }
+  if (/not writable|invalid|failed|exited|spawn/i.test(message)) {
+    return "MCP_PROTOCOL_ERROR";
+  }
+  return "MCP_TOOL_CALL_FAILED";
 }
 
 export function normalizeMcpCallOutput(serverName: string, remoteName: string, result: McpCallResult): string {

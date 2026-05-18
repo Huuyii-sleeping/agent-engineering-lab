@@ -1,5 +1,6 @@
 import path from "node:path";
 import * as process from "node:process";
+import { performance } from "node:perf_hooks";
 import { afterEach, describe, expect, it } from "vitest";
 import type { McpServerConfig } from "../../../src/tools/mcp-config.js";
 import { McpRegistry } from "../../../src/tools/mcp-registry.js";
@@ -20,6 +21,9 @@ function createRegistry(): McpRegistry {
     provenance: `${path.join(process.cwd(), ".codex", "mcp.json")}#demo`,
     credentialMode: "none",
     requestTimeoutMs: 2000,
+    allowedTools: [],
+    disabledTools: [],
+    maxConcurrentCalls: 4,
   };
   activeRegistry = new McpRegistry([config]);
   return activeRegistry;
@@ -71,11 +75,84 @@ describe("tools/mcp-registry", () => {
       provenance: `${path.join(process.cwd(), ".codex", "mcp.json")}#demo`,
       credentialMode: "configured",
       requestTimeoutMs: 2000,
+      allowedTools: [],
+      disabledTools: [],
+      maxConcurrentCalls: 4,
     };
     activeRegistry = new McpRegistry([config]);
 
     expect(await activeRegistry.listRegistrations()).toEqual([]);
     expect(await activeRegistry.run("mcp__demo__echo_upper", { text: "hello" })).toBeNull();
+  });
+
+  it("filters remote registrations through configured tool allow and deny lists", async () => {
+    const config: McpServerConfig = {
+      name: "demo",
+      command: process.execPath,
+      args: [tsxCliPath, fixtureServerPath],
+      env: {},
+      cwd: process.cwd(),
+      enabled: true,
+      trusted: true,
+      provenance: `${path.join(process.cwd(), ".codex", "mcp.json")}#demo`,
+      credentialMode: "none",
+      requestTimeoutMs: 2000,
+      allowedTools: ["echo_upper", "fail_now"],
+      disabledTools: ["fail_now"],
+      maxConcurrentCalls: 4,
+    };
+    activeRegistry = new McpRegistry([config]);
+
+    expect((await activeRegistry.listRegistrations()).map((tool) => tool.remoteName)).toEqual(["echo_upper"]);
+  });
+
+  it("serializes calls when the server concurrency limit is one", async () => {
+    const config: McpServerConfig = {
+      name: "demo",
+      command: process.execPath,
+      args: [tsxCliPath, fixtureServerPath],
+      env: {},
+      cwd: process.cwd(),
+      enabled: true,
+      trusted: true,
+      provenance: `${path.join(process.cwd(), ".codex", "mcp.json")}#demo`,
+      credentialMode: "none",
+      requestTimeoutMs: 2000,
+      allowedTools: [],
+      disabledTools: [],
+      maxConcurrentCalls: 1,
+    };
+    activeRegistry = new McpRegistry([config]);
+    await activeRegistry.listRegistrations();
+
+    const start = performance.now();
+    const [first, second] = await Promise.all([
+      activeRegistry.run("mcp__demo__delay_echo", { text: "a", delayMs: 60 }),
+      activeRegistry.run("mcp__demo__delay_echo", { text: "b", delayMs: 60 }),
+    ]);
+
+    expect(performance.now() - start).toBeGreaterThanOrEqual(100);
+    expect(JSON.parse(first ?? "{}").echoed).toBe("a");
+    expect(JSON.parse(second ?? "{}").echoed).toBe("b");
+  });
+
+  it("classifies authentication failures and caches them per server", async () => {
+    const registry = createRegistry();
+    await registry.listRegistrations();
+
+    const first = JSON.parse((await registry.run("mcp__demo__auth_fail", {})) ?? "{}") as {
+      ok?: boolean;
+      error?: { code?: string };
+    };
+    const second = JSON.parse((await registry.run("mcp__demo__echo_upper", { text: "hello" })) ?? "{}") as {
+      ok?: boolean;
+      error?: { code?: string };
+    };
+
+    expect(first.ok).toBe(false);
+    expect(first.error?.code).toBe("MCP_AUTH_REQUIRED");
+    expect(second.ok).toBe(false);
+    expect(second.error?.code).toBe("MCP_AUTH_REQUIRED");
   });
 
   it("runs matching mcp tools and keeps missing aliases as null", async () => {
