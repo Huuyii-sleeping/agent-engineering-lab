@@ -1,5 +1,5 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
-import { getSkillCatalog, loadSkill } from "../skills/loader.js";
+import { expandSkillContent, getSkillCatalog, loadSkill } from "../skills/loader.js";
 
 export const SKILL_TOOLS: ChatCompletionTool[] = [
   {
@@ -19,6 +19,7 @@ export const SKILL_TOOLS: ChatCompletionTool[] = [
         type: "object",
         properties: {
           name: { type: "string" },
+          session_id: { type: "string" },
         },
         required: ["name"],
       },
@@ -35,6 +36,13 @@ export async function runListSkills(): Promise<string> {
         name: skill.name,
         description: skill.description,
         path: skill.path,
+        root: skill.root,
+        source_type: skill.sourceType,
+        allowed_tools: skill.allowedTools,
+        model: skill.model,
+        paths: skill.pathPatterns,
+        contains_shell_commands: skill.containsShellCommands,
+        can_run_shell: skill.canRunShell,
         loaded: skill.loaded,
       })),
       loaded_names: catalog.loadedNames,
@@ -46,7 +54,7 @@ export async function runListSkills(): Promise<string> {
   );
 }
 
-export async function runLoadSkill(name: unknown): Promise<string> {
+export async function runLoadSkill(name: unknown, sessionId?: unknown): Promise<string> {
   const skillName = typeof name === "string" ? name.trim() : "";
   if (!skillName) {
     return JSON.stringify({
@@ -77,8 +85,17 @@ export async function runLoadSkill(name: unknown): Promise<string> {
         name: skill.name,
         description: skill.description,
         path: skill.path,
+        root: skill.root,
         metadata: skill.metadata,
-        content: skill.content,
+        source_type: skill.sourceType,
+        allowed_tools: skill.allowedTools,
+        model: skill.model,
+        paths: skill.pathPatterns,
+        contains_shell_commands: skill.containsShellCommands,
+        can_run_shell: skill.canRunShell,
+        content: expandSkillContent(skill, {
+          sessionId: typeof sessionId === "string" ? sessionId : undefined,
+        }),
         loaded: catalog.loadedNames.some(
           (loadedName) => loadedName.toLowerCase() === skill.name.toLowerCase(),
         ),

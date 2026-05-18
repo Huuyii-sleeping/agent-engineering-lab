@@ -648,6 +648,12 @@ export async function handleTerminalTuiCommand(input: {
           path: skill.path,
           root: skill.root,
           metadata: skill.metadata,
+          allowedTools: skill.allowedTools,
+          model: skill.model,
+          pathPatterns: skill.pathPatterns,
+          sourceType: skill.sourceType,
+          containsShellCommands: skill.containsShellCommands,
+          canRunShell: skill.canRunShell,
           content: skill.content,
           loaded: catalog.loadedNames.some(
             (loadedName) => loadedName.toLowerCase() === skill.name.toLowerCase(),

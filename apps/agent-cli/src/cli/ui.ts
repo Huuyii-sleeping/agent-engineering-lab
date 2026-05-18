@@ -136,10 +136,16 @@ export type CliSkillSummary = {
   path: string;
   root: string;
   loaded: boolean;
+  allowedTools: string[];
+  model: string | null;
+  pathPatterns: string[];
+  sourceType: string;
+  containsShellCommands: boolean;
+  canRunShell: boolean;
 };
 
 export type CliSkillDetail = CliSkillSummary & {
-  metadata: Record<string, string>;
+  metadata: Record<string, string | string[]>;
   content: string;
 };
 
@@ -875,7 +881,9 @@ export function renderCliSkills(
       ...skills.map((skill) => {
         const state = skill.loaded ? success("loaded") : muted("available");
         const description = skill.description ? ` ${truncate(skill.description, 72)}` : "";
-        return `${state} ${accent(skill.name)}${description}\n${muted("path")}  ${skill.path}`;
+        const sourceType = skill.sourceType ?? "unknown";
+        const policy = `source=${sourceType} shell=${skill.canRunShell ? "allowed" : "blocked"}`;
+        return `${state} ${accent(skill.name)} ${muted(policy)}${description}\n${muted("path")}  ${skill.path}`;
       }),
     );
   }
@@ -892,14 +900,23 @@ export function renderCliSkillDetail(skill: CliSkillDetail): string {
   const metadataEntries = Object.entries(skill.metadata);
   const metadata =
     metadataEntries.length > 0
-      ? metadataEntries.map(([key, value]) => `${key}: ${value}`).join(", ")
+      ? metadataEntries
+          .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(",") : value}`)
+          .join(", ")
       : "(none)";
+  const allowedTools = skill.allowedTools ?? [];
+  const pathPatterns = skill.pathPatterns ?? [];
   return [
     strong(`Skill: ${skill.name}`),
     renderRows([
       { label: "state", value: skill.loaded ? "loaded into prompt" : "available" },
       { label: "path", value: skill.path },
       { label: "root", value: skill.root },
+      { label: "source", value: skill.sourceType ?? "unknown" },
+      { label: "allowed", value: allowedTools.join(", ") || "(none)" },
+      { label: "model", value: skill.model ?? "(default)" },
+      { label: "paths", value: pathPatterns.join(", ") || "(all)" },
+      { label: "shell", value: skill.canRunShell ? "allowed" : "blocked" },
       { label: "meta", value: metadata },
     ]),
     "",

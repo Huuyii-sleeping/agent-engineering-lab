@@ -17,10 +17,22 @@ describe("tools/index", () => {
   it("loads a discovered local skill through the base tool surface", async () => {
     const output = JSON.parse(
       await runToolByName("load_skill", JSON.stringify({ name: "openspec-apply-change" })),
-    ) as { ok?: boolean; skill?: { name?: string; content?: string } };
+    ) as {
+      ok?: boolean;
+      skill?: {
+        name?: string;
+        content?: string;
+        source_type?: string;
+        allowed_tools?: string[];
+        can_run_shell?: boolean;
+      };
+    };
 
     expect(output.ok).toBe(true);
     expect(output.skill?.name).toBe("openspec-apply-change");
     expect(output.skill?.content).toContain("Implement tasks from an OpenSpec change");
+    expect(output.skill?.source_type).toBeDefined();
+    expect(output.skill?.allowed_tools).toBeDefined();
+    expect(output.skill?.can_run_shell).toBeDefined();
   });
 });

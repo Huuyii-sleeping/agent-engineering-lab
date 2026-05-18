@@ -112,7 +112,7 @@ const BASE_HANDLERS: Record<string, ToolHandler> = {
   memory_session_summarize: async (args) =>
     DEFAULT_MEMORY_SERVICE.runSessionSummarize(args.session_id, args.summary),
   list_skills: async () => runListSkills(),
-  load_skill: async (args) => runLoadSkill(args.name),
+  load_skill: async (args) => runLoadSkill(args.name, args.session_id),
   todo: async (args) => runTodo(args.items),
   task_create: async (args) => runTaskCreate(args.subject, args.description),
   task_update: async (args) =>
