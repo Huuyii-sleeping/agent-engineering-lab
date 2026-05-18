@@ -1,5 +1,8 @@
 import OpenAI from "openai";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { AgentRuntimeState } from "../../../src/agent-loop.js";
 import type { HookServiceLike } from "../../../src/services/hook-service.js";
@@ -88,9 +91,41 @@ function createMessage(toolCalls: Array<{ id: string; name: string; argumentsJso
 }
 
 describe("runtime/query-tools", () => {
+  const tempRoots: string[] = [];
+  const previousSkillRoots = process.env.AGENT_SKILL_ROOTS;
+  const previousSkills = process.env.AGENT_SKILLS;
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
+
+  afterEach(() => {
+    for (const root of tempRoots.splice(0)) {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+    if (previousSkillRoots === undefined) {
+      delete process.env.AGENT_SKILL_ROOTS;
+    } else {
+      process.env.AGENT_SKILL_ROOTS = previousSkillRoots;
+    }
+    if (previousSkills === undefined) {
+      delete process.env.AGENT_SKILLS;
+    } else {
+      process.env.AGENT_SKILLS = previousSkills;
+    }
+  });
+
+  function createSkillRoot(): string {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-cli-query-skills-"));
+    tempRoots.push(root);
+    return root;
+  }
+
+  function writeSkill(root: string, name: string, body: string): void {
+    const skillDir = path.join(root, name);
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.writeFileSync(path.join(skillDir, "SKILL.md"), body);
+  }
 
   it("records successful write side effects and appends post-tool hook messages", async () => {
     const runtimeState = createRuntimeState();
@@ -189,6 +224,39 @@ describe("runtime/query-tools", () => {
     });
     expect(messages[1]?.role).toBe("tool");
     expect(String(messages[1]?.content)).toContain("HOOK_BLOCKED");
+  });
+
+  it("activates matching path-scoped skills after successful file tool use", async () => {
+    const root = createSkillRoot();
+    writeSkill(
+      root,
+      "apps-workflow",
+      ["---", "description: Apps workflow.", "paths: apps/**", "---", "Hidden workflow body."].join("\n"),
+    );
+    process.env.AGENT_SKILL_ROOTS = root;
+    process.env.AGENT_SKILLS = "all";
+    const runtimeState = createRuntimeState();
+    const messages = [] as Array<{ role: string; content?: string; tool_call_id?: string }>;
+    const toolService = createToolService();
+    const hookService = createHookService();
+    const observabilityService = createObservabilityService();
+    vi.mocked(toolService.runToolByName).mockResolvedValueOnce(JSON.stringify({ ok: true, content: "read" }));
+
+    await runQueryToolStage({
+      message: createMessage([
+        { id: "call_read", name: "read_file", argumentsJson: JSON.stringify({ path: "apps/agent-cli/src/config.ts" }) },
+      ]),
+      messages,
+      runtimeState,
+      traceId: "trace-conditional-skill",
+      toolService,
+      hookService,
+      observabilityService,
+    });
+
+    const activation = messages.find((message) => message.role === "system" && message.content?.includes("apps-workflow"));
+    expect(activation?.content).toContain("Call load_skill");
+    expect(activation?.content).not.toContain("Hidden workflow body.");
   });
 
   it("auto-completes the active task when todo marks every item completed", async () => {

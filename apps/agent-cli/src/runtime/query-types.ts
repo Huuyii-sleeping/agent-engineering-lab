@@ -19,6 +19,7 @@ export type AgentRuntimeState = {
   roundCounter: number;
   touchedPaths: Set<string>;
   wroteWorkspaceFiles: boolean;
+  activatedSkillNames?: Set<string>;
   pendingApprovalCandidate?: PendingApprovalReplay | null;
   pendingApprovalReplays?: Map<string, PendingApprovalReplay>;
 };

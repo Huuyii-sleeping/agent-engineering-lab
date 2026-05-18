@@ -5,6 +5,11 @@ import { executeQueryFunctionToolCall } from "./query-tool-executor.js";
 import { runPostToolUseHooks } from "./query-tool-hooks.js";
 import { maybeAutoCompleteTaskFromTodo, syncActiveTaskState } from "./query-tool-task-sync.js";
 import type { QueryFunctionToolCall, QueryToolStageResult, RunQueryToolStageOptions } from "./query-tool-types.js";
+import {
+  activateConditionalSkillsForPaths,
+  getConfiguredSkillSummaries,
+  toPromptSkillCatalogBlocks,
+} from "../skills/loader.js";
 import type { ToolRegistration } from "../tools/protocol.js";
 
 export type { QueryToolStageResult } from "./query-tool-types.js";
@@ -56,8 +61,57 @@ function buildBatches(items: ToolWorkItem[]): ToolWorkItem[][] {
   return batches;
 }
 
+function ensureActivatedSkillNames(opts: RunQueryToolStageOptions): Set<string> {
+  if (!opts.runtimeState.activatedSkillNames) {
+    opts.runtimeState.activatedSkillNames = new Set<string>();
+  }
+  return opts.runtimeState.activatedSkillNames;
+}
+
+function getFileToolPaths(toolName: string, toolArgs: Record<string, unknown>): string[] {
+  if (toolName !== "read_file" && toolName !== "write_file" && toolName !== "edit_file") {
+    return [];
+  }
+  const target = typeof toolArgs.path === "string" ? toolArgs.path.trim() : "";
+  return target ? [target] : [];
+}
+
+function collectConditionalSkillActivationMessages(opts: {
+  runtimeState: RunQueryToolStageOptions["runtimeState"];
+  toolName: string;
+  toolArgs: Record<string, unknown>;
+}): string[] {
+  const paths = getFileToolPaths(opts.toolName, opts.toolArgs);
+  if (paths.length === 0) {
+    return [];
+  }
+  const configured = getConfiguredSkillSummaries();
+  const activatedSkillNames = opts.runtimeState.activatedSkillNames ?? new Set<string>();
+  const newlyActivated = activateConditionalSkillsForPaths(configured.selected, paths).filter(
+    (skill) => !activatedSkillNames.has(skill.name.toLowerCase()),
+  );
+  if (newlyActivated.length === 0) {
+    return [];
+  }
+  if (!opts.runtimeState.activatedSkillNames) {
+    opts.runtimeState.activatedSkillNames = activatedSkillNames;
+  }
+  for (const skill of newlyActivated) {
+    activatedSkillNames.add(skill.name.toLowerCase());
+  }
+  return [
+    [
+      "<activated_skills>",
+      "The following path-scoped skills now match files used in this session. Load full instructions with load_skill before applying them.",
+      toPromptSkillCatalogBlocks(newlyActivated, { includeConditional: true }).join("\n\n"),
+      "</activated_skills>",
+    ].join("\n"),
+  ];
+}
+
 export async function runQueryToolStage(opts: RunQueryToolStageOptions): Promise<QueryToolStageResult> {
   let usedTodo = false;
+  ensureActivatedSkillNames(opts);
   const batches = buildBatches(await buildToolWorkItems(opts));
 
   for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
@@ -116,6 +170,14 @@ export async function runQueryToolStage(opts: RunQueryToolStageOptions): Promise
 
       if (result.analyzed.ok) {
         markWriteSideEffect(opts.runtimeState, result.toolName, result.toolArgs);
+        appendSystemMessages(
+          opts.messages,
+          collectConditionalSkillActivationMessages({
+            runtimeState: opts.runtimeState,
+            toolName: result.toolName,
+            toolArgs: result.toolArgs,
+          }),
+        );
       }
       const postToolHooks = await runPostToolUseHooks({
         hookService: opts.hookService,

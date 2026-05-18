@@ -21,6 +21,7 @@ describe("tools/index", () => {
       ok?: boolean;
       skill?: {
         name?: string;
+        base_dir?: string;
         content?: string;
         source_type?: string;
         allowed_tools?: string[];
@@ -30,6 +31,8 @@ describe("tools/index", () => {
 
     expect(output.ok).toBe(true);
     expect(output.skill?.name).toBe("openspec-apply-change");
+    expect(output.skill?.base_dir).toContain("openspec-apply-change");
+    expect(output.skill?.content).toContain("Base directory for this skill:");
     expect(output.skill?.content).toContain("Implement tasks from an OpenSpec change");
     expect(output.skill?.source_type).toBeDefined();
     expect(output.skill?.allowed_tools).toBeDefined();

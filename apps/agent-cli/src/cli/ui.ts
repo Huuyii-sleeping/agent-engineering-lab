@@ -888,7 +888,7 @@ export function renderCliSkills(
     );
   }
   if (loadedNames.length > 0) {
-    lines.push("", `${muted("prompt")}  ${loadedNames.join(", ")}`);
+    lines.push("", `${muted("configured")}  ${loadedNames.join(", ")}`);
   }
   if (missingNames.length > 0) {
     lines.push(`${muted("missing")}  ${missingNames.join(", ")}`);
@@ -909,7 +909,7 @@ export function renderCliSkillDetail(skill: CliSkillDetail): string {
   return [
     strong(`Skill: ${skill.name}`),
     renderRows([
-      { label: "state", value: skill.loaded ? "loaded into prompt" : "available" },
+      { label: "state", value: skill.loaded ? "configured" : "available" },
       { label: "path", value: skill.path },
       { label: "root", value: skill.root },
       { label: "source", value: skill.sourceType ?? "unknown" },

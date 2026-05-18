@@ -12,7 +12,7 @@ export type SkillExpansionOptions = {
   sessionId?: string;
 };
 
-export type SkillDefinition = {
+export type SkillSummary = {
   name: string;
   description: string;
   path: string;
@@ -24,8 +24,16 @@ export type SkillDefinition = {
   sourceType: SkillSourceType;
   containsShellCommands: boolean;
   canRunShell: boolean;
+  contentLength: number;
+  conditional: boolean;
+};
+
+export type LoadedSkillDefinition = SkillSummary & {
+  baseDir: string;
   content: string;
 };
+
+export type SkillDefinition = LoadedSkillDefinition;
 
 export type SkillCatalogItem = {
   name: string;
@@ -39,6 +47,8 @@ export type SkillCatalogItem = {
   sourceType: SkillSourceType;
   containsShellCommands: boolean;
   canRunShell: boolean;
+  contentLength: number;
+  conditional: boolean;
 };
 
 export type SkillCatalog = {
@@ -268,9 +278,12 @@ function isTrustedSource(sourceType: SkillSourceType): boolean {
   return sourceType === "local" || sourceType === "project" || sourceType === "user";
 }
 
-function toSkillDefinition(filePath: string, root: string, cwd: string): SkillDefinition {
-  const raw = fs.readFileSync(filePath, "utf8");
-  const parsed = parseFrontmatter(raw);
+function toSkillSummaryFromParsed(
+  filePath: string,
+  root: string,
+  cwd: string,
+  parsed: { metadata: SkillMetadata; body: string },
+): SkillSummary {
   const defaultName = path.basename(path.dirname(filePath));
   const allowedTools = metadataValueToList(getMetadataValue(parsed.metadata, "allowed-tools"));
   const pathPatterns = metadataValueToList(getMetadataValue(parsed.metadata, "paths")).map(normalizeSlashes);
@@ -288,8 +301,51 @@ function toSkillDefinition(filePath: string, root: string, cwd: string): SkillDe
     sourceType,
     containsShellCommands,
     canRunShell: isTrustedSource(sourceType) && allowedTools.some(isShellTool),
+    contentLength: parsed.body.length,
+    conditional: pathPatterns.length > 0,
+  };
+}
+
+function toSkillSummary(filePath: string, root: string, cwd: string): SkillSummary {
+  const raw = fs.readFileSync(filePath, "utf8");
+  const parsed = parseFrontmatter(raw);
+  return toSkillSummaryFromParsed(filePath, root, cwd, parsed);
+}
+
+function toLoadedSkillDefinition(filePath: string, root: string, cwd: string): LoadedSkillDefinition {
+  const raw = fs.readFileSync(filePath, "utf8");
+  const parsed = parseFrontmatter(raw);
+  const summary = toSkillSummaryFromParsed(filePath, root, cwd, parsed);
+  return {
+    ...summary,
+    baseDir: path.dirname(filePath),
     content: parsed.body,
   };
+}
+
+function uniqueSkillsByName<T extends SkillSummary>(skills: T[]): T[] {
+  const seenNames = new Set<string>();
+  const results: T[] = [];
+  for (const skill of skills) {
+    const normalizedName = skill.name.trim().toLowerCase();
+    if (!normalizedName || seenNames.has(normalizedName)) {
+      continue;
+    }
+    seenNames.add(normalizedName);
+    results.push(skill);
+  }
+  return results.sort((left, right) => left.name.localeCompare(right.name));
+}
+
+export function listSkillSummaries(options: SkillLoaderOptions = {}): SkillSummary[] {
+  const skills: SkillSummary[] = [];
+  const cwd = options.cwd ?? process.cwd();
+  for (const root of resolveSkillRoots(options)) {
+    for (const filePath of listSkillFiles(root)) {
+      skills.push(toSkillSummary(filePath, root, cwd));
+    }
+  }
+  return uniqueSkillsByName(skills);
 }
 
 export function listSkills(options: SkillLoaderOptions = {}): SkillDefinition[] {
@@ -298,7 +354,7 @@ export function listSkills(options: SkillLoaderOptions = {}): SkillDefinition[] 
   const cwd = options.cwd ?? process.cwd();
   for (const root of resolveSkillRoots(options)) {
     for (const filePath of listSkillFiles(root)) {
-      const skill = toSkillDefinition(filePath, root, cwd);
+      const skill = toLoadedSkillDefinition(filePath, root, cwd);
       const normalizedName = skill.name.trim().toLowerCase();
       if (!normalizedName || seenNames.has(normalizedName)) {
         continue;
@@ -340,7 +396,7 @@ export function parseConfiguredSkillNames(env: NodeJS.ProcessEnv = process.env):
 }
 
 export function getSkillCatalog(options: SkillLoaderOptions = {}): SkillCatalog {
-  const availableDefinitions = listSkills(options);
+  const availableDefinitions = listSkillSummaries(options);
   const configured = parseConfiguredSkillNames(options.env ?? process.env);
   const availableByName = new Map(
     availableDefinitions.map((skill) => [skill.name.toLowerCase(), skill] as const),
@@ -367,11 +423,43 @@ export function getSkillCatalog(options: SkillLoaderOptions = {}): SkillCatalog 
       sourceType: skill.sourceType,
       containsShellCommands: skill.containsShellCommands,
       canRunShell: skill.canRunShell,
+      contentLength: skill.contentLength,
+      conditional: skill.conditional,
     })),
     loadedNames: loadedDefinitions.map((skill) => skill.name),
     missingNames,
     includeAll: configured.includeAll,
   };
+}
+
+export function getConfiguredSkillSummaries(options: SkillLoaderOptions = {}): {
+  selected: SkillSummary[];
+  missingNames: string[];
+  includeAll: boolean;
+} {
+  const availableDefinitions = listSkillSummaries(options);
+  const configured = parseConfiguredSkillNames(options.env ?? process.env);
+  if (configured.includeAll) {
+    return {
+      selected: availableDefinitions,
+      missingNames: [],
+      includeAll: true,
+    };
+  }
+  const availableByName = new Map(
+    availableDefinitions.map((skill) => [skill.name.toLowerCase(), skill] as const),
+  );
+  const selected: SkillSummary[] = [];
+  const missingNames: string[] = [];
+  for (const name of configured.names) {
+    const matched = availableByName.get(name.toLowerCase()) ?? null;
+    if (!matched) {
+      missingNames.push(name);
+      continue;
+    }
+    selected.push(matched);
+  }
+  return { selected, missingNames, includeAll: false };
 }
 
 export function getConfiguredSkills(options: SkillLoaderOptions = {}): {
@@ -405,10 +493,11 @@ export function getConfiguredSkills(options: SkillLoaderOptions = {}): {
 }
 
 export function expandSkillContent(skill: SkillDefinition, options: SkillExpansionOptions = {}): string {
-  const skillDir = path.dirname(skill.path);
-  return skill.content
+  const skillDir = skill.baseDir;
+  const expanded = skill.content
     .replaceAll("${SKILL_DIR}", skillDir)
     .replaceAll("${SESSION_ID}", options.sessionId ?? "");
+  return [`Base directory for this skill: ${skillDir}`, "", expanded].join("\n");
 }
 
 function escapeRegex(value: string): string {
@@ -439,7 +528,7 @@ function pathMatchesPattern(candidatePath: string, pattern: string): boolean {
   return normalizedPath === normalizedPattern || normalizedPath.startsWith(`${normalizedPattern}/`);
 }
 
-export function skillMatchesPaths(skill: SkillDefinition, paths: string[]): boolean {
+export function skillMatchesPaths(skill: SkillSummary, paths: string[]): boolean {
   if (skill.pathPatterns.length === 0) {
     return true;
   }
@@ -451,8 +540,12 @@ export function skillMatchesPaths(skill: SkillDefinition, paths: string[]): bool
   );
 }
 
-export function selectSkillsForContext(skills: SkillDefinition[], paths: string[]): SkillDefinition[] {
+export function selectSkillsForContext<T extends SkillSummary>(skills: T[], paths: string[]): T[] {
   return skills.filter((skill) => skillMatchesPaths(skill, paths));
+}
+
+export function activateConditionalSkillsForPaths<T extends SkillSummary>(skills: T[], paths: string[]): T[] {
+  return skills.filter((skill) => skill.conditional && skillMatchesPaths(skill, paths));
 }
 
 export function toPromptSkillBlocks(
@@ -470,4 +563,30 @@ export function toPromptSkillBlocks(
     ].filter(Boolean);
     return `### ${skill.name}\n[skill ${metadata.join(" ")}]\n${content}`.trim();
   });
+}
+
+export function toPromptSkillCatalogBlocks(
+  skills: SkillSummary[],
+  options: { includeConditional?: boolean } = {},
+): string[] {
+  return skills
+    .filter((skill) => options.includeConditional || !skill.conditional)
+    .map((skill) => {
+      const metadata = [
+        `source=${skill.sourceType}`,
+        skill.allowedTools.length > 0 ? `allowed_tools=${skill.allowedTools.join(",")}` : null,
+        skill.model ? `model=${skill.model}` : null,
+        skill.pathPatterns.length > 0 ? `paths=${skill.pathPatterns.join(",")}` : null,
+        `can_run_shell=${skill.canRunShell ? "true" : "false"}`,
+        `content_chars=${skill.contentLength}`,
+        `path=${skill.path}`,
+      ].filter(Boolean);
+      const lines = [
+        `### ${skill.name}`,
+        `[skill_summary ${metadata.join(" ")}]`,
+        skill.description.trim() || "(no description)",
+        `Call load_skill with name "${skill.name}" before following this skill's full instructions.`,
+      ];
+      return lines.join("\n").trim();
+    });
 }

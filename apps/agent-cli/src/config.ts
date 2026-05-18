@@ -4,7 +4,7 @@ import OpenAI from "openai";
 import * as process from "node:process";
 import { resolveAgentMemoryRoot } from "./memory/files.js";
 import type { StaticPromptSource } from "./prompt/types.js";
-import { getConfiguredSkills, toPromptSkillBlocks } from "./skills/loader.js";
+import { getConfiguredSkillSummaries, toPromptSkillCatalogBlocks } from "./skills/loader.js";
 
 dotenv.config({ override: true });
 
@@ -66,11 +66,11 @@ function getConfiguredAgentMemory(): StaticPromptSource["agentMemory"] {
 }
 
 export function getStaticPromptSource(): StaticPromptSource {
-  const configuredSkills = getConfiguredSkills();
+  const configuredSkills = getConfiguredSkillSummaries();
   return {
     core: CORE_PROMPT,
     tools: [...TOOL_PROMPT_LINES],
-    skills: toPromptSkillBlocks(configuredSkills.selected),
+    skills: toPromptSkillCatalogBlocks(configuredSkills.selected),
     rules: [],
     agentMemory: getConfiguredAgentMemory(),
   };
