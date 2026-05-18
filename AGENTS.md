@@ -1,6 +1,6 @@
-# AGENT 执行规则
+# AGENTS 执行规则
 
-本文档是当前工作区唯一规则源。后续统一维护本文档，不再单独维护 `WORKSPACE_AGENT_RULES.md` 或 `COMMIT_CONVENTION.md`。
+本文档是当前工作区唯一规则源。后续统一维护本文档，不再单独维护 `AGENT.md`、`WORKSPACE_AGENT_RULES.md` 或 `COMMIT_CONVENTION.md`。
 
 ## 1. 语言规则
 
@@ -22,6 +22,71 @@
 1. 先阅读对应 PRD，例如 `prd/incremental/PRD-XX-*.md`。
 2. 按 OpenSpec 流程推进：`new change -> artifacts -> implement -> validate -> archive`。
 3. 每个 PRD 完成后先验收，再提交。
+
+### 3.1 OpenSpec / Superpowers 职责分工工作流
+
+核心原则：OpenSpec 只管需求、设计、任务和文档；Superpowers 只管写代码、改代码、测试和运行。
+
+职责分工：
+- OpenSpec：负责需求分析、架构设计、生成任务清单。
+- Superpowers：负责按照任务清单编写代码、测试、重构、运行。
+- 长期规划文档统一维护在 OpenSpec 中，不再维护 `docs/superpowers/`。
+
+执行顺序：
+1. 先用 OpenSpec 完成设计：`/openspec:proposal`。
+2. OpenSpec 输出 `tasks.md` 任务列表。
+3. 再交给 Superpowers 按任务执行代码。
+
+禁止行为：
+- 禁止 Superpowers 跳过设计直接写代码。
+- 禁止 OpenSpec 执行代码实现。
+- 两个工具不互相替代、不互相覆盖。
+- 禁止新增 `docs/superpowers/plans/`、`docs/superpowers/specs/` 等 Superpowers 长期计划文档。
+
+固定使用模板：
+
+```text
+请严格遵守 AGENTS.md 的职责分工
+OpenSpec 只做需求分析、架构设计和任务拆解
+Superpowers 只做代码实现、测试、调试和运行
+不要互相越权
+```
+
+OpenSpec 文档位置：
+- 需求与方案：`openspec/changes/<change-name>/proposal.md`
+- 设计与决策：`openspec/changes/<change-name>/design.md`
+- 任务清单：`openspec/changes/<change-name>/tasks.md`
+- 规范变更：`openspec/changes/<change-name>/specs/**/spec.md`
+
+Superpowers 执行规则：
+- 只读取 OpenSpec 的 `tasks.md` 和相关设计文档作为执行输入。
+- 可以在对话中说明执行计划，但不落盘维护 Superpowers 计划文档。
+- 测试、调试、运行结果只在最终汇报中说明；除非 OpenSpec 明确要求，不新增长期执行记录。
+
+标准工作流：
+
+1. OpenSpec 做设计：
+
+```text
+/openspec:proposal 实现飞书文档同步到 GitHub
+```
+
+2. OpenSpec 输出任务：
+
+```text
+把设计拆成可执行的任务列表 tasks.md
+```
+
+3. Superpowers 执行代码：
+
+```text
+Superpowers 按照 tasks.md 里的任务依次实现
+只做代码开发、测试和调试，不修改设计
+```
+
+一句话原则：
+- OpenSpec = 产品经理 + 架构师。
+- Superpowers = 程序员 + 测试。
 
 ## 4. 执行与打断规则
 
