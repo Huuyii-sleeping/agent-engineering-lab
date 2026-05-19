@@ -10,6 +10,7 @@ import type { PromptDump } from "../prompt/inspect.js";
 import type { CliTranscriptEntry, CliTranscriptView } from "./transcript.js";
 import { getCliWorkflowLabel, type CliWorkflowMode } from "./workflow.js";
 import type { UserDataGovernanceReport } from "../governance/user-data.js";
+import type { BashSandboxMode } from "../runtime-config.js";
 
 export type CliThemeName = "atlas" | "plain";
 
@@ -36,6 +37,7 @@ export type CliStatusSnapshot = {
   schedulerStatus: string;
   theme: CliThemeName;
   permissionMode: CliPermissionMode;
+  bashSandboxMode: BashSandboxMode;
   pendingApprovals: number;
   workspaceRoots: string[];
   sessionPromptTokens: number;
@@ -59,6 +61,7 @@ export type CliConfigSnapshot = {
   releaseCheckConfigured: boolean;
   theme: CliThemeName;
   permissionMode: CliPermissionMode;
+  bashSandboxMode: BashSandboxMode;
   workspaceRoots: string[];
 };
 
@@ -594,6 +597,7 @@ export function renderCliStatus(snapshot: CliStatusSnapshot): string {
         label: "permissions",
         value: `${snapshot.permissionMode} / ${snapshot.pendingApprovals} pending approvals`,
       },
+      { label: "sandbox", value: snapshot.bashSandboxMode },
       { label: "roots", value: snapshot.workspaceRoots.join(", ") },
       {
         label: "usage",
@@ -629,6 +633,7 @@ export function renderCliConfig(snapshot: CliConfigSnapshot): string {
           : "release:check missing",
       },
       { label: "permissions", value: snapshot.permissionMode },
+      { label: "sandbox", value: snapshot.bashSandboxMode },
       { label: "roots", value: snapshot.workspaceRoots.join(", ") },
       { label: "theme", value: snapshot.theme },
     ]),

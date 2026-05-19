@@ -3,12 +3,18 @@ import { collectCliStatusSnapshot, runCliDoctor } from "../../src/cli/doctor.js"
 import { resetCliUiForTest } from "../../src/cli/ui.js";
 
 const originalModelId = process.env.MODEL_ID;
+const originalSandboxMode = process.env.AGENT_BASH_SANDBOX_MODE;
 
 afterEach(() => {
   if (originalModelId === undefined) {
     delete process.env.MODEL_ID;
   } else {
     process.env.MODEL_ID = originalModelId;
+  }
+  if (originalSandboxMode === undefined) {
+    delete process.env.AGENT_BASH_SANDBOX_MODE;
+  } else {
+    process.env.AGENT_BASH_SANDBOX_MODE = originalSandboxMode;
   }
   resetCliUiForTest();
 });
@@ -51,7 +57,20 @@ describe("cli-doctor", () => {
       mcpToolCount: 1,
       bridgeEndpoint: "/events",
       permissionMode: "default",
+      bashSandboxMode: "workspace-write",
     });
     expect(snapshot.workspaceRoots[0]).toContain(process.cwd());
+  });
+
+  it("reports bash sandbox posture in doctor", async () => {
+    process.env.AGENT_BASH_SANDBOX_MODE = "strict-readonly";
+
+    const report = await runCliDoctor();
+    const sandboxCheck = report.checks.find((check) => check.id === "bash-sandbox");
+
+    expect(sandboxCheck).toMatchObject({
+      severity: "pass",
+      reason: "strict-readonly mode",
+    });
   });
 });

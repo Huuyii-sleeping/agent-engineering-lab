@@ -7,6 +7,7 @@ import { runBash } from "../../../src/tools/bash.js";
 
 let tempDir = "";
 let previousCwd = "";
+const originalSandboxMode = process.env.AGENT_BASH_SANDBOX_MODE;
 
 afterEach(async () => {
   if (previousCwd) {
@@ -16,6 +17,11 @@ afterEach(async () => {
   delete process.env.GIT_DIR;
   delete process.env.GIT_WORK_TREE;
   delete process.env.BASH_ENV;
+  if (originalSandboxMode === undefined) {
+    delete process.env.AGENT_BASH_SANDBOX_MODE;
+  } else {
+    process.env.AGENT_BASH_SANDBOX_MODE = originalSandboxMode;
+  }
   if (tempDir) {
     await rm(tempDir, { recursive: true, force: true });
     tempDir = "";
@@ -30,6 +36,26 @@ async function withTempWorkspace(): Promise<string> {
 }
 
 describe("tools/bash", () => {
+  it("blocks obvious write commands in strict-readonly sandbox mode", async () => {
+    await withTempWorkspace();
+    process.env.AGENT_BASH_SANDBOX_MODE = "strict-readonly";
+
+    const output = await runBash("touch blocked.txt");
+    const parsed = JSON.parse(output) as { ok?: boolean; error?: { code?: string } };
+
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error?.code).toBe("SANDBOX_READONLY_VIOLATION");
+  });
+
+  it("allows read-only commands through strict-readonly sandbox mode", async () => {
+    await withTempWorkspace();
+    process.env.AGENT_BASH_SANDBOX_MODE = "strict-readonly";
+
+    const output = await runBash('node -e "console.log(\'read ok\')"');
+
+    expect(output).toBe("read ok");
+  });
+
   it("scrubs dangerous inherited environment variables before execution", async () => {
     await withTempWorkspace();
     process.env.GIT_DIR = "C:/sneaky/repo";

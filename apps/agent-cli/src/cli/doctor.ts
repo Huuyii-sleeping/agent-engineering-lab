@@ -17,6 +17,7 @@ import { readModelUsageSnapshot } from "../model-policy.js";
 import { runMemoryDoctor } from "../memory/service.js";
 import { loadMcpServerConfigs } from "../tools/mcp-config.js";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
+import { getBashSandboxMode } from "../runtime-config.js";
 import { listWorkspaceRoots } from "../workspace-roots.js";
 
 async function readPackageJson(): Promise<{ scripts?: Record<string, string> }> {
@@ -63,6 +64,7 @@ export async function collectCliStatusSnapshot(input: {
     schedulerStatus: `${RUNTIME_CONFIG.schedulerPollIntervalMs}ms`,
     theme: getCliUiTheme(),
     permissionMode: getCliPermissionMode(),
+    bashSandboxMode: getBashSandboxMode(),
     pendingApprovals: approvals.pending,
     workspaceRoots: listWorkspaceRoots(),
     sessionPromptTokens: usage.sessionPromptTokens,
@@ -93,6 +95,7 @@ export async function collectCliConfigSnapshot(input: { model?: string } = {}): 
     releaseCheckConfigured: Boolean(packageJson.scripts?.["release:check"]),
     theme: getCliUiTheme(),
     permissionMode: getCliPermissionMode(),
+    bashSandboxMode: getBashSandboxMode(),
     workspaceRoots: listWorkspaceRoots(),
   };
 }
@@ -228,6 +231,15 @@ export async function runCliDoctor(): Promise<CliDoctorReport> {
     severity: "pass",
     reason: `${getCliPermissionMode()} mode / ${approvals.pending} pending approval(s)`,
     suggestion: approvals.pending > 0 ? "run /permissions to inspect approval state before continuing" : "",
+  });
+
+  const sandboxMode = getBashSandboxMode();
+  checks.push({
+    id: "bash-sandbox",
+    label: "bash sandbox",
+    severity: sandboxMode === "off" ? "warn" : "pass",
+    reason: `${sandboxMode} mode`,
+    suggestion: sandboxMode === "off" ? "set AGENT_BASH_SANDBOX_MODE=workspace-write for default guardrails" : "",
   });
 
   checks.push({

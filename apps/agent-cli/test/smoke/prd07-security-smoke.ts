@@ -1,6 +1,7 @@
 import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
+import { resetCliPermissionModeForTest, setCliPermissionMode } from "../../src/cli/permissions.js";
 import { runBaseToolByName } from "../../src/tools/base.js";
 
 function assert(condition: unknown, message: string): void {
@@ -22,6 +23,7 @@ async function cleanDirs(): Promise<void> {
 
 async function main(): Promise<void> {
   await cleanDirs();
+  process.env.AGENT_BASH_SANDBOX_MODE = "strict-readonly";
   const writeArgs = { path: "tmp/a.txt", content: "token=sk-12345678901234567890" };
 
   const deniedRaw = await runBaseToolByName("bash", JSON.stringify({ command: "shutdown /s /t 0" }));
@@ -30,6 +32,16 @@ async function main(): Promise<void> {
   assert(
     (denied.error as { code?: string } | undefined)?.code === "SECURITY_POLICY_DENY",
     "critical command should return SECURITY_POLICY_DENY",
+  );
+
+  setCliPermissionMode("plan");
+  const planBlockedRaw = await runBaseToolByName("bash", JSON.stringify({ command: "touch blocked.txt" }));
+  resetCliPermissionModeForTest();
+  const planBlocked = asJson(planBlockedRaw);
+  assert(planBlocked.ok === false, "plan mode should block bash before sandbox");
+  assert(
+    (planBlocked.error as { code?: string } | undefined)?.code === "SECURITY_PERMISSION_MODE",
+    "plan mode should return SECURITY_PERMISSION_MODE before sandbox",
   );
 
   const reqRaw = await runBaseToolByName(

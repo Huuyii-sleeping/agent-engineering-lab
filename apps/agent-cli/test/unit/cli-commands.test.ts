@@ -63,6 +63,7 @@ function createContext(input: {
       schedulerStatus: "1000ms",
       theme,
       permissionMode: "default",
+      bashSandboxMode: "workspace-write",
       pendingApprovals: 0,
       workspaceRoots: ["/repo"],
       sessionPromptTokens: 120,
@@ -85,6 +86,7 @@ function createContext(input: {
       releaseCheckConfigured: true,
       theme,
       permissionMode: "default",
+      bashSandboxMode: "workspace-write",
       workspaceRoots: ["/repo"],
     })),
     getMcpStatus: vi.fn(async () => [

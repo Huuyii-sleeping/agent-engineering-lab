@@ -71,6 +71,7 @@ describe("cli-ui", () => {
         schedulerStatus: "1000ms",
         theme: "atlas",
         permissionMode: "accept-edits",
+        bashSandboxMode: "workspace-write",
         pendingApprovals: 2,
         workspaceRoots: ["/repo", "/repo/docs"],
         sessionPromptTokens: 400,
@@ -83,6 +84,34 @@ describe("cli-ui", () => {
         dailyTokenBudget: 5000,
       }),
     ).toContain("permissions  accept-edits / 2 pending approvals");
+    expect(
+      renderCliStatus({
+        workspace: "repo",
+        mode: "interactive",
+        model: "gpt-test",
+        activeSessionId: "sess_1",
+        sessionCount: 2,
+        toolCount: 8,
+        mcpToolCount: 2,
+        mcpServerCount: 1,
+        hookCount: 3,
+        bridgeEndpoint: "/events",
+        schedulerStatus: "1000ms",
+        theme: "atlas",
+        permissionMode: "accept-edits",
+        bashSandboxMode: "workspace-write",
+        pendingApprovals: 2,
+        workspaceRoots: ["/repo", "/repo/docs"],
+        sessionPromptTokens: 400,
+        sessionCompletionTokens: 100,
+        dailyPromptTokens: 800,
+        dailyCompletionTokens: 200,
+        sessionEstimatedCostUsd: 0.012,
+        dailyEstimatedCostUsd: 0.024,
+        sessionTokenBudget: 1000,
+        dailyTokenBudget: 5000,
+      }),
+    ).toContain("sandbox      workspace-write");
     expect(
       renderCliDoctor({
         checks: [

@@ -3,6 +3,7 @@ import * as process from "node:process";
 type RuntimeConfig = {
   bashTimeoutMs: number;
   bashMaxOutputChars: number;
+  bashSandboxMode: BashSandboxMode;
   fileReadDefaultLimit: number;
   compactThresholdTokens: number;
   compactDefaultKeepRecent: number;
@@ -40,6 +41,7 @@ type RuntimeConfig = {
   modelDailyTokenBudget: number;
 };
 
+export type BashSandboxMode = "off" | "workspace-write" | "strict-readonly";
 export type PrivacyPersistenceMode = "default" | "disabled";
 export type PrivacyMemoryMode = "default" | "manual_only" | "disabled";
 export type PrivacyObservabilityMode = "default" | "minimal" | "disabled";
@@ -101,9 +103,14 @@ function readCsvList(raw: string | undefined): string[] {
   return [...new Set(raw.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean))];
 }
 
+export function getBashSandboxMode(env: Partial<NodeJS.ProcessEnv> = process.env): BashSandboxMode {
+  return readEnum(env.AGENT_BASH_SANDBOX_MODE, ["off", "workspace-write", "strict-readonly"], "workspace-write");
+}
+
 export const RUNTIME_CONFIG: RuntimeConfig = {
   bashTimeoutMs: readInt("AGENT_BASH_TIMEOUT_MS", 120_000, 1),
   bashMaxOutputChars: readInt("AGENT_BASH_MAX_OUTPUT_CHARS", 50_000, 100),
+  bashSandboxMode: getBashSandboxMode(),
   fileReadDefaultLimit: readInt("AGENT_FILE_READ_DEFAULT_LIMIT", 50_000, 100),
   compactThresholdTokens: readInt("AGENT_COMPACT_THRESHOLD_TOKENS", 50_000, 100),
   compactDefaultKeepRecent: readInt("AGENT_COMPACT_DEFAULT_KEEP_RECENT", 20, 1),

@@ -3,9 +3,45 @@ import { readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
-import { RUNTIME_CONFIG } from "../runtime-config.js";
+import { getBashSandboxMode, RUNTIME_CONFIG } from "../runtime-config.js";
 
 const DANGEROUS_SNIPPETS = ["rm -rf /", "sudo", "shutdown", "reboot"];
+const READONLY_WRITE_PREFIXES = [
+  "copy ",
+  "cp ",
+  "del ",
+  "erase ",
+  "git checkout -b",
+  "git commit",
+  "git merge",
+  "git mv",
+  "git reset --hard",
+  "git revert",
+  "mkdir ",
+  "move ",
+  "mv ",
+  "new-item ",
+  "npm install",
+  "pnpm install",
+  "remove-item ",
+  "ren ",
+  "rename-item ",
+  "rm ",
+  "rmdir ",
+  "set-content ",
+  "touch ",
+  "write-output ",
+  "yarn add",
+  "yarn install",
+];
+const READONLY_WRITE_SNIPPETS = [
+  " > ",
+  " >> ",
+  " out-file ",
+  " set-content ",
+  " add-content ",
+  " tee-object ",
+];
 const SCRUBBED_ENV_KEYS = [
   "BASH_ENV",
   "ENV",
@@ -34,7 +70,7 @@ const BARE_REPO_SCAN_SKIP = new Set([".codex", ".git", ".pnpm-store", "coverage"
 type ToolError = {
   ok: false;
   error: {
-    code: "DANGEROUS_COMMAND" | "TIMEOUT";
+    code: "DANGEROUS_COMMAND" | "SANDBOX_READONLY_VIOLATION" | "TIMEOUT";
     message: string;
   };
 };
@@ -77,6 +113,17 @@ function scrubbedEnvironment(): NodeJS.ProcessEnv {
     delete env[key];
   }
   return env;
+}
+
+function isReadonlyWriteCommand(command: string): boolean {
+  const normalized = command.trim().replace(/\s+/g, " ").toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return (
+    READONLY_WRITE_PREFIXES.some((prefix) => normalized.startsWith(prefix)) ||
+    READONLY_WRITE_SNIPPETS.some((snippet) => normalized.includes(snippet))
+  );
 }
 
 async function isBareRepoCandidate(target: string): Promise<boolean> {
@@ -140,6 +187,15 @@ export function readCommandArgs(argumentsJson: string): string {
 }
 
 export function runBash(command: string): Promise<string> {
+  if (getBashSandboxMode() === "strict-readonly" && isReadonlyWriteCommand(command)) {
+    return Promise.resolve(
+      toToolError(
+        "SANDBOX_READONLY_VIOLATION",
+        "blocked by bash sandbox: strict-readonly does not allow write-like shell commands",
+      ),
+    );
+  }
+
   if (DANGEROUS_SNIPPETS.some((snippet) => command.includes(snippet))) {
     return Promise.resolve(toToolError("DANGEROUS_COMMAND", "blocked dangerous command"));
   }
