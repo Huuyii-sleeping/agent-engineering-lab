@@ -15,11 +15,14 @@ const PROMPT_ENVELOPE: PromptEnvelope = {
   dynamicSections: [],
 };
 
-function createClient(response: unknown): OpenAI {
+function createClient(response: unknown, requests: unknown[] = []): OpenAI {
   return {
     chat: {
       completions: {
-        create: async () => response,
+        create: async (request: unknown) => {
+          requests.push(request);
+          return response;
+        },
       },
     },
   } as unknown as OpenAI;
@@ -85,5 +88,23 @@ describe("runtime/query-model-request", () => {
         tools: [] as ChatCompletionTool[],
       }),
     ).resolves.toBeNull();
+  });
+
+  it("uses the configured max completion token limit", async () => {
+    const requests: unknown[] = [];
+    await runQueryModelCompletionRequest({
+      client: createClient(
+        {
+          choices: [{ finish_reason: "stop", message: { role: "assistant", content: "ok" } }],
+          usage: { completion_tokens: 1 },
+        },
+        requests,
+      ),
+      model: "test-model",
+      messages: [{ role: "user", content: "hello" }],
+      tools: [] as ChatCompletionTool[],
+    });
+
+    expect(requests[0]).toMatchObject({ max_tokens: 8_000 });
   });
 });

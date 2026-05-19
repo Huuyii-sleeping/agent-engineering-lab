@@ -7,6 +7,10 @@ type RuntimeConfig = {
   fileReadDefaultLimit: number;
   compactThresholdTokens: number;
   compactDefaultKeepRecent: number;
+  compactMinReductionTokens: number;
+  modelContextWindowTokens: number;
+  modelContextReserveTokens: number;
+  modelMaxCompletionTokens: number;
   recoveryContinuationMaxAttempts: number;
   recoveryCompactMaxAttempts: number;
   recoveryTransportMaxAttempts: number;
@@ -114,6 +118,10 @@ export const RUNTIME_CONFIG: RuntimeConfig = {
   fileReadDefaultLimit: readInt("AGENT_FILE_READ_DEFAULT_LIMIT", 50_000, 100),
   compactThresholdTokens: readInt("AGENT_COMPACT_THRESHOLD_TOKENS", 50_000, 100),
   compactDefaultKeepRecent: readInt("AGENT_COMPACT_DEFAULT_KEEP_RECENT", 20, 1),
+  compactMinReductionTokens: readInt("AGENT_COMPACT_MIN_REDUCTION_TOKENS", 100, 0),
+  modelContextWindowTokens: readInt("AGENT_MODEL_CONTEXT_WINDOW_TOKENS", 200_000, 1_000),
+  modelContextReserveTokens: readInt("AGENT_MODEL_CONTEXT_RESERVE_TOKENS", 16_000, 0),
+  modelMaxCompletionTokens: readInt("AGENT_MODEL_MAX_COMPLETION_TOKENS", 8_000, 1),
   recoveryContinuationMaxAttempts: readInt("AGENT_RECOVERY_CONTINUATION_MAX_ATTEMPTS", 2, 0),
   recoveryCompactMaxAttempts: readInt("AGENT_RECOVERY_COMPACT_MAX_ATTEMPTS", 2, 0),
   recoveryTransportMaxAttempts: readInt("AGENT_RECOVERY_TRANSPORT_MAX_ATTEMPTS", 3, 0),

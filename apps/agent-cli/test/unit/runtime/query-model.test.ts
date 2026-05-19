@@ -12,7 +12,6 @@ vi.mock("../../../src/model-policy.js", () => ({
 }));
 
 vi.mock("../../../src/tools/context-compact.js", () => ({
-  COMPACT_THRESHOLD_TOKENS: 100,
   compactMessages: vi.fn(async (context: { messages: ChatCompletionMessageParam[] }) => {
     context.messages.splice(
       0,
@@ -23,14 +22,23 @@ vi.mock("../../../src/tools/context-compact.js", () => ({
     return {
       estimatedBefore: 400,
       estimatedAfter: 40,
+      reducedBy: 360,
       transcriptPath: "tmp/compact.jsonl",
     };
   }),
   estimateTokensFromMessages: vi.fn(() => 20),
+  getEffectiveCompactThresholdTokens: vi.fn(() => 100),
+  isCompactReductionEffective: vi.fn((result: { reducedBy: number; estimatedBefore: number; estimatedAfter: number }) =>
+    result.estimatedAfter < result.estimatedBefore && result.reducedBy >= 100,
+  ),
 }));
 
 import { classifyFallbackableError } from "../../../src/model-policy.js";
-import { compactMessages, estimateTokensFromMessages } from "../../../src/tools/context-compact.js";
+import {
+  compactMessages,
+  estimateTokensFromMessages,
+  isCompactReductionEffective,
+} from "../../../src/tools/context-compact.js";
 
 const PROMPT_SOURCE: StaticPromptSource = {
   core: "test-core",
@@ -104,6 +112,10 @@ describe("runtime/query-model", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(estimateTokensFromMessages).mockReturnValue(20);
+    vi.mocked(isCompactReductionEffective).mockImplementation(
+      (result: { reducedBy: number; estimatedBefore: number; estimatedAfter: number }) =>
+        result.estimatedAfter < result.estimatedBefore && result.reducedBy >= 100,
+    );
     vi.mocked(classifyFallbackableError).mockReturnValue(false);
   });
 
@@ -210,6 +222,16 @@ describe("runtime/query-model", () => {
 
     expect(result.ok).toBe(true);
     expect(compactMessages).toHaveBeenCalledTimes(1);
+    expect(compactMessages).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "query-model-session",
+        state: expect.objectContaining({
+          sessionId: "query-model-session",
+          roundCounter: 1,
+        }),
+      }),
+      "auto",
+    );
     expect(seenRequests).toHaveLength(1);
     expect(
       seenRequests[0]?.some(
@@ -219,6 +241,53 @@ describe("runtime/query-model", () => {
           item.content.startsWith("Context compacted (auto)."),
       ),
     ).toBe(true);
+  });
+
+  it("fails preflight recovery when compacting does not reduce enough context", async () => {
+    vi.mocked(estimateTokensFromMessages).mockReturnValueOnce(150);
+    vi.mocked(compactMessages).mockResolvedValueOnce({
+      estimatedBefore: 400,
+      estimatedAfter: 380,
+      reducedBy: 20,
+      transcriptPath: "tmp/compact.jsonl",
+      transcriptBeforePath: "tmp/before.jsonl",
+      transcriptAfterPath: "tmp/after.jsonl",
+      sessionMemoryPath: null,
+      keptRecent: 20,
+      oldMessageCount: 3,
+      newMessageCount: 3,
+      reason: "auto",
+    });
+    vi.mocked(isCompactReductionEffective).mockReturnValueOnce(false);
+
+    const client = createClient(async () => {
+      throw new Error("should not call model API after ineffective compact");
+    });
+    const messages: ChatCompletionMessageParam[] = [
+      { role: "user", content: "x".repeat(180) },
+      { role: "assistant", content: "x".repeat(180) },
+      { role: "user", content: "trigger compact" },
+    ];
+    const observabilityService = createObservabilityService();
+    const modelPolicyService = createModelPolicyService();
+
+    const result = await requestQueryModel({
+      client,
+      model: "primary-model",
+      promptSource: PROMPT_SOURCE,
+      tools: [] as ChatCompletionTool[],
+      messages,
+      runtimeState: createRuntimeState(),
+      traceId: "trace-ineffective",
+      latestUserInput: "trigger compact",
+      memoryContext: null,
+      dynamicSystemMessages: [],
+      modelPolicyService,
+      observabilityService,
+    });
+
+    expect(result).toEqual({ ok: false, stopReason: "recovery_failed" });
+    expect(messages[messages.length - 1]?.content).toContain("compact_ineffective");
   });
 
   it("stops early and appends a denial message when budget policy rejects the request", async () => {

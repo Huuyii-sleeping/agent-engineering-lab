@@ -1,4 +1,6 @@
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import type { AgentRuntimeState } from "./query-types.js";
+import { RUNTIME_CONFIG } from "../runtime-config.js";
 import type { ObservabilityServiceLike } from "../services/index.js";
 import {
   createInitialRecoveryState,
@@ -8,7 +10,7 @@ import {
   type RecoveryDecision,
   type RecoveryState,
 } from "../recovery.js";
-import { compactMessages } from "../tools/context-compact.js";
+import { compactMessages, isCompactReductionEffective } from "../tools/context-compact.js";
 
 export async function appendQueryModelRecoveryFailure(input: {
   messages: ChatCompletionMessageParam[];
@@ -41,6 +43,7 @@ export async function applyQueryModelPreflightRecovery(input: {
   thresholdTokens: number;
   recoveryState: RecoveryState;
   round: number;
+  runtimeState: AgentRuntimeState;
   observabilityService: ObservabilityServiceLike;
   traceId: string;
 }): Promise<{ ok: true; recoveryState: RecoveryState } | { ok: false; recoveryState: RecoveryState }> {
@@ -74,15 +77,51 @@ export async function applyQueryModelPreflightRecovery(input: {
     });
     return { ok: false, recoveryState };
   }
-  await compactQueryModelMessages(input.messages, "auto compact");
+  const compactResult = await compactQueryModelMessages(input.messages, "auto compact", input.runtimeState);
+  if (!isCompactReductionEffective(compactResult)) {
+    await appendQueryModelRecoveryFailure({
+      messages: input.messages,
+      observabilityService: input.observabilityService,
+      traceId: input.traceId,
+      phase: "model_request",
+      decision: {
+        reason: "compact_ineffective",
+        detail: `auto compact reduced ${compactResult.reducedBy} token(s), below minimum ${compactResult.minReductionTokens}`,
+      },
+    });
+    return { ok: false, recoveryState };
+  }
   return { ok: true, recoveryState };
 }
 
-export async function compactQueryModelMessages(messages: ChatCompletionMessageParam[], label: string): Promise<void> {
-  const compactResult = await compactMessages({ messages }, "auto");
+export async function compactQueryModelMessages(
+  messages: ChatCompletionMessageParam[],
+  label: string,
+  runtimeState?: AgentRuntimeState,
+): Promise<Awaited<ReturnType<typeof compactMessages>> & { minReductionTokens: number }> {
+  const compactResult = await compactMessages(
+    {
+      messages,
+      sessionId: runtimeState?.sessionId,
+      state: runtimeState
+        ? {
+            sessionId: runtimeState.sessionId,
+            activeTaskId: runtimeState.activeTaskId === null ? null : String(runtimeState.activeTaskId),
+            roundCounter: runtimeState.roundCounter,
+            touchedPaths: [...runtimeState.touchedPaths].sort(),
+            wroteWorkspaceFiles: runtimeState.wroteWorkspaceFiles,
+          }
+        : undefined,
+    },
+    "auto",
+  );
   console.log(
     `\u001b[36m[${label}]\u001b[0m before=${compactResult.estimatedBefore} after=${compactResult.estimatedAfter} snapshot=${compactResult.transcriptPath}`,
   );
+  return {
+    ...compactResult,
+    minReductionTokens: RUNTIME_CONFIG.compactMinReductionTokens,
+  };
 }
 
 export function logQueryModelContinuation(recoveryState: RecoveryState): void {

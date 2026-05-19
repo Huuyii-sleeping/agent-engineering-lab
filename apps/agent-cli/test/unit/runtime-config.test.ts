@@ -7,6 +7,10 @@ describe("runtime-config", () => {
     expect(RUNTIME_CONFIG.bashMaxOutputChars).toBeGreaterThan(0);
     expect(RUNTIME_CONFIG.bashSandboxMode).toBe("workspace-write");
     expect(RUNTIME_CONFIG.compactThresholdTokens).toBeGreaterThan(0);
+    expect(RUNTIME_CONFIG.compactMinReductionTokens).toBeGreaterThanOrEqual(0);
+    expect(RUNTIME_CONFIG.modelContextWindowTokens).toBeGreaterThan(0);
+    expect(RUNTIME_CONFIG.modelContextReserveTokens).toBeGreaterThanOrEqual(0);
+    expect(RUNTIME_CONFIG.modelMaxCompletionTokens).toBeGreaterThan(0);
     expect(RUNTIME_CONFIG.recoveryContinuationMaxAttempts).toBeGreaterThan(0);
     expect(RUNTIME_CONFIG.recoveryCompactMaxAttempts).toBeGreaterThan(0);
     expect(RUNTIME_CONFIG.recoveryTransportMaxAttempts).toBeGreaterThan(0);

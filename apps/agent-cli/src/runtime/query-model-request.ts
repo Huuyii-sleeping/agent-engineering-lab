@@ -1,6 +1,7 @@
 import type OpenAI from "openai";
 import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
 import type { PromptEnvelope } from "../prompt/types.js";
+import { RUNTIME_CONFIG } from "../runtime-config.js";
 import type { QueryModelCompletionResult } from "./query-model-types.js";
 
 export function summarizeQueryModelText(value: string, max = 160): string {
@@ -42,7 +43,7 @@ export async function runQueryModelCompletionRequest(input: {
     model: input.model,
     messages: input.messages,
     tools: input.tools,
-    max_tokens: 8_000,
+    max_tokens: RUNTIME_CONFIG.modelMaxCompletionTokens,
   });
 
   const message = response.choices[0]?.message;

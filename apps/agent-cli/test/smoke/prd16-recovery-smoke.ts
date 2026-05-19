@@ -65,7 +65,7 @@ async function main(): Promise<void> {
   process.env.AGENT_RECOVERY_CONTINUATION_MAX_ATTEMPTS = "2";
   process.env.AGENT_RECOVERY_COMPACT_MAX_ATTEMPTS = "2";
   process.env.AGENT_RECOVERY_TRANSPORT_MAX_ATTEMPTS = "2";
-  process.env.AGENT_COMPACT_THRESHOLD_TOKENS = "200";
+  process.env.AGENT_COMPACT_THRESHOLD_TOKENS = "700";
   process.env.AGENT_COMPACT_DEFAULT_KEEP_RECENT = "1";
 
   const { agentLoop } = await import("../../src/agent-loop.js");
@@ -146,7 +146,7 @@ async function main(): Promise<void> {
       };
     });
 
-    const largeChunk = "x".repeat(180);
+    const largeChunk = "x".repeat(1200);
     const messages: ChatCompletionMessageParam[] = [
       { role: "user", content: largeChunk },
       { role: "assistant", content: largeChunk },

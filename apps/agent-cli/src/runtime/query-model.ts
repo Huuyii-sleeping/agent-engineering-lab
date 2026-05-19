@@ -7,7 +7,7 @@ import {
   createInitialRecoveryState,
   selectRecoveryDecision,
 } from "../recovery.js";
-import { COMPACT_THRESHOLD_TOKENS, estimateTokensFromMessages } from "../tools/context-compact.js";
+import { estimateTokensFromMessages, getEffectiveCompactThresholdTokens } from "../tools/context-compact.js";
 import { tryQueryModelFallback } from "./query-model-fallback.js";
 import {
   buildQueryModelRequestMessages,
@@ -46,13 +46,15 @@ export async function requestQueryModel(opts: RequestQueryModelOptions): Promise
       continuationPrompt,
     );
     const estimatedPromptTokens = estimateTokensFromMessages(requestMessages);
-    if (estimatedPromptTokens > COMPACT_THRESHOLD_TOKENS) {
+    const compactThresholdTokens = getEffectiveCompactThresholdTokens();
+    if (estimatedPromptTokens > compactThresholdTokens) {
       const preflightResult = await applyQueryModelPreflightRecovery({
         messages: opts.messages,
         estimatedPromptTokens,
-        thresholdTokens: COMPACT_THRESHOLD_TOKENS,
+        thresholdTokens: compactThresholdTokens,
         recoveryState,
         round: opts.runtimeState.roundCounter,
+        runtimeState: opts.runtimeState,
         observabilityService: opts.observabilityService,
         traceId: opts.traceId,
       });

@@ -8,9 +8,11 @@ vi.mock("../../../src/tools/context-compact.js", () => ({
     return {
       estimatedBefore: 300,
       estimatedAfter: 40,
+      reducedBy: 260,
       transcriptPath: "tmp/compact.jsonl",
     };
   }),
+  isCompactReductionEffective: vi.fn(() => true),
 }));
 
 import {
@@ -84,6 +86,15 @@ describe("runtime/query-model-recovery", () => {
         transportAttempts: 0,
       },
       round: 3,
+      runtimeState: {
+        sessionId: "recovery-session",
+        roundsWithoutTodo: 0,
+        activeTaskId: null,
+        lastMemoryInput: null,
+        roundCounter: 3,
+        touchedPaths: new Set<string>(),
+        wroteWorkspaceFiles: false,
+      },
       observabilityService,
       traceId: "trace-preflight",
     });

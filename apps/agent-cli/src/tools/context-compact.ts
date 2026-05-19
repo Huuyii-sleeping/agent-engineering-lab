@@ -13,10 +13,20 @@ import { buildArtifactMetadata, isExpired } from "../security/local-retention.js
 export const COMPACT_THRESHOLD_TOKENS = RUNTIME_CONFIG.compactThresholdTokens;
 const SUMMARY_LINE_LIMIT = 24;
 const SUMMARY_ITEM_CHAR_LIMIT = 160;
+const STATE_PATH_LIMIT = 12;
+
+export type CompactRuntimeState = {
+  sessionId?: string | null;
+  activeTaskId?: string | null;
+  roundCounter?: number | null;
+  touchedPaths?: string[];
+  wroteWorkspaceFiles?: boolean;
+};
 
 export type CompactRuntimeContext = {
   sessionId?: string | null;
   messages: ChatCompletionMessageParam[];
+  state?: CompactRuntimeState;
 };
 
 const COMPACT_RUNTIME_CONTEXT = new AsyncLocalStorage<CompactRuntimeContext>();
@@ -93,6 +103,21 @@ async function writeTranscriptSnapshot(
   return path.relative(process.cwd(), full).replace(/\\/g, "/");
 }
 
+export function getEffectiveCompactThresholdTokens(): number {
+  const reservedWindow = Math.max(
+    100,
+    RUNTIME_CONFIG.modelContextWindowTokens - RUNTIME_CONFIG.modelContextReserveTokens,
+  );
+  return Math.min(RUNTIME_CONFIG.compactThresholdTokens, reservedWindow);
+}
+
+export function isCompactReductionEffective(result: Pick<CompactResult, "estimatedBefore" | "estimatedAfter" | "reducedBy">): boolean {
+  if (result.estimatedAfter >= result.estimatedBefore) {
+    return false;
+  }
+  return result.reducedBy >= RUNTIME_CONFIG.compactMinReductionTokens;
+}
+
 function safeSessionId(sessionId: string): string {
   return sessionId.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120) || "default";
 }
@@ -124,26 +149,75 @@ async function cleanupTranscriptSnapshots(dir: string): Promise<void> {
   }
 }
 
+function describeToolCalls(message: ChatCompletionMessageParam): string[] {
+  const toolCalls = (message as { tool_calls?: unknown }).tool_calls;
+  if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
+    return [];
+  }
+  const names = toolCalls
+    .map((toolCall) => {
+      if (!toolCall || typeof toolCall !== "object") {
+        return "unknown";
+      }
+      const fn = (toolCall as { function?: { name?: unknown } }).function;
+      return typeof fn?.name === "string" && fn.name.trim() ? fn.name.trim() : "unknown";
+    })
+    .slice(0, 6);
+  const suffix = toolCalls.length > names.length ? ` +${toolCalls.length - names.length}` : "";
+  return [`tool_calls=${names.join(",")}${suffix}`];
+}
+
+function describeMessageContent(message: ChatCompletionMessageParam): string[] {
+  const parts: string[] = [];
+  const role = (message as { role?: string }).role ?? "unknown";
+  const content = (message as { content?: unknown }).content;
+  const text = asStringContent(content).replace(/\s+/g, " ").trim();
+  if (text) {
+    parts.push(`text="${truncate(text, SUMMARY_ITEM_CHAR_LIMIT)}"`);
+  }
+  if (Array.isArray(content)) {
+    parts.push(`content_parts=${content.length}`);
+  }
+  const toolName = (message as { name?: string }).name;
+  if (role === "tool" || toolName) {
+    parts.push(`tool_result=${toolName ?? "unknown"}`);
+  }
+  parts.push(...describeToolCalls(message));
+  return parts.length > 0 ? parts : ["non_text_message=true"];
+}
+
 function summarizeMessages(messages: ChatCompletionMessageParam[]): string {
   const lines: string[] = [];
   for (const message of messages.slice(0, SUMMARY_LINE_LIMIT)) {
     const role = (message as { role?: string }).role ?? "unknown";
-    const content = asStringContent((message as { content?: unknown }).content)
-      .replace(/\s+/g, " ")
-      .trim();
-    if (content) {
-      lines.push(`- [${role}] ${truncate(content, SUMMARY_ITEM_CHAR_LIMIT)}`);
-      continue;
-    }
-    const toolName = (message as { name?: string }).name;
-    if (toolName) {
-      lines.push(`- [${role}] tool=${toolName}`);
-    } else {
-      lines.push(`- [${role}] (non-text message)`);
-    }
+    lines.push(`- [${role}] ${describeMessageContent(message).join("; ")}`);
   }
   if (messages.length > SUMMARY_LINE_LIMIT) {
     lines.push(`- ... and ${messages.length - SUMMARY_LINE_LIMIT} more messages`);
+  }
+  return lines.join("\n");
+}
+
+function formatRuntimeState(context: CompactRuntimeContext): string {
+  const state = context.state;
+  const lines: string[] = [];
+  const sessionId = state?.sessionId ?? context.sessionId;
+  if (sessionId) {
+    lines.push(`- sessionId: ${sessionId}`);
+  }
+  if (state?.activeTaskId) {
+    lines.push(`- activeTaskId: ${state.activeTaskId}`);
+  }
+  if (typeof state?.roundCounter === "number") {
+    lines.push(`- roundCounter: ${state.roundCounter}`);
+  }
+  if (typeof state?.wroteWorkspaceFiles === "boolean") {
+    lines.push(`- wroteWorkspaceFiles: ${state.wroteWorkspaceFiles}`);
+  }
+  if (state?.touchedPaths?.length) {
+    const paths = state.touchedPaths.slice(0, STATE_PATH_LIMIT);
+    const suffix = state.touchedPaths.length > paths.length ? `, +${state.touchedPaths.length - paths.length} more` : "";
+    lines.push(`- touchedPaths: ${paths.join(", ")}${suffix}`);
   }
   return lines.join("\n");
 }
@@ -209,11 +283,18 @@ export async function compactMessages(
   const sessionMemoryPrefix = previousSessionMemory
     ? `Session memory summary reused from ${previousSessionMemory.path}:\n${previousSessionMemory.content}\n\n`
     : "";
+  const runtimeState = formatRuntimeState(context);
   const compactedMessage: ChatCompletionMessageParam = {
     role: "assistant",
-    content:
-      `Context compacted (${reason}). ` +
-      `${sessionMemoryPrefix}Summary of ${older.length} earlier messages:\n${summary || "- (no older text content)"}`,
+    content: [
+      `Context compacted (${reason}).`,
+      `Compaction stats: summarizedMessages=${older.length}; keptRecentMessages=${recent.length}; estimatedBefore=${estimatedBefore}.`,
+      sessionMemoryPrefix.trim() ? sessionMemoryPrefix.trim() : null,
+      runtimeState ? `Runtime state restored after compaction:\n${runtimeState}` : null,
+      `Dehydrated summary of earlier messages:\n${summary || "- (no older text content)"}`,
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
   };
 
   const newMessages = older.length > 0 ? [compactedMessage, ...recent] : recent;

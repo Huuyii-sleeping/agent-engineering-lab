@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import * as process from "node:process";
 import { afterEach, describe, expect, it } from "vitest";
-import { compactMessages } from "../../../src/tools/context-compact.js";
+import {
+  compactMessages,
+  getEffectiveCompactThresholdTokens,
+  isCompactReductionEffective,
+} from "../../../src/tools/context-compact.js";
 
 let tempDir = "";
 let previousCwd = "";
@@ -90,6 +94,48 @@ describe("tools/context-compact", () => {
     expect(first.sessionMemoryPath).toBe(".sessions/s123/session-memory.md");
     expect(sessionMemoryRaw).toContain("We decided to use durable markdown memory.");
     expect(messages[0]?.content).toContain("Session memory summary");
+  });
+
+  it("adds dehydrated summary and runtime state to compacted context", async () => {
+    await withWorkspace();
+
+    const messages = [
+      {
+        role: "assistant" as const,
+        content: null,
+        tool_calls: [{ id: "call-1", type: "function" as const, function: { name: "read_file", arguments: "{}" } }],
+      },
+      { role: "tool" as const, tool_call_id: "call-1", name: "read_file", content: "file content" },
+      { role: "user" as const, content: "continue" },
+    ];
+
+    await compactMessages(
+      {
+        sessionId: "state-session",
+        messages,
+        state: {
+          sessionId: "state-session",
+          activeTaskId: "42",
+          roundCounter: 7,
+          touchedPaths: ["apps/agent-cli/src/runtime/query-model.ts"],
+          wroteWorkspaceFiles: true,
+        },
+      },
+      "auto",
+      1,
+    );
+
+    expect(messages[0]?.content).toContain("Runtime state restored after compaction");
+    expect(messages[0]?.content).toContain("activeTaskId: 42");
+    expect(messages[0]?.content).toContain("tool_calls=read_file");
+    expect(messages[0]?.content).toContain("tool_result=read_file");
+  });
+
+  it("computes effective compact thresholds and checks reduction usefulness", () => {
+    expect(getEffectiveCompactThresholdTokens()).toBeLessThanOrEqual(50_000);
+    expect(isCompactReductionEffective({ estimatedBefore: 500, estimatedAfter: 300, reducedBy: 200 })).toBe(true);
+    expect(isCompactReductionEffective({ estimatedBefore: 500, estimatedAfter: 450, reducedBy: 50 })).toBe(false);
+    expect(isCompactReductionEffective({ estimatedBefore: 500, estimatedAfter: 500, reducedBy: 200 })).toBe(false);
   });
 
   it("skips transcript snapshot persistence when no-persistence mode is enabled", async () => {
