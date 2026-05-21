@@ -20,6 +20,7 @@ describe("prompt/inspect", () => {
       tools: ["tool manifest"],
       skills: [],
       rules: [],
+      userContext: "user private context",
       memoryContext: "memory context",
       dynamicMessages: ["token=sk-12345678901234567890", "runtime secret"],
     });
@@ -27,6 +28,16 @@ describe("prompt/inspect", () => {
     expect(dump.supplementalSystemMessages[0]).toContain("protected");
     expect(dump.supplementalSystemMessages.join("\n")).not.toContain("sk-12345678901234567890");
     expect(dump.inspectionMode).toBe("default");
+    expect(dump.sections).toContainEqual(
+      expect.objectContaining({
+        id: "user_context",
+        kind: "user_context",
+        source: "user_context",
+        cachePolicy: "ephemeral",
+        inclusionReason: "current user context",
+      }),
+    );
+    expect(dump.sections.every((section) => section.estimatedTokens > 0)).toBe(true);
   });
 
   it("returns full supplemental messages only in protected mode", () => {
@@ -36,12 +47,20 @@ describe("prompt/inspect", () => {
         tools: ["tool manifest"],
         skills: [],
         rules: [],
+        compactSummary: "compact summary",
         memoryContext: "memory context",
         dynamicMessages: ["runtime details"],
       },
       "protected",
     );
 
+    expect(dump.sections).toContainEqual(
+      expect.objectContaining({
+        id: "compact_summary",
+        kind: "compact_summary",
+        source: "context_compaction",
+      }),
+    );
     expect(dump.supplementalSystemMessages).toContain("runtime details");
     expect(dump.inspectionMode).toBe("protected");
   });
@@ -101,11 +120,12 @@ describe("prompt/inspect", () => {
     const parsed = JSON.parse(raw) as {
       kind: string;
       expiresAt: number;
-      dump: { supplementalSystemMessages: string[] };
+      dump: { supplementalSystemMessages: string[]; sections: Array<{ id: string; cachePolicy: string }> };
     };
     expect(parsed.kind).toBe("prompt_dump");
     expect(parsed.expiresAt).toBeGreaterThan(0);
     expect(parsed.dump.supplementalSystemMessages).toContain("runtime details");
+    expect(parsed.dump.sections).toContainEqual(expect.objectContaining({ id: "core", cachePolicy: "cacheable" }));
   });
 
   it("suppresses protected prompt dump persistence when no-persistence mode is enabled", async () => {

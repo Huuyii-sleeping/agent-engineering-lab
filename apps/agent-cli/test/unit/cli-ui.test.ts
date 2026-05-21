@@ -296,12 +296,50 @@ describe("cli-ui", () => {
           supplementalSystemMessages: [],
           stableSectionIds: ["core"],
           dynamicSectionIds: [],
+          sections: [
+            {
+              id: "core",
+              title: "Core",
+              kind: "system",
+              source: "core",
+              cachePolicy: "cacheable",
+              priority: 10,
+              estimatedTokens: 2,
+              inclusionReason: "base agent instructions",
+            },
+          ],
           protectedExportPath: null,
         },
         ["openspec-apply-change"],
         ["missing-skill"],
       ),
     ).toContain("System Prompt");
+    expect(
+      renderCliPromptDump(
+        {
+          inspectionMode: "default",
+          primarySystemPrompt: "## Core\ncore",
+          supplementalSystemMessages: [],
+          stableSectionIds: ["core"],
+          dynamicSectionIds: [],
+          sections: [
+            {
+              id: "core",
+              title: "Core",
+              kind: "system",
+              source: "core",
+              cachePolicy: "cacheable",
+              priority: 10,
+              estimatedTokens: 2,
+              inclusionReason: "base agent instructions",
+            },
+          ],
+          protectedExportPath: null,
+        },
+        [],
+        [],
+      ),
+    ).toContain("core system source=core cache=cacheable priority=10 tokens=2 reason=base agent instructions");
     expect(renderCliArchitecture()).toContain("Architecture");
     expect(renderCliArchitecture()).toContain("Stronger Here");
     expect(renderCliArchitecture()).toContain("remote/bridge/daemon");

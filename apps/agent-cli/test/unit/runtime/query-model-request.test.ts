@@ -11,8 +11,43 @@ import {
 const PROMPT_ENVELOPE: PromptEnvelope = {
   primarySystemPrompt: "primary system",
   supplementalSystemMessages: ["memory context", "dynamic guard"],
-  stableSections: [],
-  dynamicSections: [],
+  stableSections: [
+    {
+      id: "core",
+      title: "Core",
+      content: "primary system",
+      kind: "system",
+      source: "core",
+      cachePolicy: "cacheable",
+      priority: 10,
+      estimatedTokens: 2,
+      inclusionReason: "base agent instructions",
+    },
+  ],
+  dynamicSections: [
+    {
+      id: "memory",
+      title: "Memory",
+      content: "memory context",
+      kind: "memory",
+      source: "memory_retrieval",
+      cachePolicy: "ephemeral",
+      priority: 100,
+      estimatedTokens: 2,
+      inclusionReason: "retrieved memory context",
+    },
+    {
+      id: "runtime_reminder",
+      title: "Runtime Reminder",
+      content: "dynamic guard",
+      kind: "runtime_reminder",
+      source: "runtime",
+      cachePolicy: "ephemeral",
+      priority: 130,
+      estimatedTokens: 2,
+      inclusionReason: "runtime reminder",
+    },
+  ],
 };
 
 function createClient(response: unknown, requests: unknown[] = []): OpenAI {

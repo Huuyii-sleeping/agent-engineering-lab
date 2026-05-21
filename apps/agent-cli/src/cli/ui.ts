@@ -996,6 +996,11 @@ export function renderCliPromptDump(
   loadedNames: string[],
   missingNames: string[],
 ): string {
+  const sectionGovernance =
+    dump.sections?.map(
+      (section) =>
+        `${section.id} ${section.kind} source=${section.source} cache=${section.cachePolicy} priority=${section.priority} tokens=${section.estimatedTokens} reason=${section.inclusionReason}`,
+    ) ?? [];
   const protectedExportNotice =
     dump.inspectionMode === "protected" && dump.protectedExportPath
       ? [
@@ -1022,6 +1027,9 @@ export function renderCliPromptDump(
       { label: "export", value: dump.protectedExportPath ?? "(inline only)" },
       { label: "persistence", value: dump.persistenceBlockedReason ?? "(allowed)" },
     ]),
+    "",
+    strong("Sections"),
+    sectionGovernance.length > 0 ? sectionGovernance.join("\n") : muted("(none)"),
     "",
     strong("Primary"),
     dump.inspectionMode === "protected" && dump.protectedExportPath

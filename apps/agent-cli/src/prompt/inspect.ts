@@ -4,7 +4,7 @@ import { buildPromptEnvelope } from "./builder.js";
 import { getPrivacyConfig, isLocalPersistenceEnabled } from "../runtime-config.js";
 import { sanitizeAndRedactText } from "../security/data-hygiene.js";
 import { buildArtifactMetadata, isExpired } from "../security/local-retention.js";
-import type { StaticPromptSource } from "./types.js";
+import type { PromptBuilderInput, PromptSection } from "./types.js";
 
 export type PromptSuppressedCategory = {
   id: string;
@@ -17,10 +17,23 @@ export type PromptDump = {
   supplementalSystemMessages: string[];
   stableSectionIds: string[];
   dynamicSectionIds: string[];
+  sections: PromptSectionInspection[];
   suppressedCategories?: PromptSuppressedCategory[];
   protectedExportPath: string | null;
   persistenceBlockedReason?: string | null;
 };
+
+export type PromptSectionInspection = Pick<
+  PromptSection,
+  | "id"
+  | "title"
+  | "kind"
+  | "source"
+  | "cachePolicy"
+  | "priority"
+  | "estimatedTokens"
+  | "inclusionReason"
+>;
 
 type PersistedPromptDumpEnvelope = {
   schemaVersion: 1;
@@ -43,8 +56,21 @@ function protectSupplementalMessages(
   );
 }
 
+function toSectionInspection(section: PromptSection): PromptSectionInspection {
+  return {
+    id: section.id,
+    title: section.title,
+    kind: section.kind,
+    source: section.source,
+    cachePolicy: section.cachePolicy,
+    priority: section.priority,
+    estimatedTokens: section.estimatedTokens,
+    inclusionReason: section.inclusionReason,
+  };
+}
+
 export function inspectPromptSource(
-  source: StaticPromptSource,
+  source: PromptBuilderInput,
   mode: "default" | "protected" = "default",
 ): PromptDump {
   const envelope = buildPromptEnvelope(source);
@@ -68,6 +94,7 @@ export function inspectPromptSource(
     supplementalSystemMessages: protectSupplementalMessages(envelope.supplementalSystemMessages, mode),
     stableSectionIds: envelope.stableSections.map((section) => section.id),
     dynamicSectionIds: envelope.dynamicSections.map((section) => section.id),
+    sections: [...envelope.stableSections, ...envelope.dynamicSections].map(toSectionInspection),
     suppressedCategories,
     protectedExportPath: null,
     persistenceBlockedReason: null,
@@ -98,7 +125,7 @@ async function pruneExpiredPromptDumps(root: string): Promise<void> {
 }
 
 export async function exportProtectedPromptDump(
-  source: StaticPromptSource,
+  source: PromptBuilderInput,
   rootDir = process.cwd(),
 ): Promise<PromptDump> {
   if (!isLocalPersistenceEnabled()) {
