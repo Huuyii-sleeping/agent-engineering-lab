@@ -8,6 +8,7 @@ import {
   subagentSnapshot,
   type SubagentNotification,
   type SubagentRecord,
+  type SubagentRole,
 } from "./subagent-types.js";
 
 export class SubagentManager {
@@ -30,6 +31,29 @@ export class SubagentManager {
     return this.records.get(agentId) ?? null;
   }
 
+  private parseRole(roleArg: unknown): SubagentRole | null {
+    if (roleArg === undefined || roleArg === null || String(roleArg).trim() === "") {
+      return "worker";
+    }
+    const role = String(roleArg).trim();
+    return role === "worker" || role === "coordinator" || role === "reviewer" ? role : null;
+  }
+
+  private parseParentAgentId(parentAgentIdArg: unknown): number | null | false {
+    if (
+      parentAgentIdArg === undefined ||
+      parentAgentIdArg === null ||
+      String(parentAgentIdArg).trim() === ""
+    ) {
+      return null;
+    }
+    const parentAgentId = Number(parentAgentIdArg);
+    if (!Number.isInteger(parentAgentId) || parentAgentId <= 0) {
+      return false;
+    }
+    return parentAgentId;
+  }
+
   private pushCompletedNotification(record: SubagentRecord): void {
     void recordObservabilityEvent(
       "notification",
@@ -37,6 +61,8 @@ export class SubagentManager {
         source: "subagent",
         agentId: record.id,
         agentName: record.name,
+        role: record.role,
+        parentAgentId: record.parentAgentId,
         status: "completed",
         output: record.lastOutput ?? "",
       },
@@ -45,6 +71,7 @@ export class SubagentManager {
     this.notifications.push({
       agentId: record.id,
       agentName: record.name,
+      role: record.role,
       status: "completed",
       updatedAt: record.updatedAt,
       output: record.lastOutput,
@@ -58,6 +85,8 @@ export class SubagentManager {
         source: "subagent",
         agentId: record.id,
         agentName: record.name,
+        role: record.role,
+        parentAgentId: record.parentAgentId,
         status: "failed",
         error: record.lastError ?? "",
       },
@@ -66,6 +95,7 @@ export class SubagentManager {
     this.notifications.push({
       agentId: record.id,
       agentName: record.name,
+      role: record.role,
       status: "failed",
       updatedAt: record.updatedAt,
       error: record.lastError,
@@ -89,12 +119,25 @@ export class SubagentManager {
     this.pushFailedNotification(record);
   }
 
-  async spawn(nameArg: unknown): Promise<string> {
+  async spawn(nameArg: unknown, roleArg?: unknown, parentAgentIdArg?: unknown): Promise<string> {
     const name = String(nameArg ?? "").trim() || `worker-${this.nextId}`;
+    const role = this.parseRole(roleArg);
+    if (!role) {
+      return err("INVALID_ARGUMENT", "subagent_spawn role must be worker|coordinator|reviewer");
+    }
+    const parentAgentId = this.parseParentAgentId(parentAgentIdArg);
+    if (parentAgentId === false) {
+      return err("INVALID_ARGUMENT", "parent_agent_id must be a positive integer");
+    }
+    if (parentAgentId !== null && !this.records.has(parentAgentId)) {
+      return err("AGENT_NOT_FOUND", `parent agent ${parentAgentId} not found`);
+    }
     const now = this.now();
     const record: SubagentRecord = {
       id: this.nextId,
       name,
+      role,
+      parentAgentId,
       status: "idle",
       traceId: getExecutionContext()?.traceId ?? null,
       createdAt: now,

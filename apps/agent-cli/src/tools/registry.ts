@@ -23,7 +23,7 @@ export type BuiltinToolRegistration = ToolRegistration & {
 };
 
 const SUBAGENT_HANDLERS: Record<string, ToolHandler> = {
-  subagent_spawn: async (args) => runSubagentSpawn(args.name),
+  subagent_spawn: async (args) => runSubagentSpawn(args.name, args.role, args.parent_agent_id),
   subagent_send: async (args) => runSubagentSend(args.agent_id, args.prompt),
   subagent_wait: async (args) => runSubagentWait(args.agent_id, args.timeout_ms),
   subagent_list: async () => runSubagentList(),

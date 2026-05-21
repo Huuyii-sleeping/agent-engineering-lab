@@ -50,6 +50,7 @@ describe("tools/task-manager", () => {
     expect(listed).toContain(`#${second.id}: task-b`);
     expect(listed).toContain("worktree=lane-a");
     expect(listed).toContain("lane=bound");
+    expect(listed).toContain("owner=(unassigned)");
   });
 
   it("keeps claim and worktree sync behavior stable", async () => {
@@ -65,6 +66,7 @@ describe("tools/task-manager", () => {
       task: { owner: string; status: string };
     };
     expect(claimed).toMatchObject({ ok: true, task: { owner: "alice", status: "in_progress" } });
+    await expect(manager.listAll()).resolves.toContain(`owner=alice`);
 
     const conflict = JSON.parse(await manager.claimTask(created.id, "bob")) as {
       ok?: boolean;

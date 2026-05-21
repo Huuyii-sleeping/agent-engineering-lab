@@ -40,6 +40,7 @@ describe("tools/team-manager", () => {
 
     const aliceInbox = JSON.parse(await manager.readInbox(alice.teammate.id)) as { messages: TeamMessage[] };
     expect(aliceInbox.messages.map((message) => message.type)).toEqual(["message", "broadcast"]);
+    expect(aliceInbox).toMatchObject({ unreadCount: 2, lastReadAt: 0 });
 
     const bobInbox = JSON.parse(await manager.readInbox(bob.teammate.id)) as { messages: TeamMessage[] };
     expect(bobInbox.messages).toMatchObject([{ type: "broadcast", content: "standup" }]);
@@ -47,6 +48,33 @@ describe("tools/team-manager", () => {
     const notifications = manager.drainNotifications();
     expect(notifications.map((notification) => notification.messageType)).toEqual(["message", "broadcast", "broadcast"]);
     expect(manager.drainNotifications()).toEqual([]);
+  });
+
+  it("tracks inbox unread messages until explicit acknowledgement", async () => {
+    const manager = await makeManager();
+    const teammate = JSON.parse(await manager.addTeammate("reviewer")) as { teammate: Teammate };
+
+    await manager.sendMessage(teammate.teammate.id, "first", "main");
+    await manager.sendMessage(teammate.teammate.id, "second", "main");
+
+    expect(JSON.parse(await manager.readInbox(teammate.teammate.id))).toMatchObject({
+      unreadCount: 2,
+      lastReadAt: 0,
+      messages: [{ content: "first" }, { content: "second" }],
+    });
+
+    const ack = JSON.parse(await manager.markInboxRead(teammate.teammate.id)) as { lastReadAt: number };
+    expect(ack.lastReadAt).toBeGreaterThan(0);
+    expect(JSON.parse(await manager.readInbox(teammate.teammate.id))).toMatchObject({
+      unreadCount: 0,
+      lastReadAt: ack.lastReadAt,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    await manager.sendMessage(teammate.teammate.id, "third", "main");
+    expect(JSON.parse(await manager.readInbox(teammate.teammate.id))).toMatchObject({
+      unreadCount: 1,
+    });
   });
 
   it("keeps shutdown and plan approval request response flow stable", async () => {

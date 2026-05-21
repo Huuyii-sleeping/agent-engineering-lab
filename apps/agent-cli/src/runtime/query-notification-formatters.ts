@@ -27,10 +27,11 @@ export function buildScheduledPromptSystemMessage(items: ScheduledNotification[]
 export function formatSubagentNotificationSummary(item: SubagentNotification): string {
   const output = typeof item.output === "string" ? item.output.slice(0, 200) : "";
   const error = typeof item.error === "string" ? item.error.slice(0, 200) : "";
+  const role = item.role ? ` role=${item.role}` : "";
   if (item.status === "completed") {
-    return `agent#${item.agentId}(${item.agentName}) updated_at_ms=${item.updatedAt}; output=${output}`;
+    return `agent#${item.agentId}(${item.agentName})${role} updated_at_ms=${item.updatedAt}; output=${output}`;
   }
-  return `agent#${item.agentId}(${item.agentName}) updated_at_ms=${item.updatedAt}; error=${error}`;
+  return `agent#${item.agentId}(${item.agentName})${role} updated_at_ms=${item.updatedAt}; error=${error}`;
 }
 
 export function buildSubagentNotificationsSystemMessage(items: SubagentNotification[]): string {

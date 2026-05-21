@@ -38,6 +38,8 @@ const PLAN_BLOCKED_TOOLS = new Set([
   "subagent_close",
   "subagent_send",
   "subagent_spawn",
+  "task_claim",
+  "team_mark_inbox_read",
 ]);
 
 function isWorkspaceMutationTool(name: string): boolean {

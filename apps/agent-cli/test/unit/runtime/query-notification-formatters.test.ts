@@ -33,22 +33,24 @@ describe("runtime/query-notification-formatters", () => {
       formatSubagentNotificationSummary({
         agentId: 7,
         agentName: "worker",
+        role: "worker",
         status: "completed",
         updatedAt: 2000,
         output: "done",
       }),
-    ).toBe("agent#7(worker) updated_at_ms=2000; output=done");
+    ).toBe("agent#7(worker) role=worker updated_at_ms=2000; output=done");
     expect(
       buildSubagentNotificationsSystemMessage([
         {
           agentId: 7,
           agentName: "worker",
+          role: "worker",
           status: "failed",
           updatedAt: 2000,
           error: "failed",
         },
       ]),
-    ).toBe("<subagent_notifications>\nagent#7(worker) updated_at_ms=2000; error=failed\n</subagent_notifications>");
+    ).toBe("<subagent_notifications>\nagent#7(worker) role=worker updated_at_ms=2000; error=failed\n</subagent_notifications>");
 
     const background = {
       taskId: 3,

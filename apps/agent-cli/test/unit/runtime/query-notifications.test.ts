@@ -63,7 +63,7 @@ describe("runtime/query-notifications", () => {
         },
       ],
       subagent: [
-        { agentId: 7, agentName: "worker", status: "completed", updatedAt: 2000, output: "done" },
+        { agentId: 7, agentName: "worker", role: "worker", status: "completed", updatedAt: 2000, output: "done" },
       ],
       background: [
         {

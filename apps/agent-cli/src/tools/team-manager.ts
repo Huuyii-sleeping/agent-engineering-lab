@@ -187,8 +187,22 @@ export class TeamManager {
     if (!Number.isInteger(teammateId) || teammateId <= 0) {
       return fail("INVALID_ARGUMENT", "team_read_inbox requires positive teammate_id");
     }
-    const messages = await this.store.readInbox(teammateId);
-    return ok({ messages });
+    const inbox = await this.store.readInbox(teammateId);
+    return ok(inbox);
+  }
+
+  async markInboxRead(teammateIdArg: unknown): Promise<string> {
+    const teammateId = Number(teammateIdArg);
+    if (!Number.isInteger(teammateId) || teammateId <= 0) {
+      return fail("INVALID_ARGUMENT", "team_mark_inbox_read requires positive teammate_id");
+    }
+    const teammates = await this.store.loadTeammates();
+    const teammate = teammateById(teammates, teammateId);
+    if (!teammate) {
+      return fail("TEAMMATE_NOT_FOUND", `teammate ${teammateId} not found`);
+    }
+    const result = await this.store.markInboxRead(teammateId);
+    return ok(result);
   }
 
   async listRequests(): Promise<string> {

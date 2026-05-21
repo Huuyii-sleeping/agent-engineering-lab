@@ -35,6 +35,8 @@ describe("tools/registry", () => {
     expect(spawn?.allowDuringReplay).toBe(false);
     expect(spawn?.execution.parallelSafe).toBe(false);
     expect(registrations.some((tool) => tool.name === "task_create")).toBe(true);
+    expect(registrations.some((tool) => tool.name === "task_claim")).toBe(true);
+    expect(registrations.some((tool) => tool.name === "team_mark_inbox_read")).toBe(true);
   });
 
   it("previews subagent calls using shared registry behavior", () => {

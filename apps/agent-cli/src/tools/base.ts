@@ -18,7 +18,14 @@ import {
 } from "./context-compact.js";
 import { FILE_TOOLS, runEditFile, runReadFile, runWriteFile } from "./file-tools.js";
 import { MEMORY_TOOLS } from "./memory.js";
-import { TASK_TOOLS, runTaskCreate, runTaskGet, runTaskList, runTaskUpdate } from "./task-board.js";
+import {
+  TASK_TOOLS,
+  runClaimTask,
+  runTaskCreate,
+  runTaskGet,
+  runTaskList,
+  runTaskUpdate,
+} from "./task-board.js";
 import {
   runScheduleCreate,
   runScheduleList,
@@ -32,6 +39,7 @@ import {
   runTeamBroadcast,
   runTeamListRequests,
   runTeamListTeammates,
+  runTeamMarkInboxRead,
   runTeamMessage,
   runTeamPlanApprovalRequest,
   runTeamPlanApprovalResponse,
@@ -115,6 +123,7 @@ const BASE_HANDLERS: Record<string, ToolHandler> = {
   load_skill: async (args) => runLoadSkill(args.name, args.session_id),
   todo: async (args) => runTodo(args.items),
   task_create: async (args) => runTaskCreate(args.subject, args.description),
+  task_claim: async (args) => runClaimTask(args.task_id, args.owner),
   task_update: async (args) =>
     runTaskUpdate(
       args.task_id,
@@ -150,6 +159,7 @@ const BASE_HANDLERS: Record<string, ToolHandler> = {
     runTeamPlanApprovalResponse(args.request_id, args.approve, args.note, args.from),
   team_list_teammates: async () => runTeamListTeammates(),
   team_read_inbox: async (args) => runTeamReadInbox(args.teammate_id),
+  team_mark_inbox_read: async (args) => runTeamMarkInboxRead(args.teammate_id),
   team_list_requests: async () => runTeamListRequests(),
   security_check: async (args) => runSecurityCheck(args.tool, args.args_json),
   security_request_approval: async (args) => runSecurityRequestApproval(args.tool, args.args_json),

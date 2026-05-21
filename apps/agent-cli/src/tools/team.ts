@@ -143,7 +143,19 @@ export const TEAM_TOOLS: ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "team_read_inbox",
-      description: "Read inbox messages for a teammate.",
+      description: "Read inbox messages and unread count for a teammate without acknowledging them.",
+      parameters: {
+        type: "object",
+        properties: { teammate_id: { type: "integer" } },
+        required: ["teammate_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "team_mark_inbox_read",
+      description: "Acknowledge all current inbox messages for a teammate.",
       parameters: {
         type: "object",
         properties: { teammate_id: { type: "integer" } },
@@ -213,6 +225,10 @@ export async function runTeamListTeammates(): Promise<string> {
 
 export async function runTeamReadInbox(teammateId: unknown): Promise<string> {
   return TEAM.readInbox(teammateId);
+}
+
+export async function runTeamMarkInboxRead(teammateId: unknown): Promise<string> {
+  return TEAM.markInboxRead(teammateId);
 }
 
 export async function runTeamListRequests(): Promise<string> {

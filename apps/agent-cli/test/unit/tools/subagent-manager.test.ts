@@ -32,11 +32,13 @@ describe("tools/subagent-manager", () => {
   it("spawns and lists subagents with stable snapshots", async () => {
     const manager = new SubagentManager(new FakeExecutor());
 
-    expect(JSON.parse(await manager.spawn("alpha"))).toMatchObject({
+    expect(JSON.parse(await manager.spawn("alpha", "coordinator"))).toMatchObject({
       ok: true,
       agent: {
         id: 1,
         name: "alpha",
+        role: "coordinator",
+        parentAgentId: null,
         status: "idle",
         lastInput: null,
         lastOutput: null,
@@ -50,10 +52,33 @@ describe("tools/subagent-manager", () => {
         {
           id: 1,
           name: "alpha",
+          role: "coordinator",
           status: "idle",
         },
       ],
     });
+  });
+
+  it("keeps role metadata on notifications and child subagents", async () => {
+    const executor = new FakeExecutor();
+    executor.execute.mockResolvedValueOnce({ status: "completed", output: "done" });
+    const manager = new SubagentManager(executor);
+
+    await manager.spawn("parent", "coordinator");
+    await manager.spawn("child", "worker", 1);
+    await manager.send(2, "do task");
+    await manager.wait(2, 50);
+
+    expect(manager.drainNotifications()).toEqual([
+      {
+        agentId: 2,
+        agentName: "child",
+        role: "worker",
+        status: "completed",
+        updatedAt: expect.any(Number),
+        output: "done",
+      },
+    ]);
   });
 
   it("enforces running and timeout semantics, then completes and drains notifications", async () => {
@@ -105,6 +130,7 @@ describe("tools/subagent-manager", () => {
       {
         agentId: 1,
         agentName: "worker",
+        role: "worker",
         status: "completed",
         updatedAt: expect.any(Number),
         output: "done",
@@ -157,6 +183,7 @@ describe("tools/subagent-manager", () => {
       {
         agentId: 1,
         agentName: "beta",
+        role: "worker",
         status: "failed",
         updatedAt: expect.any(Number),
         error: "boom",

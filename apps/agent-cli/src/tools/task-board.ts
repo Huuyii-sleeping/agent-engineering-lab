@@ -42,6 +42,21 @@ export const TASK_TOOLS: ChatCompletionTool[] = [
   {
     type: "function",
     function: {
+      name: "task_claim",
+      description: "Claim a task for a coordinator, teammate, or subagent owner.",
+      parameters: {
+        type: "object",
+        properties: {
+          task_id: { type: "integer" },
+          owner: { type: "string" },
+        },
+        required: ["task_id", "owner"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "task_list",
       description: "List task summary.",
       parameters: { type: "object", properties: {} },

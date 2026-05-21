@@ -38,6 +38,8 @@ describe("cli permissions", () => {
   it("blocks risky tool execution while in plan mode", () => {
     setCliPermissionMode("plan");
     expect(applyCliPermissionMode("write_file")).toMatchObject({ ok: false });
+    expect(applyCliPermissionMode("task_claim")).toMatchObject({ ok: false });
+    expect(applyCliPermissionMode("team_mark_inbox_read")).toMatchObject({ ok: false });
     expect(applyCliPermissionMode("read_file")).toBeNull();
   });
 

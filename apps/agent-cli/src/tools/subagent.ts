@@ -21,6 +21,8 @@ export const SUBAGENT_TOOLS: ChatCompletionTool[] = [
         type: "object",
         properties: {
           name: { type: "string" },
+          role: { type: "string", enum: ["worker", "coordinator", "reviewer"] },
+          parent_agent_id: { type: "integer" },
         },
       },
     },
@@ -83,8 +85,8 @@ export function drainSubagentNotifications() {
   return SUBAGENTS.drainNotifications();
 }
 
-export async function runSubagentSpawn(name: unknown): Promise<string> {
-  return SUBAGENTS.spawn(name);
+export async function runSubagentSpawn(name: unknown, role?: unknown, parentAgentId?: unknown): Promise<string> {
+  return SUBAGENTS.spawn(name, role, parentAgentId);
 }
 
 export async function runSubagentSend(agentId: unknown, prompt: unknown): Promise<string> {

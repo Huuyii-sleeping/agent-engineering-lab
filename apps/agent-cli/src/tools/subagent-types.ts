@@ -1,8 +1,11 @@
 export type SubagentStatus = "idle" | "running" | "completed" | "failed" | "closed";
+export type SubagentRole = "worker" | "coordinator" | "reviewer";
 
 export type SubagentRecord = {
   id: number;
   name: string;
+  role: SubagentRole;
+  parentAgentId: number | null;
   status: SubagentStatus;
   traceId: string | null;
   createdAt: number;
@@ -15,6 +18,7 @@ export type SubagentRecord = {
 export type SubagentNotification = {
   agentId: number;
   agentName: string;
+  role: SubagentRole;
   status: "completed" | "failed";
   updatedAt: number;
   output?: string | null;
@@ -37,6 +41,8 @@ export function subagentSnapshot(record: SubagentRecord): Record<string, unknown
   return {
     id: record.id,
     name: record.name,
+    role: record.role,
+    parentAgentId: record.parentAgentId,
     status: record.status,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,

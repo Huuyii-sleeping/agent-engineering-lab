@@ -56,6 +56,7 @@ export class TaskManager {
     const lines: string[] = [];
     for (const task of tasks) {
       const marker = task.status === "pending" ? "[ ]" : task.status === "in_progress" ? "[>]" : "[x]";
+      const owner = task.owner ? ` owner=${task.owner}` : " owner=(unassigned)";
       const blocked = task.blockedBy.length > 0 ? ` blockedBy=${JSON.stringify(task.blockedBy)}` : "";
       const worktree = task.worktree ? ` worktree=${task.worktree}` : "";
       const lane = ` lane=${task.worktreeState}`;
@@ -63,7 +64,7 @@ export class TaskManager {
       const closeout = task.closeout
         ? ` closeout=${task.closeout.action}@${task.closeout.at}${task.closeout.forced ? ":forced" : ""}`
         : "";
-      lines.push(`${marker} #${task.id}: ${task.subject}${blocked}${worktree}${lane}${lastWorktree}${closeout}`);
+      lines.push(`${marker} #${task.id}: ${task.subject}${owner}${blocked}${worktree}${lane}${lastWorktree}${closeout}`);
     }
     return lines.join("\n");
   }
