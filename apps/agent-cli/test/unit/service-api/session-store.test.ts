@@ -17,7 +17,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   };
 });
 
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -63,6 +63,63 @@ describe("service-api/session-store", () => {
     expect(list[0]?.runtimeState.roundCounter).toBe(3);
   });
 
+  it("appends session journal rows on every save", async () => {
+    tempDir = await mkdtemp(path.join(tmpdir(), "agent-session-store-"));
+    const store = new SessionStore(path.join(tempDir, ".sessions"));
+    const session = createAgentSessionRecord("session_journal", 1000);
+    session.history.push({ role: "user", content: "first" });
+
+    await store.save(session);
+
+    session.updatedAt = 2000;
+    session.history.push({ role: "assistant", content: "second" });
+    await store.save(session);
+
+    const raw = await readFile(path.join(tempDir, ".sessions", "session_session_journal.jsonl"), "utf8");
+    const rows = raw.trim().split("\n").map((line) => JSON.parse(line) as { session: AgentSessionRecord });
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.session.history).toHaveLength(1);
+    expect(rows[1]?.session.history).toHaveLength(2);
+  });
+
+  it("restores sessions from journal when the legacy snapshot is absent", async () => {
+    tempDir = await mkdtemp(path.join(tmpdir(), "agent-session-store-"));
+    const store = new SessionStore(path.join(tempDir, ".sessions"));
+    const session = createAgentSessionRecord("session_resume", 1000);
+    session.history.push({ role: "user", content: "before restart" });
+    session.runtimeState.roundCounter = 4;
+
+    await store.save(session);
+    await rm(path.join(tempDir, ".sessions", "session_session_resume.json"), { force: true });
+
+    const loaded = await store.load(session.id);
+
+    expect(loaded?.history).toEqual([{ role: "user", content: "before restart" }]);
+    expect(loaded?.runtimeState.roundCounter).toBe(4);
+  });
+
+  it("prefers journal data over stale legacy snapshots while listing sessions", async () => {
+    tempDir = await mkdtemp(path.join(tmpdir(), "agent-session-store-"));
+    const store = new SessionStore(path.join(tempDir, ".sessions"));
+    const session = createAgentSessionRecord("session_prefer_journal", 1000);
+    const snapshotPath = path.join(tempDir, ".sessions", "session_session_prefer_journal.json");
+    session.history.push({ role: "user", content: "stale snapshot" });
+
+    await store.save(session);
+    const staleSnapshot = await readFile(snapshotPath, "utf8");
+    session.history.push({ role: "assistant", content: "journal wins" });
+    await store.save(session);
+    await writeFile(snapshotPath, staleSnapshot, "utf8");
+
+    const listed = await store.list();
+
+    expect(listed.map((item) => item.id)).toEqual(["session_prefer_journal"]);
+    expect(listed[0]?.history).toEqual([
+      { role: "user", content: "stale snapshot" },
+      { role: "assistant", content: "journal wins" },
+    ]);
+  });
+
   it("redacts secret-like history and runtime state before persistence", async () => {
     tempDir = await mkdtemp(path.join(tmpdir(), "agent-session-store-"));
     const store = new SessionStore(path.join(tempDir, ".sessions"));
@@ -105,6 +162,7 @@ describe("service-api/session-store", () => {
       await store.save(session);
 
       await expect(readFile(path.join(tempDir, ".sessions", "session_session_private.json"), "utf8")).rejects.toBeTruthy();
+      await expect(readFile(path.join(tempDir, ".sessions", "session_session_private.jsonl"), "utf8")).rejects.toBeTruthy();
       expect(await store.list()).toEqual([]);
     } finally {
       if (previous === undefined) {
@@ -113,5 +171,17 @@ describe("service-api/session-store", () => {
         process.env.AGENT_PRIVACY_PERSISTENCE_MODE = previous;
       }
     }
+  });
+
+  it("deletes both legacy snapshots and session journals", async () => {
+    tempDir = await mkdtemp(path.join(tmpdir(), "agent-session-store-"));
+    const store = new SessionStore(path.join(tempDir, ".sessions"));
+    const session = createAgentSessionRecord("session_delete", 1000);
+
+    await store.save(session);
+
+    expect(await store.delete(session.id)).toBe(true);
+    await expect(readFile(path.join(tempDir, ".sessions", "session_session_delete.json"), "utf8")).rejects.toBeTruthy();
+    await expect(readFile(path.join(tempDir, ".sessions", "session_session_delete.jsonl"), "utf8")).rejects.toBeTruthy();
   });
 });
