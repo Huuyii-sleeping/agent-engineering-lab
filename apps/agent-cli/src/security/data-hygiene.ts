@@ -7,6 +7,7 @@ const HIDDEN_CONTROL_REGEX = new RegExp(
 );
 /* eslint-enable no-control-regex */
 const BIDI_CONTROL_REGEX = /[\u200E\u200F\u202A-\u202E\u2066-\u2069]/g;
+const ZERO_WIDTH_FORMAT_REGEX = /[\u200B-\u200D\u2060\uFEFF]/g;
 
 const SECRET_TEXT_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
   {
@@ -50,7 +51,10 @@ function sortKeys(value: unknown): unknown {
 }
 
 export function sanitizeVisibleText(value: string): string {
-  return value.replace(HIDDEN_CONTROL_REGEX, "").replace(BIDI_CONTROL_REGEX, "");
+  return value
+    .replace(HIDDEN_CONTROL_REGEX, "")
+    .replace(BIDI_CONTROL_REGEX, "")
+    .replace(ZERO_WIDTH_FORMAT_REGEX, "");
 }
 
 export function redactSecretText(value: string): string {
