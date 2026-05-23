@@ -104,4 +104,48 @@ describe("buildPromptEnvelope", () => {
     expect(result.primarySystemPrompt).toContain("prefer strict reviews");
     expect(result.stableSections.map((section) => section.id)).toContain("agent_memory");
   });
+
+  it("bounds long agent memory indexes in the stable prompt", () => {
+    const longIndex = Array.from({ length: 140 }, (_, index) => `line-${index + 1}`).join("\n");
+
+    const result = buildPromptEnvelope({
+      core: "core prompt",
+      tools: [],
+      skills: [],
+      rules: [],
+      agentMemory: {
+        agentType: "reviewer",
+        scope: "project",
+        mode: "read_only",
+        memoryDir: ".agent/agent-memory/reviewer",
+        entrypoint: "MEMORY.md",
+        currentIndex: longIndex,
+      },
+    });
+
+    expect(result.primarySystemPrompt).toContain("line-120");
+    expect(result.primarySystemPrompt).not.toContain("line-121");
+    expect(result.primarySystemPrompt).toContain("Agent memory index truncated");
+    expect(result.primarySystemPrompt).toContain("retainedLines=120");
+  });
+
+  it("keeps short agent memory indexes unchanged", () => {
+    const result = buildPromptEnvelope({
+      core: "core prompt",
+      tools: [],
+      skills: [],
+      rules: [],
+      agentMemory: {
+        agentType: "reviewer",
+        scope: "project",
+        mode: "read_only",
+        memoryDir: ".agent/agent-memory/reviewer",
+        entrypoint: "MEMORY.md",
+        currentIndex: "# Memory Index\n\n- prefer strict reviews",
+      },
+    });
+
+    expect(result.primarySystemPrompt).toContain("# Memory Index\n\n- prefer strict reviews");
+    expect(result.primarySystemPrompt).not.toContain("Agent memory index truncated");
+  });
 });

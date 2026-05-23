@@ -18,12 +18,47 @@ function joinLines(values: string[]): string {
   return normalizeList(values).join("\n");
 }
 
+const AGENT_MEMORY_INDEX_MAX_LINES = 120;
+const AGENT_MEMORY_INDEX_MAX_CHARS = 12_000;
+
 function estimateTokens(value: string): number {
   const normalized = normalizeText(value);
   if (!normalized) {
     return 0;
   }
   return Math.max(1, Math.ceil(normalized.length / 4));
+}
+
+function boundAgentMemoryIndex(value: string): {
+  content: string;
+  notice: string | null;
+} {
+  const normalized = normalizeText(value);
+  if (!normalized) {
+    return { content: "", notice: null };
+  }
+  const lines = normalized.split(/\r?\n/);
+  let content = lines.slice(0, AGENT_MEMORY_INDEX_MAX_LINES).join("\n");
+  if (content.length > AGENT_MEMORY_INDEX_MAX_CHARS) {
+    content = content.slice(0, AGENT_MEMORY_INDEX_MAX_CHARS).trimEnd();
+  }
+  const truncated = lines.length > AGENT_MEMORY_INDEX_MAX_LINES || normalized.length > content.length;
+  if (!truncated) {
+    return { content: normalized, notice: null };
+  }
+  const retainedLines = Math.min(lines.length, AGENT_MEMORY_INDEX_MAX_LINES);
+  return {
+    content,
+    notice: [
+      "Agent memory index truncated:",
+      `originalLines=${lines.length}`,
+      `originalChars=${normalized.length}`,
+      `retainedLines=${retainedLines}`,
+      `retainedChars=${content.length}`,
+      `lineLimit=${AGENT_MEMORY_INDEX_MAX_LINES}`,
+      `charLimit=${AGENT_MEMORY_INDEX_MAX_CHARS}`,
+    ].join(" "),
+  };
 }
 
 function createPromptSection(input: {
@@ -149,7 +184,11 @@ export function buildStablePromptSections(
     ];
     const currentIndex = normalizeText(agentMemory.currentIndex ?? "");
     if (currentIndex) {
-      lines.push("", "Current index:", currentIndex);
+      const boundedIndex = boundAgentMemoryIndex(currentIndex);
+      lines.push("", "Current index:", boundedIndex.content);
+      if (boundedIndex.notice) {
+        lines.push("", boundedIndex.notice);
+      }
     }
     pushSection(
       sections,
