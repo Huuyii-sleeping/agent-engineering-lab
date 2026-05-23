@@ -328,6 +328,7 @@ describe("cli-commands", () => {
     expect((await dispatchCliCommand("/status", context)).output).toContain("Status");
     expect((await dispatchCliCommand("/doctor", context)).output).toContain("Doctor");
     expect((await dispatchCliCommand("/architecture", context)).output).toContain("Architecture");
+    expect((await dispatchCliCommand("/features", context)).output).toContain("Feature Disclosure");
     expect((await dispatchCliCommand("/data", context)).output).toContain("User Data Governance");
   });
 
@@ -360,6 +361,7 @@ describe("cli-commands", () => {
     expect((await dispatchCliCommand("/approvals", context)).output).toContain("Approvals");
     expect((await dispatchCliCommand("/architecture", context)).output).toContain("remote/bridge/daemon");
     expect((await dispatchCliCommand("/data", context)).output).toContain("shared team memory");
+    expect((await dispatchCliCommand("/features", context)).output).toContain("hidden commands");
     expect((await dispatchCliCommand("/approve apr_1", context)).output).toContain("approved apr_1");
     expect((await dispatchCliCommand("/reject apr_1", context)).output).toContain("rejected apr_1");
     expect((await dispatchCliCommand("/skills", context)).output).toContain("openspec-apply-change");

@@ -26,6 +26,7 @@ describe("cli-palette", () => {
     expect(candidates.some((candidate) => candidate.command === "/workflow draw")).toBe(true);
     expect(candidates.some((candidate) => candidate.command === "/architecture")).toBe(true);
     expect(candidates.some((candidate) => candidate.command === "/data")).toBe(true);
+    expect(candidates.some((candidate) => candidate.command === "/features")).toBe(true);
   });
 
   it("fuzzy-searches local palette candidates", () => {
@@ -34,6 +35,12 @@ describe("cli-palette", () => {
     expect(view.query).toBe("review");
     expect(view.total).toBeGreaterThan(0);
     expect(view.candidates[0]?.command).toBe("/use 2");
+  });
+
+  it("surfaces feature disclosure from palette search", () => {
+    const view = searchCliPaletteCandidates(context, "feature");
+
+    expect(view.candidates.some((candidate) => candidate.command === "/features")).toBe(true);
   });
 
   it("stores recent palette results per session", () => {

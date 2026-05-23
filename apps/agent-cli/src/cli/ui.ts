@@ -9,6 +9,7 @@ import type { CliPermissionMode } from "./permissions.js";
 import type { PromptDump } from "../prompt/inspect.js";
 import type { CliTranscriptEntry, CliTranscriptView } from "./transcript.js";
 import { getCliWorkflowLabel, type CliWorkflowMode } from "./workflow.js";
+import type { CliFeatureDisclosureReport } from "./features.js";
 import type { UserDataGovernanceReport } from "../governance/user-data.js";
 import type { BashSandboxMode } from "../runtime-config.js";
 
@@ -176,6 +177,7 @@ export type CliHelpTopicId =
   | "draft"
   | "sessions"
   | "runtime"
+  | "features"
   | "approvals"
   | "transcript"
   | "workflow"
@@ -235,6 +237,7 @@ const CLI_HELP_TOPICS = [
       "/permissions show or set permission mode",
       "/architecture inspect the local runtime architecture coverage",
       "/data       inspect the local user data governance surface",
+      "/features   inspect local feature disclosure and hidden surface status",
       "/mcp        show MCP server status",
       "/mcp reset  clear cached MCP auth failures",
       "/skills     list discovered local skills",
@@ -244,7 +247,18 @@ const CLI_HELP_TOPICS = [
       "/compact    compact current session history",
       "/redraw     clear screen and redraw banner",
     ],
-    examples: ["/status", "/data", "/architecture", "/prompt"],
+    examples: ["/status", "/features", "/data", "/architecture", "/prompt"],
+  },
+  {
+    id: "features",
+    title: "Features",
+    summary: "Inspect local feature disclosure, visibility, and reserved hidden surfaces.",
+    commands: [
+      "/features   list public local surfaces and hidden/reserved feature states",
+      "/palette feature find the feature disclosure command",
+      "/help runtime includes the same disclosure entry",
+    ],
+    examples: ["/features", "/palette feature"],
   },
   {
     id: "approvals",
@@ -522,7 +536,7 @@ export function renderCliGuideLines(input: {
       "brief     /compose starts a multi-line draw brief",
       "review    /preview inspects numbered brief lines",
       "browse    /history last /search bug /peek 12 /tail",
-      "runtime   /status /model /permissions /architecture /skills /prompt /data",
+      "runtime   /status /model /permissions /architecture /skills /prompt /data /features",
       input.pendingApprovals > 0
         ? "approvals /approvals /approve <id> /reject <id>"
         : "workspace /doctor /add-dir /theme",
@@ -778,13 +792,13 @@ export function renderCliHelp(topic: CliHelpTopicId = "overview"): string {
   }
   return [
     strong("Commands"),
-    "topics     /help draft | /help sessions | /help runtime | /help approvals | /help transcript | /help workflow | /help palette | /help all",
+    "topics     /help draft | /help sessions | /help runtime | /help features | /help approvals | /help transcript | /help workflow | /help palette | /help all",
     "palette    /palette /palette <query> /palette open <index>",
     "draft      /compose /preview /pop /send /cancel",
     "sessions   /sessions /use /next /prev /clear",
     "workflow   /workflow agent | /workflow draw",
     "browse     /history /search /peek /tail",
-    "runtime    /status /config /model /permissions /architecture /skills /skill /prompt /mcp /data /cost /compact /redraw",
+    "runtime    /status /config /model /permissions /architecture /skills /skill /prompt /mcp /data /features /cost /compact /redraw",
     "approvals  /approvals /approve /reject /doctor /add-dir /tools /theme",
     "shell      !<cmd> | /exit",
     "TUI keys    Ctrl+G help | Ctrl+K palette | Ctrl+N next | Ctrl+P prev | Ctrl+L redraw | Esc cancel draft",
@@ -795,6 +809,7 @@ export function renderCliHelp(topic: CliHelpTopicId = "overview"): string {
     "- /help sessions",
     "- /search hook blocked",
     "- /data",
+    "- /features",
     "- /architecture",
     "- /model gpt-5-mini",
     "- /permissions plan",
@@ -840,6 +855,47 @@ export function renderCliPaletteLines(view: CliPaletteView, maxEntries = 8): str
 
 export function renderCliPalette(view: CliPaletteView): string {
   return [strong("Palette"), ...renderCliPaletteLines(view, 8)].join("\n");
+}
+
+export function renderCliFeatureDisclosure(report: CliFeatureDisclosureReport): string {
+  return [
+    strong("Feature Disclosure"),
+    renderRows([
+      { label: "public", value: String(report.summary.publicFeatures) },
+      { label: "internal", value: String(report.summary.internalFeatures) },
+      {
+        label: "hidden commands",
+        value: report.summary.hiddenCommands === 0 ? "none registered" : String(report.summary.hiddenCommands),
+      },
+      {
+        label: "easter eggs",
+        value: report.summary.easterEggs === 0 ? "none registered" : String(report.summary.easterEggs),
+      },
+      {
+        label: "beta-only",
+        value: report.summary.betaOnlySurfaces === 0 ? "reserved_gap" : String(report.summary.betaOnlySurfaces),
+      },
+      { label: "reserved", value: String(report.summary.reservedGaps) },
+    ]),
+    "",
+    strong("Reserved Gaps"),
+    ...report.reservedGaps.map((item) => `- ${item}`),
+    "",
+    strong("Entries"),
+    ...report.entries.flatMap((entry) => [
+      renderRows([
+        { label: "id", value: entry.id },
+        { label: "title", value: entry.title },
+        { label: "visibility", value: entry.visibility },
+        { label: "stability", value: entry.stability },
+        { label: "default", value: entry.enabledByDefault ? "enabled" : "disabled" },
+        { label: "commands", value: entry.commands.join(" | ") },
+        { label: "summary", value: entry.summary },
+        { label: "notes", value: entry.notes.join(" | ") || "(none)" },
+      ]),
+      "",
+    ]),
+  ].join("\n");
 }
 
 function formatTranscriptIndex(index: number): string {

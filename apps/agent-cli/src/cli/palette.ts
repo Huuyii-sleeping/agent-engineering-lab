@@ -235,6 +235,14 @@ function staticPaletteCandidates(context: CliPaletteContext): CliPaletteCandidat
       keywords: ["data", "privacy", "governance", "telemetry", "memory", "bridge"],
     },
     {
+      id: "runtime-feature-disclosure",
+      group: "runtime",
+      title: "Inspect feature disclosure",
+      summary: "Review public local features, hidden surface status, and reserved gaps.",
+      command: "/features",
+      keywords: ["feature", "features", "hidden", "easter", "beta", "disclosure", "governance"],
+    },
+    {
       id: "runtime-skills",
       group: "runtime",
       title: "List discovered skills",

@@ -7,6 +7,7 @@ import {
   renderCliConfig,
   renderCliDoctor,
   renderCliError,
+  renderCliFeatureDisclosure,
   renderCliHelp,
   renderCliMcpStatus,
   renderCliPalette,
@@ -41,6 +42,7 @@ import type { PromptDump } from "../prompt/inspect.js";
 import type { CliTranscriptView } from "./transcript.js";
 import type { CliWorkflowMode } from "./workflow.js";
 import { buildUserDataGovernanceReport } from "../governance/user-data.js";
+import { buildCliFeatureDisclosureReport } from "./features.js";
 
 export type CliCommandResult =
   | { handled: false }
@@ -508,6 +510,9 @@ export async function dispatchCliCommand(
   }
   if (parsed.command === "data") {
     return { handled: true, output: renderCliUserDataGovernance(buildUserDataGovernanceReport()) };
+  }
+  if (parsed.command === "features") {
+    return { handled: true, output: renderCliFeatureDisclosure(buildCliFeatureDisclosureReport()) };
   }
   if (parsed.command === "model") {
     const nextModel = parsed.args.join(" ").trim();

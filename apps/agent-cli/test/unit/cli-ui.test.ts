@@ -10,6 +10,7 @@ import {
   renderCliComposerLines,
   renderCliDoctor,
   renderCliError,
+  renderCliFeatureDisclosure,
   renderCliGuideLines,
   renderCliHelp,
   renderCliMcpStatus,
@@ -31,6 +32,7 @@ import {
   resolveCliHelpTopic,
   setCliUiColorEnabled,
 } from "../../src/cli/ui.js";
+import { buildCliFeatureDisclosureReport } from "../../src/cli/features.js";
 import { buildUserDataGovernanceReport } from "../../src/governance/user-data.js";
 
 afterEach(() => {
@@ -215,6 +217,7 @@ describe("cli-ui", () => {
     expect(renderCliHelp()).toContain("/mcp");
     expect(renderCliHelp()).toContain("/data");
     expect(renderCliHelp()).toContain("/architecture");
+    expect(renderCliHelp()).toContain("/features");
     expect(renderCliHelp()).toContain("Ctrl+G help");
     expect(renderCliHelp()).toContain("Ctrl+K palette");
     expect(renderCliHelp("draft")).toContain("Help: Draft");
@@ -223,6 +226,7 @@ describe("cli-ui", () => {
     expect(renderCliHelp("transcript")).toContain("/search <q>");
     expect(renderCliHelp("workflow")).toContain("/workflow draw");
     expect(renderCliHelp("palette")).toContain("/palette open <n>");
+    expect(renderCliHelp("runtime")).toContain("/features");
     expect(renderCliHelp("all")).toContain("Help: Runtime");
     expect(renderCliHelp("all")).toContain("Help: Transcript");
     expect(renderCliHelp("all")).toContain("Help: Workflow");
@@ -368,6 +372,8 @@ describe("cli-ui", () => {
     expect(renderCliUserDataGovernance(buildUserDataGovernanceReport())).toContain("model_input");
     expect(renderCliUserDataGovernance(buildUserDataGovernanceReport())).toContain("reserved_gap");
     expect(renderCliUserDataGovernance(buildUserDataGovernanceReport())).toContain("Privacy Minimization");
+    expect(renderCliFeatureDisclosure(buildCliFeatureDisclosureReport())).toContain("Feature Disclosure");
+    expect(renderCliFeatureDisclosure(buildCliFeatureDisclosureReport())).toContain("hidden commands  none registered");
     expect(
       renderCliShortcutLines({
         composerActive: false,
