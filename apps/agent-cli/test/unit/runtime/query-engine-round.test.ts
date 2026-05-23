@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   beginQueryEngineRound,
+  classifyUserInputIntent,
   findLatestUserInput,
   recordQueryLoopStart,
   summarizeQueryLoopInput,
@@ -85,8 +86,36 @@ describe("runtime/query-engine-round", () => {
       {
         round: 3,
         latestUserInput: "inspect runtime",
+        userInputIntent: {
+          negativeFeedback: false,
+          keepGoing: false,
+          categories: [],
+          inputLength: 17,
+        },
       },
       { traceId: "trace-round" },
     );
+  });
+
+  it("classifies negative feedback and keep-going input without carrying raw prompt text", () => {
+    const intent = classifyUserInputIntent("又失败了，太差了。继续执行，不要停。");
+
+    expect(intent).toEqual({
+      negativeFeedback: true,
+      keepGoing: true,
+      categories: ["negative_feedback", "keep_going"],
+      inputLength: 18,
+    });
+    expect(JSON.stringify(intent)).not.toContain("失败");
+    expect(JSON.stringify(intent)).not.toContain("继续执行");
+  });
+
+  it("classifies ordinary input as neutral", () => {
+    expect(classifyUserInputIntent("帮我检查当前项目状态")).toEqual({
+      negativeFeedback: false,
+      keepGoing: false,
+      categories: [],
+      inputLength: 10,
+    });
   });
 });
