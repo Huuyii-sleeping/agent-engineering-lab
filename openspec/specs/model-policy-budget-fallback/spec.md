@@ -23,11 +23,13 @@
 - **THEN** 系统切换到该角色 fallback 模型并重试一次
 
 ### Requirement: System SHALL record model selection and estimated cost
-系统 SHALL 为每次模型请求记录命中的模型、角色、延迟、token 统计与 estimated cost。
 
-#### Scenario: 请求完成后写入模型指标
-- **WHEN** 一次模型请求完成
-- **THEN** observability 中包含所选模型、角色、延迟和 estimated cost
+系统 SHALL 为每次模型请求记录命中的模型、角色、延迟、token 统计与 estimated cost，并使用运行时配置控制 completion token 上限。
+
+#### Scenario: 请求使用配置化 completion token
+
+- **WHEN** QueryModel 发起模型请求
+- **THEN** request 中的 `max_tokens` 使用 `modelMaxCompletionTokens`
 
 ### Requirement: QueryModel boundary corrections MUST preserve model policy budget and fallback semantics
 QueryModel 边界校正 MUST 保持 model selection、budget deny、fallback once 与 usage finalize 的现有语义不变。
@@ -43,3 +45,4 @@ QueryModel 边界校正 MUST 保持 model selection、budget deny、fallback onc
 #### Scenario: fallback 无可用响应
 - **WHEN** fallback request 失败或返回空响应
 - **THEN** 系统继续进入既有 recovery selector，而不是把 fallback 空响应当成成功结果
+

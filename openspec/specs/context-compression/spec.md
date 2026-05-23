@@ -15,15 +15,19 @@
 - **THEN** 系统压缩历史消息并返回压缩结果摘要
 
 ### Requirement: Agent MUST support automatic compaction with snapshot
-系统 MUST 在估算 token 超过阈值时自动压缩，并在压缩前落盘完整会话快照。
+
+系统 MUST 在估算 token 超过有效压缩阈值时自动压缩，并在压缩前后落盘脱敏 snapshot。
 
 #### Scenario: 自动压缩触发
-- **WHEN** 估算 token 超过 50000
+
+- **WHEN** 估算 token 超过有效压缩阈值
 - **THEN** 下一次模型请求前自动执行压缩
+- **AND** 压缩摘要不原样复灌全部旧消息
 
 #### Scenario: 快照落盘
-- **WHEN** 执行任意压缩（手动或自动）
-- **THEN** 在 `.transcripts/transcript_<ts>.jsonl` 写入压缩前会话内容
+
+- **WHEN** 执行任意压缩
+- **THEN** 在 `.transcripts/` 写入压缩前后脱敏会话快照和生命周期元数据
 
 ### Requirement: Transcript snapshots MUST be redacted and lifecycle-managed
 `compact` 产生的 transcript snapshot MUST 在写入 `.transcripts/` 前执行高敏感内容脱敏，并接入统一生命周期治理，而不是将压缩前后上下文永久原样落盘。
