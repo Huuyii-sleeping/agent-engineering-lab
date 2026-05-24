@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildInkTuiPreviewSnapshot } from "../../../src/terminal-ui/ink-tui.js";
 
 describe("terminal-ui/ink-tui", () => {
-  it("builds a preview snapshot with title shortcuts guide and palette summary", () => {
+  it("builds a Claude-style REPL preview snapshot", () => {
     const snapshot = buildInkTuiPreviewSnapshot({
       model: "gpt-test",
       workflow: "draw",
@@ -12,14 +12,23 @@ describe("terminal-ui/ink-tui", () => {
       bridgeEndpoint: "/events",
     });
 
-    expect(snapshot.title).toBe("Agent CLI Ink/TSX Preview");
-    expect(snapshot.badges).toContain("tsx");
-    expect(snapshot.badges).toContain("ink");
-    expect(snapshot.status).toContainEqual({ label: "model", value: "gpt-test" });
-    expect(snapshot.status).toContainEqual({ label: "workflow", value: "draw" });
-    expect(snapshot.shortcuts).toContain("q / Esc / Ctrl+C exit");
-    expect(snapshot.shortcuts).toContain("Ctrl+K palette");
-    expect(snapshot.guide).toContain("palette   /palette or Ctrl+K launches local actions");
-    expect(snapshot.paletteSummary).toContain("feature disclosure");
+    expect(snapshot.byline).toContain("Agent CLI");
+    expect(snapshot.messages).toContainEqual({
+      role: "user",
+      marker: ">",
+      text: "Build with TSX terminal components",
+      tone: "user",
+    });
+    expect(snapshot.messages.some((message) => message.text.includes("REPL-style surface"))).toBe(
+      true,
+    );
+    expect(snapshot.slashPane.title).toBe("/palette feature");
+    expect(snapshot.slashPane.items).toContain("/features  feature disclosure");
+    expect(snapshot.statusLine).toContain("model gpt-test");
+    expect(snapshot.statusLine).toContain("workflow draw");
+    expect(snapshot.prompt.mode).toBe("agent");
+    expect(snapshot.prompt.placeholder).toContain("Type a message");
+    expect(snapshot.footerHints).toContain("Ctrl+K palette");
+    expect(snapshot.footerHints).toContain("q exit");
   });
 });
