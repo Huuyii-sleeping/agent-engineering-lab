@@ -12,6 +12,7 @@ type CliMode =
   | "print"
   | "mcp-server"
   | "tui"
+  | "tui-ink"
   | "architecture"
   | "data-usage"
   | "dump-system-prompt";
@@ -27,6 +28,7 @@ export type CliInvocation =
   | { mode: "print"; prompt: string }
   | { mode: "mcp-server" }
   | { mode: "tui" }
+  | { mode: "tui-ink" }
   | { mode: "architecture" }
   | { mode: "data-usage" }
   | { mode: "dump-system-prompt" };
@@ -61,6 +63,7 @@ export function renderCliHelp(): string {
     "  agent-cli daemon stop           Stop the running daemon host",
     "  agent-cli mcp-server            Start stdio MCP server",
     "  agent-cli tui                   Start terminal TUI console",
+    "  agent-cli tui-ink               Start Ink/TSX terminal UI preview",
     "  agent-cli architecture          Print the local architecture overview",
     "  agent-cli data-usage            Print the local user data governance overview",
     "  agent-cli dump-system-prompt    Print the current stable system prompt",
@@ -101,6 +104,9 @@ export function parseCliInvocation(argv: string[]): CliInvocation {
   if (normalized === "--tui" || normalized === "tui") {
     return { mode: "tui" };
   }
+  if (normalized === "--tui-ink" || normalized === "tui-ink") {
+    return { mode: "tui-ink" };
+  }
   if (normalized === "--architecture" || normalized === "architecture") {
     return { mode: "architecture" };
   }
@@ -125,7 +131,10 @@ async function readStdin(input: NodeJS.ReadableStream): Promise<string> {
   return Buffer.concat(chunks).toString("utf8").trim();
 }
 
-async function resolvePrintPrompt(invocation: Extract<CliInvocation, { mode: "print" }>, io: CliIo): Promise<string> {
+async function resolvePrintPrompt(
+  invocation: Extract<CliInvocation, { mode: "print" }>,
+  io: CliIo,
+): Promise<string> {
   if (invocation.prompt) {
     return invocation.prompt;
   }
@@ -175,6 +184,11 @@ export async function dispatchCli(
   if (invocation.mode === "tui") {
     const { runTerminalTui } = await import("./tui.js");
     await runTerminalTui({ input: io.stdin, output: io.stdout });
+    return 0;
+  }
+  if (invocation.mode === "tui-ink") {
+    const { runInkTerminalTui } = await import("./tui-ink.js");
+    await runInkTerminalTui({ input: io.stdin, output: io.stdout, errorOutput: io.stderr });
     return 0;
   }
   if (invocation.mode === "architecture") {

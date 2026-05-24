@@ -13,6 +13,8 @@
     "dev:mcp-server": "tsx src/main.ts mcp-server",
     "start:tui": "node dist/main.js tui",
     "dev:tui": "tsx src/main.ts tui",
+    "start:tui-ink": "node dist/main.js tui-ink",
+    "dev:tui-ink": "tsx src/main.ts tui-ink",
     "test:regression": "tsx test/smoke/prd13-regression.ts",
     "test:security": "tsx test/smoke/prd07-security-smoke.ts",
     "test:memory": "tsx test/smoke/prd08-memory-smoke.ts",
@@ -26,21 +28,25 @@
     "test:model-policy": "tsx test/smoke/prd11-model-policy-smoke.ts",
     "test:service-api": "tsx test/smoke/prd12-service-api-smoke.ts",
     "test:daemon": "tsx test/smoke/prd20-daemon-control-smoke.ts",
+    "test:ink-tui": "tsx test/smoke/prd80-ink-tui-smoke.ts",
     "replay:trace": "tsx src/observability/replay-cli.ts",
     "test": "vitest run --no-cache",
-    "lint": "eslint . --ext .ts",
-    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"*.json\" \"*.md\"",
-    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" \"*.json\" \"*.md\"",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write \"src/**/*.{ts,tsx}\" \"test/**/*.ts\" \"*.json\" \"*.md\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"test/**/*.ts\" \"*.json\" \"*.md\"",
     "release:check": "pnpm lint && pnpm test && pnpm build && pnpm test:security && pnpm test:memory && pnpm test:observability && pnpm test:delivery && pnpm test:model-policy && pnpm test:service-api && pnpm test:daemon && pnpm test:regression && pnpm test:hooks && pnpm test:recovery && pnpm test:scheduler && pnpm test:worktree-closeout && pnpm test:mcp"
   },
   "dependencies": {
     "dotenv": "^17.2.0",
+    "ink": "^7.0.3",
     "openai": "^6.0.0",
-    "pino": "^9.3.2"
+    "pino": "^9.3.2",
+    "react": "^19.2.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.8.0",
     "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
     "eslint": "^9.8.0",
     "globals": "^15.9.0",
     "prettier": "^3.3.3",

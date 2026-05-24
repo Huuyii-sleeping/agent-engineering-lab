@@ -18,6 +18,8 @@ describe("entrypoints/cli-dispatcher", () => {
     expect(parseCliInvocation(["daemon", "stop"])).toEqual({ mode: "daemon-stop" });
     expect(parseCliInvocation(["--mcp-server"])).toEqual({ mode: "mcp-server" });
     expect(parseCliInvocation(["tui"])).toEqual({ mode: "tui" });
+    expect(parseCliInvocation(["tui-ink"])).toEqual({ mode: "tui-ink" });
+    expect(parseCliInvocation(["--tui-ink"])).toEqual({ mode: "tui-ink" });
     expect(parseCliInvocation(["architecture"])).toEqual({ mode: "architecture" });
     expect(parseCliInvocation(["data-usage"])).toEqual({ mode: "data-usage" });
     expect(parseCliInvocation(["dump-system-prompt"])).toEqual({ mode: "dump-system-prompt" });
@@ -40,6 +42,7 @@ describe("entrypoints/cli-dispatcher", () => {
     expect(help).toContain("Check daemon host status");
     expect(help).toContain("Stop the running daemon host");
     expect(help).toContain("Start terminal TUI console");
+    expect(help).toContain("Start Ink/TSX terminal UI preview");
     expect(help).toContain("Print the local architecture overview");
     expect(help).toContain("Print the local user data governance overview");
     expect(help).toContain("Print the current stable system prompt");
