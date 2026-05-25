@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import { CliPaletteStore } from "../cli/palette.js";
 import type { CliWorkflowMode } from "../cli/workflow.js";
@@ -96,6 +96,20 @@ export function reduceInkTuiInput(state: InkTuiInputState, event: InkTuiInputEve
     return { ...state, draft: `${draft}${event.input}` };
   }
   return state;
+}
+
+/** Append scheduled messages without changing React state when there is nothing to render. */
+export function mergeInkTuiScheduledMessages(
+  state: InkTuiInputState,
+  messages: InkTuiPreviewMessage[],
+): InkTuiInputState {
+  if (messages.length === 0) {
+    return state;
+  }
+  return {
+    ...state,
+    messages: [...state.messages, ...messages],
+  };
 }
 
 /** Build the preview view model without depending on a live TTY. */
@@ -205,31 +219,30 @@ export function InkTuiPreviewApp({
     shouldExit: false,
   });
   const [busy, setBusy] = useState(false);
-  const [scheduledBusy, setScheduledBusy] = useState(false);
+  const scheduledBusyRef = useRef(false);
 
   useEffect(() => {
     if (!interactive || !onScheduledTick || !schedulerIntervalMs) {
       return;
     }
     const interval = setInterval(() => {
-      if (scheduledBusy) {
+      if (scheduledBusyRef.current) {
         return;
       }
-      setScheduledBusy(true);
+      scheduledBusyRef.current = true;
       void onScheduledTick()
         .then((messages) => {
           if (messages.length === 0) {
             return;
           }
-          setState((current) => ({
-            ...current,
-            messages: [...current.messages, ...messages],
-          }));
+          setState((current) => mergeInkTuiScheduledMessages(current, messages));
         })
-        .finally(() => setScheduledBusy(false));
+        .finally(() => {
+          scheduledBusyRef.current = false;
+        });
     }, schedulerIntervalMs);
     return () => clearInterval(interval);
-  }, [interactive, onScheduledTick, scheduledBusy, schedulerIntervalMs]);
+  }, [interactive, onScheduledTick, schedulerIntervalMs]);
 
   useInput(
     (input, key) => {

@@ -316,6 +316,7 @@ export async function runInkTerminalTui(input: InkTerminalTuiIo): Promise<void> 
       stdin: input.input as ReadStream,
       stdout: input.output as WriteStream,
       exitOnCtrlC: false,
+      alternateScreen: true,
     };
     if (input.errorOutput) {
       renderOptions.stderr = input.errorOutput as WriteStream;

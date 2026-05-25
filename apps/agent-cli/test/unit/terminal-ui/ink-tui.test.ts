@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildInkTuiPreviewSnapshot,
+  mergeInkTuiScheduledMessages,
   reduceInkTuiInput,
 } from "../../../src/terminal-ui/ink-tui.js";
 
@@ -55,5 +56,17 @@ describe("terminal-ui/ink-tui", () => {
     });
     expect(submitted.messages.some((message) => message.text.includes("submitted"))).toBe(true);
     expect(exit.shouldExit).toBe(true);
+  });
+
+  it("does not change state for empty scheduled ticks", () => {
+    const state = { draft: "", messages: [], shouldExit: false };
+    const unchanged = mergeInkTuiScheduledMessages(state, []);
+    const changed = mergeInkTuiScheduledMessages(state, [
+      { role: "system", marker: "$", text: "scheduled", tone: "accent" },
+    ]);
+
+    expect(unchanged).toBe(state);
+    expect(changed).not.toBe(state);
+    expect(changed.messages).toHaveLength(1);
   });
 });
