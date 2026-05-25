@@ -3,6 +3,7 @@ import * as process from "node:process";
 
 type CliMode =
   | "interactive"
+  | "classic"
   | "help"
   | "version"
   | "server"
@@ -19,6 +20,7 @@ type CliMode =
 
 export type CliInvocation =
   | { mode: "interactive" }
+  | { mode: "classic" }
   | { mode: "help" }
   | { mode: "version" }
   | { mode: "server" }
@@ -54,7 +56,8 @@ export function renderCliHelp(): string {
     "agent-cli",
     "",
     "Usage:",
-    "  agent-cli                       Start interactive CLI",
+    "  agent-cli                       Start Ink/TSX interactive CLI",
+    "  agent-cli classic               Start classic readline CLI",
     "  agent-cli --print <prompt>      Run one headless query",
     "  agent-cli print <prompt>        Run one headless query",
     "  agent-cli server                Start HTTP service",
@@ -63,7 +66,7 @@ export function renderCliHelp(): string {
     "  agent-cli daemon stop           Stop the running daemon host",
     "  agent-cli mcp-server            Start stdio MCP server",
     "  agent-cli tui                   Start terminal TUI console",
-    "  agent-cli tui-ink               Start Ink/TSX terminal UI preview",
+    "  agent-cli tui-ink               Start Ink/TSX terminal CLI",
     "  agent-cli architecture          Print the local architecture overview",
     "  agent-cli data-usage            Print the local user data governance overview",
     "  agent-cli dump-system-prompt    Print the current stable system prompt",
@@ -82,6 +85,9 @@ export function parseCliInvocation(argv: string[]): CliInvocation {
   const normalized = mode.trim();
   if (normalized === "--help" || normalized === "-h" || normalized === "help") {
     return { mode: "help" };
+  }
+  if (normalized === "--classic" || normalized === "classic" || normalized === "readline") {
+    return { mode: "classic" };
   }
   if (normalized === "--version" || normalized === "-v" || normalized === "version") {
     return { mode: "version" };
@@ -216,8 +222,14 @@ export async function dispatchCli(
     return runHeadlessQuery({ prompt, output: io.stdout, errorOutput: io.stderr });
   }
 
-  const { runCli } = await import("../cli/index.js");
-  await runCli();
+  if (invocation.mode === "classic") {
+    const { runCli } = await import("../cli/index.js");
+    await runCli();
+    return 0;
+  }
+
+  const { runInkTerminalTui } = await import("./tui-ink.js");
+  await runInkTerminalTui({ input: io.stdin, output: io.stdout, errorOutput: io.stderr });
   return 0;
 }
 

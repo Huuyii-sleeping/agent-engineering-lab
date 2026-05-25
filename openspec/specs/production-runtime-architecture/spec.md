@@ -688,36 +688,59 @@ CLI / TUI 本地交互面 MUST 提供功能披露治理入口，列出公开本�
 - **THEN** `/features` MUST 明确报告这些能力为 `none registered` 或 `reserved_gap`
 - **AND** 不得把未实现的隐藏能力伪装成可用功能
 
-### Requirement: TUI MAY expose an Ink TSX preview surface without replacing the existing TUI
+### Requirement: TUI MAY expose an Ink TSX surface alongside the existing TUI
 
-TUI 交互面 MAY 提供独立 Ink/TSX 预览入口，用组件化方式渲染终端 UI；该入口 MUST 与现有 `agent-cli tui` 并存，且不得改变现有 TUI 默认行为。
+TUI 交互面 MAY 提供独立 Ink/TSX 入口，用组件化方式渲染终端 UI；该入口 MUST 与现有 `agent-cli tui` 并存，且不得改变 `agent-cli tui` 的既有行为。
 
-#### Scenario: User starts the Ink TSX preview
+#### Scenario: User starts the Ink TSX surface
 - **WHEN** 用户执行 `agent-cli tui-ink` 或 `agent-cli --tui-ink`
-- **THEN** 系统启动 Ink/TSX 终端 UI 预览入口
-- **AND** 该入口展示组件化 dashboard、runtime 状态、快捷键与 palette 摘要
+- **THEN** 系统启动 Ink/TSX 终端 CLI surface
+- **AND** 该入口展示组件化 REPL 消息流、runtime 状态、快捷键与 palette 摘要
 
 #### Scenario: Existing TUI remains unchanged
 - **WHEN** 用户执行 `agent-cli tui`
 - **THEN** 系统仍启动原有 TUI 实现
 - **AND** 不要求用户迁移到实验性 Ink/TSX 入口
 
-#### Scenario: Preview can exit in automated smoke checks
-- **WHEN** Ink/TSX 预览入口从 stdin 收到 `q`、`Esc` 或 `Ctrl+C`
-- **THEN** 系统退出预览入口
+#### Scenario: Surface can exit in automated smoke checks
+- **WHEN** Ink/TSX 入口从 stdin 收到 `q`、`Esc` 或 `Ctrl+C`
+- **THEN** 系统退出 Ink/TSX CLI surface
 - **AND** 命令返回成功状态码
 
-### Requirement: Ink TSX preview MUST render as a REPL-style terminal surface
+### Requirement: Ink TSX surface MUST render as a REPL-style terminal surface
 
-Ink/TSX 预览入口 MUST 采用 REPL-style terminal surface，包含消息流、状态行、底部 prompt 输入区和 footer hints，而不是以多个 dashboard card 作为主体布局。
+Ink/TSX 入口 MUST 采用 REPL-style terminal surface，包含消息流、状态行、底部 prompt 输入区和 footer hints，而不是以多个 dashboard card 作为主体布局。
 
-#### Scenario: User starts the polished Ink TSX preview
+#### Scenario: User starts the polished Ink TSX surface
 - **WHEN** 用户执行 `agent-cli tui-ink`
 - **THEN** 系统展示 REPL-style 消息流
 - **AND** 底部展示 prompt 输入区、statusline 和 footer hints
 
-#### Scenario: Preview keeps existing command behavior
+#### Scenario: Surface keeps existing command behavior
 - **WHEN** 用户按下 `q`、`Esc` 或 `Ctrl+C`
 - **THEN** `tui-ink` 仍正常退出
 - **AND** 不影响 `agent-cli tui` 的既有行为
 
+### Requirement: Ink TSX CLI surface MUST provide an editable prompt loop and reuse existing CLI runtime
+
+Ink/TSX CLI surface MUST 提供最小可编辑 prompt 输入闭环，使用户输入能显示在 prompt bar，并能通过 Enter 进入现有 CLI/TUI 命令与聊天处理链路。
+
+#### Scenario: User starts the default interactive CLI
+- **WHEN** 用户执行无参数 `agent-cli`
+- **THEN** 系统启动 Ink/TSX CLI surface
+- **AND** 旧 readline CLI 可通过 `agent-cli classic` 显式启动
+
+#### Scenario: User types into the Ink CLI prompt
+- **WHEN** 用户在 `agent-cli tui-ink` 中输入普通字符
+- **THEN** 输入内容显示在底部 prompt bar
+- **AND** 不会因为内容中包含非退出字符而丢失
+
+#### Scenario: User submits local CLI input
+- **WHEN** 用户输入内容并按下 Enter
+- **THEN** 当前输入被追加为 user message
+- **AND** prompt buffer 被清空
+- **AND** 系统通过现有 `handleTerminalTuiCommand` 处理 slash command、shell shortcut 或普通 chat
+
+#### Scenario: User exits from an empty prompt
+- **WHEN** prompt buffer 为空且用户按下 `q`、`Esc` 或 `Ctrl+C`
+- **THEN** `tui-ink` 正常退出

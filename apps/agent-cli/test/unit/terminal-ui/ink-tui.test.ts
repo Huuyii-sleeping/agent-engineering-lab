@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildInkTuiPreviewSnapshot } from "../../../src/terminal-ui/ink-tui.js";
+import {
+  buildInkTuiPreviewSnapshot,
+  reduceInkTuiInput,
+} from "../../../src/terminal-ui/ink-tui.js";
 
 describe("terminal-ui/ink-tui", () => {
-  it("builds a Claude-style REPL preview snapshot", () => {
+  it("builds a Claude-style REPL CLI snapshot", () => {
     const snapshot = buildInkTuiPreviewSnapshot({
       model: "gpt-test",
       workflow: "draw",
@@ -30,5 +33,27 @@ describe("terminal-ui/ink-tui", () => {
     expect(snapshot.prompt.placeholder).toContain("Type a message");
     expect(snapshot.footerHints).toContain("Ctrl+K palette");
     expect(snapshot.footerHints).toContain("q exit");
+  });
+
+  it("reduces editable prompt input locally", () => {
+    const initial = { draft: "", messages: [], shouldExit: false };
+    const typed = reduceInkTuiInput(initial, { input: "你" });
+    const typedMore = reduceInkTuiInput(typed, { input: "是谁" });
+    const removed = reduceInkTuiInput(typedMore, { key: { backspace: true } });
+    const submitted = reduceInkTuiInput(typedMore, { key: { return: true } });
+    const exit = reduceInkTuiInput(initial, { input: "q" });
+
+    expect(typed.draft).toBe("你");
+    expect(typedMore.draft).toBe("你是谁");
+    expect(removed.draft).toBe("你是");
+    expect(submitted.draft).toBe("");
+    expect(submitted.messages).toContainEqual({
+      role: "user",
+      marker: ">",
+      text: "你是谁",
+      tone: "user",
+    });
+    expect(submitted.messages.some((message) => message.text.includes("submitted"))).toBe(true);
+    expect(exit.shouldExit).toBe(true);
   });
 });

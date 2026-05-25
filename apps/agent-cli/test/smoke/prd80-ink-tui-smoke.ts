@@ -26,13 +26,15 @@ const result = await new Promise<{ exitCode: number | null; stdout: string; stde
       resolve({ exitCode, stdout: stdout.join(""), stderr: stderr.join("") });
     });
 
-    child.stdin.end("q");
+    child.stdin.end("/help\nq");
   },
 );
 
 assert.equal(result.exitCode, 0, result.stderr);
-assert.match(result.stdout, /Agent CLI - Ink\/TSX REPL preview/);
+assert.match(result.stdout, /Agent CLI - Ink\/TSX interactive CLI/);
 assert.match(result.stdout, /Build with TSX terminal components/);
+assert.match(result.stdout, /\/help/);
+assert.match(result.stdout, /Commands/);
 assert.match(result.stdout, /Type a message/);
 assert.match(result.stdout, /Ctrl\+K palette/);
 assert.match(result.stdout, /feature disclosure/);

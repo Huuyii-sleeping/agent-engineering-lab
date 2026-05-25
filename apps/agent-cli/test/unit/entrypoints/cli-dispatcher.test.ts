@@ -9,6 +9,7 @@ describe("entrypoints/cli-dispatcher", () => {
   it("parses fast flags without needing runtime state", () => {
     expect(parseCliInvocation(["--help"])).toEqual({ mode: "help" });
     expect(parseCliInvocation(["-v"])).toEqual({ mode: "version" });
+    expect(parseCliInvocation(["classic"])).toEqual({ mode: "classic" });
   });
 
   it("parses service and MCP entrypoints", () => {
@@ -35,14 +36,15 @@ describe("entrypoints/cli-dispatcher", () => {
 
   it("renders the available entrypoint modes", () => {
     const help = renderCliHelp();
-    expect(help).toContain("Start interactive CLI");
+    expect(help).toContain("Start Ink/TSX interactive CLI");
+    expect(help).toContain("Start classic readline CLI");
     expect(help).toContain("Run one headless query");
     expect(help).toContain("Start stdio MCP server");
     expect(help).toContain("Start background daemon host");
     expect(help).toContain("Check daemon host status");
     expect(help).toContain("Stop the running daemon host");
     expect(help).toContain("Start terminal TUI console");
-    expect(help).toContain("Start Ink/TSX terminal UI preview");
+    expect(help).toContain("Start Ink/TSX terminal CLI");
     expect(help).toContain("Print the local architecture overview");
     expect(help).toContain("Print the local user data governance overview");
     expect(help).toContain("Print the current stable system prompt");

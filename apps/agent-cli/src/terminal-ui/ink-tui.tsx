@@ -1,4 +1,5 @@
-import { Box, Text } from "ink";
+import { useState } from "react";
+import { Box, Text, useInput } from "ink";
 import { CliPaletteStore } from "../cli/palette.js";
 import type { CliWorkflowMode } from "../cli/workflow.js";
 
@@ -10,6 +11,7 @@ export type InkTuiPreviewSnapshotInput = {
   sessionCount?: number;
   toolCount?: number;
   bridgeEndpoint?: string;
+  extraMessages?: InkTuiPreviewMessage[];
 };
 
 export type InkTuiPreviewMessage = {
@@ -35,6 +37,66 @@ export type InkTuiPreviewSnapshot = {
   };
   footerHints: string[];
 };
+
+export type InkTuiInputState = {
+  draft: string;
+  messages: InkTuiPreviewMessage[];
+  shouldExit: boolean;
+};
+
+export type InkTuiInputEvent = {
+  input?: string;
+  key?: {
+    backspace?: boolean;
+    delete?: boolean;
+    return?: boolean;
+    escape?: boolean;
+    ctrl?: boolean;
+    name?: string;
+  };
+};
+
+export function createPreviewResponse(input: string): InkTuiPreviewMessage {
+  return {
+    role: "assistant",
+    marker: "*",
+    text: `submitted "${input}" to the CLI runtime; no output was produced.`,
+    tone: "assistant",
+  };
+}
+
+/** Reduce prompt keystrokes without depending on Ink runtime state. */
+export function reduceInkTuiInput(state: InkTuiInputState, event: InkTuiInputEvent): InkTuiInputState {
+  const draft = state.draft;
+  if (event.key?.return) {
+    const line = draft.trim();
+    if (!line) {
+      return { ...state, draft: "" };
+    }
+    return {
+      draft: "",
+      shouldExit: false,
+      messages: [
+        ...state.messages,
+        { role: "user", marker: ">", text: draft, tone: "user" },
+        createPreviewResponse(draft),
+      ],
+    };
+  }
+  if (event.key?.backspace || event.key?.delete || event.key?.name === "backspace") {
+    return { ...state, draft: Array.from(draft).slice(0, -1).join("") };
+  }
+  if (event.key?.escape || (event.key?.ctrl && event.input === "c")) {
+    return draft.length === 0 ? { ...state, shouldExit: true } : state;
+  }
+  if (event.input === "q" && draft.length === 0) {
+    return { ...state, shouldExit: true };
+  }
+  if (event.input && !event.key?.ctrl) {
+    return { ...state, draft: `${draft}${event.input}` };
+  }
+  return state;
+}
 
 /** Build the preview view model without depending on a live TTY. */
 export function buildInkTuiPreviewSnapshot(
@@ -68,12 +130,12 @@ export function buildInkTuiPreviewSnapshot(
   );
 
   return {
-    byline: "Agent CLI - Ink/TSX REPL preview",
+    byline: "Agent CLI - Ink/TSX interactive CLI",
     messages: [
       {
         role: "system",
         marker: "!",
-        text: "tui-ink is a component preview; the existing agent-cli tui remains unchanged.",
+        text: "Ink/TSX surface is the default interactive CLI. Use agent-cli classic for readline fallback.",
         tone: "muted",
       },
       {
@@ -94,6 +156,7 @@ export function buildInkTuiPreviewSnapshot(
         text: `palette search returned ${palette.total} feature disclosure candidate(s).`,
         tone: "accent",
       },
+      ...(input.extraMessages ?? []),
     ],
     slashPane: {
       title: "/palette feature",
@@ -105,7 +168,7 @@ export function buildInkTuiPreviewSnapshot(
       ].filter((item, index, items) => items.indexOf(item) === index),
     },
     statusLine: [
-      `model ${input.model ?? "local-preview"}`,
+      `model ${input.model ?? "local-runtime"}`,
       `workflow ${workflow}`,
       `session ${activeSessionId ? `${activeSessionId}/${sessionCount}` : "none"}`,
       `tools ${input.toolCount ?? 0}`,
@@ -120,8 +183,64 @@ export function buildInkTuiPreviewSnapshot(
   };
 }
 
-/** Render the componentized terminal UI preview with Ink. */
-export function InkTuiPreviewApp({ snapshot }: { snapshot: InkTuiPreviewSnapshot }) {
+/** Render the componentized terminal CLI surface with Ink. */
+export function InkTuiPreviewApp({
+  snapshot,
+  onSubmitInput,
+  onExit,
+  interactive = true,
+}: {
+  snapshot: InkTuiPreviewSnapshot;
+  onSubmitInput?: (line: string) => Promise<InkTuiPreviewMessage[]>;
+  onExit?: () => void;
+  interactive?: boolean;
+}) {
+  const [state, setState] = useState<InkTuiInputState>({
+    draft: snapshot.prompt.value,
+    messages: snapshot.messages,
+    shouldExit: false,
+  });
+  const [busy, setBusy] = useState(false);
+
+  useInput(
+    (input, key) => {
+      if (busy) {
+        return;
+      }
+      const next = reduceInkTuiInput(state, { input, key });
+      if (next.shouldExit) {
+        onExit?.();
+        return;
+      }
+      if (key.return && state.draft.trim()) {
+        const submitted = state.draft;
+        const userMessage: InkTuiPreviewMessage = {
+          role: "user",
+          marker: ">",
+          text: submitted,
+          tone: "user",
+        };
+        setState({ draft: "", shouldExit: false, messages: [...state.messages, userMessage] });
+        if (onSubmitInput) {
+          setBusy(true);
+          void onSubmitInput(submitted)
+            .then((messages) => {
+              setState((current) => ({
+                ...current,
+                messages: [...current.messages, ...messages],
+              }));
+            })
+            .finally(() => setBusy(false));
+        } else {
+          setState(next);
+        }
+        return;
+      }
+      setState(next);
+    },
+    { isActive: interactive },
+  );
+
   return (
     <Box flexDirection="column" paddingX={1} width="100%">
       <Box marginBottom={1}>
@@ -129,9 +248,10 @@ export function InkTuiPreviewApp({ snapshot }: { snapshot: InkTuiPreviewSnapshot
       </Box>
 
       <Box flexDirection="column" marginBottom={1}>
-        {snapshot.messages.map((message, index) => (
+        {state.messages.map((message, index) => (
           <MessageRow key={`${message.role}-${index}`} message={message} />
         ))}
+        {busy ? <MessageRow message={{ role: "system", marker: ".", text: "running...", tone: "muted" }} /> : null}
       </Box>
 
       <SlashPane title={snapshot.slashPane.title} items={snapshot.slashPane.items} />
@@ -155,7 +275,9 @@ export function InkTuiPreviewApp({ snapshot }: { snapshot: InkTuiPreviewSnapshot
       >
         <Text color="cyan">{snapshot.prompt.mode.padEnd(7)}</Text>
         <Box flexGrow={1}>
-          <Text dimColor>{snapshot.prompt.value || snapshot.prompt.placeholder}</Text>
+          <Text dimColor={state.draft.length === 0}>
+            {state.draft || snapshot.prompt.placeholder}
+          </Text>
         </Box>
       </Box>
 
