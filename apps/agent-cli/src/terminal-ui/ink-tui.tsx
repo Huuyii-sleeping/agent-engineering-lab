@@ -56,6 +56,32 @@ export type InkTuiInputEvent = {
   };
 };
 
+export type InkPromptInputRender = {
+  draft: string;
+  placeholder: string;
+  cursor: string;
+  empty: boolean;
+};
+
+/** Build a stable prompt input render model so cursor placement is testable outside a TTY. */
+export function renderInkPromptInput({
+  draft,
+  placeholder,
+  showCursor,
+}: {
+  draft: string;
+  placeholder: string;
+  showCursor: boolean;
+}): InkPromptInputRender {
+  const empty = draft.length === 0;
+  return {
+    draft,
+    placeholder: empty ? placeholder : "",
+    cursor: showCursor ? "█" : "",
+    empty,
+  };
+}
+
 export function createPreviewResponse(input: string): InkTuiPreviewMessage {
   return {
     role: "assistant",
@@ -283,6 +309,12 @@ export function InkTuiPreviewApp({
     { isActive: interactive },
   );
 
+  const promptInput = renderInkPromptInput({
+    draft: state.draft,
+    placeholder: snapshot.prompt.placeholder,
+    showCursor: interactive,
+  });
+
   return (
     <Box flexDirection="column" paddingX={1} width="100%">
       <Box marginBottom={1}>
@@ -317,9 +349,21 @@ export function InkTuiPreviewApp({
       >
         <Text color="cyan">{snapshot.prompt.mode.padEnd(7)}</Text>
         <Box flexGrow={1}>
-          <Text dimColor={state.draft.length === 0}>
-            {state.draft || snapshot.prompt.placeholder}
-          </Text>
+          {promptInput.empty ? (
+            <Text>
+              <Text color="cyan" inverse>
+                {promptInput.cursor}
+              </Text>
+              <Text dimColor>{promptInput.placeholder}</Text>
+            </Text>
+          ) : (
+            <Text>
+              {promptInput.draft}
+              <Text color="cyan" inverse>
+                {promptInput.cursor}
+              </Text>
+            </Text>
+          )}
         </Box>
       </Box>
 

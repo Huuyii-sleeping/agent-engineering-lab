@@ -3,6 +3,7 @@ import {
   buildInkTuiPreviewSnapshot,
   mergeInkTuiScheduledMessages,
   reduceInkTuiInput,
+  renderInkPromptInput,
 } from "../../../src/terminal-ui/ink-tui.js";
 
 describe("terminal-ui/ink-tui", () => {
@@ -68,5 +69,31 @@ describe("terminal-ui/ink-tui", () => {
     expect(unchanged).toBe(state);
     expect(changed).not.toBe(state);
     expect(changed.messages).toHaveLength(1);
+  });
+
+  it("renders a visible cursor before placeholder for empty interactive prompt", () => {
+    const rendered = renderInkPromptInput({
+      draft: "",
+      placeholder: "Type a message",
+      showCursor: true,
+    });
+
+    expect(rendered.cursor).toBe("█");
+    expect(rendered.placeholder).toBe("Type a message");
+    expect(rendered.draft).toBe("");
+    expect(rendered.empty).toBe(true);
+  });
+
+  it("renders a visible cursor after typed draft", () => {
+    const rendered = renderInkPromptInput({
+      draft: "hello",
+      placeholder: "Type a message",
+      showCursor: true,
+    });
+
+    expect(rendered.draft).toBe("hello");
+    expect(rendered.cursor).toBe("█");
+    expect(rendered.placeholder).toBe("");
+    expect(rendered.empty).toBe(false);
   });
 });
