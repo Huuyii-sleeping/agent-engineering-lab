@@ -62,6 +62,40 @@ describe("terminal-ui/ink-tui", () => {
     expect(exit.shouldExit).toBe(true);
   });
 
+  it("moves prompt cursor with left right home and end keys", () => {
+    const state = { draft: "hello", cursorIndex: 5, messages: [], shouldExit: false };
+
+    const left = reduceInkTuiInput(state, { key: { leftArrow: true } });
+    const home = reduceInkTuiInput(left, { key: { home: true } });
+    const right = reduceInkTuiInput(home, { key: { rightArrow: true } });
+    const end = reduceInkTuiInput(right, { key: { end: true } });
+
+    expect(left.cursorIndex).toBe(4);
+    expect(home.cursorIndex).toBe(0);
+    expect(right.cursorIndex).toBe(1);
+    expect(end.cursorIndex).toBe(5);
+    expect(end.draft).toBe("hello");
+  });
+
+  it("inserts typed text at the prompt cursor position", () => {
+    const state = { draft: "helo", cursorIndex: 3, messages: [], shouldExit: false };
+    const next = reduceInkTuiInput(state, { input: "l" });
+
+    expect(next.draft).toBe("hello");
+    expect(next.cursorIndex).toBe(4);
+  });
+
+  it("deletes around the prompt cursor position", () => {
+    const state = { draft: "hello", cursorIndex: 2, messages: [], shouldExit: false };
+    const backspace = reduceInkTuiInput(state, { key: { backspace: true } });
+    const deleted = reduceInkTuiInput(state, { key: { delete: true } });
+
+    expect(backspace.draft).toBe("hllo");
+    expect(backspace.cursorIndex).toBe(1);
+    expect(deleted.draft).toBe("helo");
+    expect(deleted.cursorIndex).toBe(2);
+  });
+
   it("does not change state for empty scheduled ticks", () => {
     const state = { draft: "", messages: [], shouldExit: false };
     const unchanged = mergeInkTuiScheduledMessages(state, []);
@@ -102,6 +136,19 @@ describe("terminal-ui/ink-tui", () => {
     expect(rendered.empty).toBe(false);
   });
 
+  it("renders the visible cursor in the middle of draft text", () => {
+    const rendered = renderInkPromptInput({
+      draft: "hello",
+      cursorIndex: 2,
+      placeholder: "Type a message",
+      showCursor: true,
+    });
+
+    expect(rendered.visibleText).toBe("he▌llo");
+    expect(rendered.beforeCursor).toBe("he");
+    expect(rendered.afterCursor).toBe("llo");
+  });
+
   it("includes the cursor in the rendered Ink prompt output", () => {
     const snapshot = buildInkTuiPreviewSnapshot();
     const output = renderToString(
@@ -115,5 +162,20 @@ describe("terminal-ui/ink-tui", () => {
     );
 
     expect(output).toContain("hello▌");
+  });
+
+  it("includes a middle cursor in the rendered Ink prompt output", () => {
+    const snapshot = buildInkTuiPreviewSnapshot();
+    const output = renderToString(
+      React.createElement(InkTuiPreviewApp, {
+        snapshot: {
+          ...snapshot,
+          prompt: { ...snapshot.prompt, value: "hello", cursorIndex: 2 },
+        },
+        interactive: true,
+      }),
+    );
+
+    expect(output).toContain("he▌llo");
   });
 });

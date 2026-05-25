@@ -34,12 +34,14 @@ export type InkTuiPreviewSnapshot = {
     mode: string;
     placeholder: string;
     value: string;
+    cursorIndex?: number;
   };
   footerHints: string[];
 };
 
 export type InkTuiInputState = {
   draft: string;
+  cursorIndex?: number;
   messages: InkTuiPreviewMessage[];
   shouldExit: boolean;
 };
@@ -52,6 +54,10 @@ export type InkTuiInputEvent = {
     return?: boolean;
     escape?: boolean;
     ctrl?: boolean;
+    leftArrow?: boolean;
+    rightArrow?: boolean;
+    home?: boolean;
+    end?: boolean;
     name?: string;
   };
 };
@@ -61,26 +67,57 @@ export type InkPromptInputRender = {
   placeholder: string;
   cursor: string;
   visibleText: string;
+  beforeCursor: string;
+  afterCursor: string;
+  cursorIndex: number;
   empty: boolean;
 };
+
+function splitDraft(draft: string): string[] {
+  return Array.from(draft);
+}
+
+function clampCursorIndex(draft: string, cursorIndex: number | undefined): number {
+  const max = splitDraft(draft).length;
+  if (typeof cursorIndex !== "number" || !Number.isFinite(cursorIndex)) {
+    return max;
+  }
+  return Math.max(0, Math.min(Math.trunc(cursorIndex), max));
+}
+
+function replaceDraft(chars: string[], cursorIndex: number): Pick<InkTuiInputState, "draft" | "cursorIndex"> {
+  return {
+    draft: chars.join(""),
+    cursorIndex,
+  };
+}
 
 /** Build a stable prompt input render model so cursor placement is testable outside a TTY. */
 export function renderInkPromptInput({
   draft,
+  cursorIndex,
   placeholder,
   showCursor,
 }: {
   draft: string;
+  cursorIndex?: number;
   placeholder: string;
   showCursor: boolean;
 }): InkPromptInputRender {
   const empty = draft.length === 0;
+  const chars = splitDraft(draft);
+  const resolvedCursorIndex = clampCursorIndex(draft, cursorIndex);
   const cursor = showCursor ? "▌" : "";
+  const beforeCursor = chars.slice(0, resolvedCursorIndex).join("");
+  const afterCursor = chars.slice(resolvedCursorIndex).join("");
   return {
     draft,
     placeholder: empty ? placeholder : "",
     cursor,
-    visibleText: empty ? `${cursor}${placeholder}` : `${draft}${cursor}`,
+    visibleText: empty ? `${cursor}${placeholder}` : `${beforeCursor}${cursor}${afterCursor}`,
+    beforeCursor,
+    afterCursor,
+    cursorIndex: resolvedCursorIndex,
     empty,
   };
 }
@@ -97,13 +134,16 @@ export function createPreviewResponse(input: string): InkTuiPreviewMessage {
 /** Reduce prompt keystrokes without depending on Ink runtime state. */
 export function reduceInkTuiInput(state: InkTuiInputState, event: InkTuiInputEvent): InkTuiInputState {
   const draft = state.draft;
+  const chars = splitDraft(draft);
+  const cursorIndex = clampCursorIndex(draft, state.cursorIndex);
   if (event.key?.return) {
     const line = draft.trim();
     if (!line) {
-      return { ...state, draft: "" };
+      return { ...state, draft: "", cursorIndex: 0 };
     }
     return {
       draft: "",
+      cursorIndex: 0,
       shouldExit: false,
       messages: [
         ...state.messages,
@@ -112,8 +152,31 @@ export function reduceInkTuiInput(state: InkTuiInputState, event: InkTuiInputEve
       ],
     };
   }
-  if (event.key?.backspace || event.key?.delete || event.key?.name === "backspace") {
-    return { ...state, draft: Array.from(draft).slice(0, -1).join("") };
+  if (event.key?.leftArrow) {
+    return { ...state, cursorIndex: Math.max(0, cursorIndex - 1) };
+  }
+  if (event.key?.rightArrow) {
+    return { ...state, cursorIndex: Math.min(chars.length, cursorIndex + 1) };
+  }
+  if (event.key?.home) {
+    return { ...state, cursorIndex: 0 };
+  }
+  if (event.key?.end) {
+    return { ...state, cursorIndex: chars.length };
+  }
+  if (event.key?.backspace || event.key?.name === "backspace") {
+    if (cursorIndex === 0) {
+      return { ...state, cursorIndex };
+    }
+    const nextChars = [...chars.slice(0, cursorIndex - 1), ...chars.slice(cursorIndex)];
+    return { ...state, ...replaceDraft(nextChars, cursorIndex - 1) };
+  }
+  if (event.key?.delete) {
+    if (cursorIndex >= chars.length) {
+      return { ...state, cursorIndex };
+    }
+    const nextChars = [...chars.slice(0, cursorIndex), ...chars.slice(cursorIndex + 1)];
+    return { ...state, ...replaceDraft(nextChars, cursorIndex) };
   }
   if (event.key?.escape || (event.key?.ctrl && event.input === "c")) {
     return draft.length === 0 ? { ...state, shouldExit: true } : state;
@@ -122,7 +185,9 @@ export function reduceInkTuiInput(state: InkTuiInputState, event: InkTuiInputEve
     return { ...state, shouldExit: true };
   }
   if (event.input && !event.key?.ctrl) {
-    return { ...state, draft: `${draft}${event.input}` };
+    const inputChars = splitDraft(event.input);
+    const nextChars = [...chars.slice(0, cursorIndex), ...inputChars, ...chars.slice(cursorIndex)];
+    return { ...state, ...replaceDraft(nextChars, cursorIndex + inputChars.length) };
   }
   return state;
 }
@@ -244,6 +309,7 @@ export function InkTuiPreviewApp({
 }) {
   const [state, setState] = useState<InkTuiInputState>({
     draft: snapshot.prompt.value,
+    cursorIndex: clampCursorIndex(snapshot.prompt.value, snapshot.prompt.cursorIndex),
     messages: snapshot.messages,
     shouldExit: false,
   });
@@ -291,7 +357,7 @@ export function InkTuiPreviewApp({
           text: submitted,
           tone: "user",
         };
-        setState({ draft: "", shouldExit: false, messages: [...state.messages, userMessage] });
+        setState({ draft: "", cursorIndex: 0, shouldExit: false, messages: [...state.messages, userMessage] });
         if (onSubmitInput) {
           setBusy(true);
           void onSubmitInput(submitted)
@@ -314,6 +380,7 @@ export function InkTuiPreviewApp({
 
   const promptInput = renderInkPromptInput({
     draft: state.draft,
+    cursorIndex: state.cursorIndex,
     placeholder: snapshot.prompt.placeholder,
     showCursor: interactive,
   });
@@ -361,10 +428,11 @@ export function InkTuiPreviewApp({
             </Text>
           ) : (
             <Text>
-              {promptInput.draft}
+              {promptInput.beforeCursor}
               <Text color="cyan">
                 {promptInput.cursor}
               </Text>
+              {promptInput.afterCursor}
             </Text>
           )}
         </Box>
