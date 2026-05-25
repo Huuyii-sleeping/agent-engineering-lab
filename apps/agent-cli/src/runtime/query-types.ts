@@ -37,6 +37,7 @@ export type QueryEngineRunInput = {
   tools?: ChatCompletionTool[];
   messages: ChatCompletionMessageParam[];
   runtimeState: AgentRuntimeState;
+  includeScheduledNotifications?: boolean;
 };
 
 export type QueryEngineLike = {

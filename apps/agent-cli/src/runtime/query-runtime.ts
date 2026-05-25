@@ -23,6 +23,7 @@ type RunUserQueryOptions = {
   history: ChatCompletionMessageParam[];
   runtimeState: AgentRuntimeState;
   prompt: string;
+  includeScheduledNotifications?: boolean;
 };
 
 export async function runUserQuery(opts: RunUserQueryOptions): Promise<QueryRuntimeResult> {
@@ -43,6 +44,7 @@ export async function runUserQuery(opts: RunUserQueryOptions): Promise<QueryRunt
     opts.app.queryEngine.run({
       messages: opts.history,
       runtimeState: opts.runtimeState,
+      includeScheduledNotifications: opts.includeScheduledNotifications,
     }),
   );
 

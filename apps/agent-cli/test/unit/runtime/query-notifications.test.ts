@@ -48,6 +48,24 @@ describe("runtime/query-notifications", () => {
     });
 
     expect(messages).toEqual(["seed"]);
+    expect(notificationService.drainPendingQueryNotifications).toHaveBeenCalledWith({
+      includeScheduled: undefined,
+    });
+  });
+
+  it("can leave scheduled notifications queued for the proactive scheduler loop", async () => {
+    const observabilityService = createObservabilityService();
+
+    await collectDynamicSystemMessages({
+      traceId: "trace_test",
+      notificationService,
+      observabilityService,
+      includeScheduled: false,
+    });
+
+    expect(notificationService.drainPendingQueryNotifications).toHaveBeenCalledWith({
+      includeScheduled: false,
+    });
   });
 
   it("collects notification reminders and records auditable notification events", async () => {

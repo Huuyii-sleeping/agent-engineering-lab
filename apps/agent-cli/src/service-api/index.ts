@@ -17,6 +17,7 @@ export type AgentServiceDeps = AgentAppRuntimeDeps;
 type ChatRequest = {
   session_id?: string;
   message?: string;
+  include_scheduled_notifications?: boolean;
 };
 
 export type AgentServiceEvent = AgentHostEvent;
@@ -251,6 +252,7 @@ export class AgentService {
         history: session.history,
         runtimeState: session.runtimeState,
         prompt,
+        includeScheduledNotifications: input.include_scheduled_notifications === true,
       });
       if (!result.ok) {
         this.host.emitEvent("chat.failed", {

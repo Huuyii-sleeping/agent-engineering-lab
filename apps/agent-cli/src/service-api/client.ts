@@ -200,7 +200,11 @@ export class AgentServiceClient {
     }
   }
 
-  async chat(input: { session_id?: string; message?: string }): Promise<Record<string, unknown>> {
+  async chat(input: {
+    session_id?: string;
+    message?: string;
+    include_scheduled_notifications?: boolean;
+  }): Promise<Record<string, unknown>> {
     try {
       const response = await this.requestJson("POST", "/chat", input, { allowErrorStatus: true });
       const session = getObject(response.session);

@@ -95,6 +95,7 @@ describe("entrypoints/tui-ink", () => {
     expect(service.chat).toHaveBeenCalledWith({
       session_id: "s01",
       message: "Handle any scheduled prompts that are due now.",
+      include_scheduled_notifications: true,
     });
     expect(messages.map((message) => message.text).join("\n")).toContain("scheduled due");
     expect(messages.map((message) => message.text).join("\n")).toContain("daemon 喝水提醒到了");

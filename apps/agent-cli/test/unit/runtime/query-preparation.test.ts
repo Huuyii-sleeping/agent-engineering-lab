@@ -168,6 +168,34 @@ describe("runtime/query-preparation", () => {
     });
     expect(memoryService.autoExtract).toHaveBeenCalledWith("user", "hello");
     expect(runtimeState.lastMemoryInput).toBe("hello");
+    expect(collectDynamicSystemMessages).toHaveBeenCalledWith(
+      expect.objectContaining({ includeScheduled: false }),
+    );
+  });
+
+  it("only includes scheduled notifications when the caller marks the round as scheduled", async () => {
+    const runtimeState = createRuntimeState();
+    const hookService = createHookService();
+    const memoryService = createMemoryService();
+    const notificationService = createNotificationService();
+    const observabilityService = createObservabilityService();
+    const runtimeCoordinationService = createRuntimeCoordinationService();
+
+    await prepareQueryRound({
+      runtimeState,
+      traceId: "trace_test",
+      latestUserInput: "Handle any scheduled prompts that are due now.",
+      includeScheduledNotifications: true,
+      hookService,
+      memoryService,
+      notificationService,
+      observabilityService,
+      runtimeCoordinationService,
+    });
+
+    expect(collectDynamicSystemMessages).toHaveBeenCalledWith(
+      expect.objectContaining({ includeScheduled: true }),
+    );
   });
 
   it("skips automatic memory extraction and injection when privacy mode is manual-only", async () => {

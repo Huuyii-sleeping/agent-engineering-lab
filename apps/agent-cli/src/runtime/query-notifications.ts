@@ -20,13 +20,16 @@ type CollectDynamicSystemMessagesOptions = {
   notificationService: NotificationServiceLike;
   observabilityService: ObservabilityServiceLike;
   seedMessages?: string[];
+  includeScheduled?: boolean;
 };
 
 export async function collectDynamicSystemMessages(
   opts: CollectDynamicSystemMessagesOptions,
 ): Promise<string[]> {
   const dynamicSystemMessages = [...(opts.seedMessages ?? [])];
-  const notifications = await opts.notificationService.drainPendingQueryNotifications();
+  const notifications = await opts.notificationService.drainPendingQueryNotifications({
+    includeScheduled: opts.includeScheduled,
+  });
 
   const scheduledNotifications = notifications.scheduled;
   if (scheduledNotifications.length > 0) {

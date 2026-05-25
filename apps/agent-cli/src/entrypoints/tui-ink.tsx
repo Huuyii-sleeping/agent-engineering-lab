@@ -201,6 +201,7 @@ export function createInkRuntimeController(input: {
         const result = await service.chat({
           session_id: sessionId,
           message: "Handle any scheduled prompts that are due now.",
+          include_scheduled_notifications: true,
         });
         const session = result.session as { id?: unknown } | undefined;
         if (typeof session?.id === "string") {

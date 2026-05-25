@@ -229,6 +229,7 @@ export async function runScheduledRound(opts: ScheduledRoundOptions): Promise<bo
         queryEngine.run({
           messages: opts.history,
           runtimeState: opts.runtimeState,
+          includeScheduledNotifications: true,
         }),
       );
       const lastMessage = opts.history[opts.history.length - 1];

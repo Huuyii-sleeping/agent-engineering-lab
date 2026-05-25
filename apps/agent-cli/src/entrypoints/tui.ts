@@ -62,7 +62,11 @@ export type TerminalTuiServiceLike = {
   createSession(): { id: string } | Promise<{ id: string }>;
   listSessions(): Array<{ id: string; busy: boolean; history: unknown[] }>;
   toolsMetadata(): Promise<Array<Record<string, string>>>;
-  chat(input: { session_id?: string; message?: string }): Promise<Record<string, unknown>>;
+  chat(input: {
+    session_id?: string;
+    message?: string;
+    include_scheduled_notifications?: boolean;
+  }): Promise<Record<string, unknown>>;
   runToolByName?(name: string, argumentsJson: string): Promise<string>;
 };
 

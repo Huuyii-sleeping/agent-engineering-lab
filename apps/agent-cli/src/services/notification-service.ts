@@ -16,14 +16,22 @@ export type PendingQueryNotifications = {
   team: TeamNotification[];
 };
 
+export type DrainPendingQueryNotificationsOptions = {
+  includeScheduled?: boolean;
+};
+
 export type NotificationServiceLike = {
-  drainPendingQueryNotifications(): Promise<PendingQueryNotifications>;
+  drainPendingQueryNotifications(
+    opts?: DrainPendingQueryNotificationsOptions,
+  ): Promise<PendingQueryNotifications>;
 };
 
 export class NotificationService implements NotificationServiceLike {
-  async drainPendingQueryNotifications(): Promise<PendingQueryNotifications> {
+  async drainPendingQueryNotifications(
+    opts: DrainPendingQueryNotificationsOptions = {},
+  ): Promise<PendingQueryNotifications> {
     return {
-      scheduled: await drainScheduledNotifications(),
+      scheduled: opts.includeScheduled === false ? [] : await drainScheduledNotifications(),
       subagent: drainSubagentNotifications(),
       background: drainBackgroundNotifications(),
       team: drainTeamNotifications(),

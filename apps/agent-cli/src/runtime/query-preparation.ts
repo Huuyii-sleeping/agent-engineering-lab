@@ -24,6 +24,7 @@ type PrepareQueryRoundOptions = {
   runtimeState: AgentRuntimeState;
   traceId: string;
   latestUserInput: string;
+  includeScheduledNotifications?: boolean;
   hookService: HookServiceLike;
   memoryService: MemoryServiceLike;
   notificationService: NotificationServiceLike;
@@ -80,6 +81,7 @@ export async function prepareQueryRound(
     notificationService: opts.notificationService,
     observabilityService: opts.observabilityService,
     seedMessages: sessionStartHooks.messages,
+    includeScheduled: opts.includeScheduledNotifications === true,
   });
 
   let memoryContext: string | null = null;

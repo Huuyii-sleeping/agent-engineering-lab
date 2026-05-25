@@ -56,6 +56,7 @@ export class QueryEngine {
           runtimeState: opts.runtimeState,
           traceId,
           latestUserInput: round.latestUserInput,
+          includeScheduledNotifications: opts.includeScheduledNotifications,
           hookService: this.runtimeServices.hookService,
           memoryService: this.runtimeServices.memoryService,
           notificationService: this.runtimeServices.notificationService,
