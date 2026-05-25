@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import React from "react";
+import { renderToString } from "ink";
 import {
+  InkTuiPreviewApp,
   buildInkTuiPreviewSnapshot,
   mergeInkTuiScheduledMessages,
   reduceInkTuiInput,
@@ -78,7 +81,8 @@ describe("terminal-ui/ink-tui", () => {
       showCursor: true,
     });
 
-    expect(rendered.cursor).toBe("█");
+    expect(rendered.cursor).toBe("▌");
+    expect(rendered.visibleText).toBe("▌Type a message");
     expect(rendered.placeholder).toBe("Type a message");
     expect(rendered.draft).toBe("");
     expect(rendered.empty).toBe(true);
@@ -92,8 +96,24 @@ describe("terminal-ui/ink-tui", () => {
     });
 
     expect(rendered.draft).toBe("hello");
-    expect(rendered.cursor).toBe("█");
+    expect(rendered.cursor).toBe("▌");
+    expect(rendered.visibleText).toBe("hello▌");
     expect(rendered.placeholder).toBe("");
     expect(rendered.empty).toBe(false);
+  });
+
+  it("includes the cursor in the rendered Ink prompt output", () => {
+    const snapshot = buildInkTuiPreviewSnapshot();
+    const output = renderToString(
+      React.createElement(InkTuiPreviewApp, {
+        snapshot: {
+          ...snapshot,
+          prompt: { ...snapshot.prompt, value: "hello" },
+        },
+        interactive: true,
+      }),
+    );
+
+    expect(output).toContain("hello▌");
   });
 });

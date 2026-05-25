@@ -60,6 +60,7 @@ export type InkPromptInputRender = {
   draft: string;
   placeholder: string;
   cursor: string;
+  visibleText: string;
   empty: boolean;
 };
 
@@ -74,10 +75,12 @@ export function renderInkPromptInput({
   showCursor: boolean;
 }): InkPromptInputRender {
   const empty = draft.length === 0;
+  const cursor = showCursor ? "▌" : "";
   return {
     draft,
     placeholder: empty ? placeholder : "",
-    cursor: showCursor ? "█" : "",
+    cursor,
+    visibleText: empty ? `${cursor}${placeholder}` : `${draft}${cursor}`,
     empty,
   };
 }
@@ -351,7 +354,7 @@ export function InkTuiPreviewApp({
         <Box flexGrow={1}>
           {promptInput.empty ? (
             <Text>
-              <Text color="cyan" inverse>
+              <Text color="cyan">
                 {promptInput.cursor}
               </Text>
               <Text dimColor>{promptInput.placeholder}</Text>
@@ -359,7 +362,7 @@ export function InkTuiPreviewApp({
           ) : (
             <Text>
               {promptInput.draft}
-              <Text color="cyan" inverse>
+              <Text color="cyan">
                 {promptInput.cursor}
               </Text>
             </Text>

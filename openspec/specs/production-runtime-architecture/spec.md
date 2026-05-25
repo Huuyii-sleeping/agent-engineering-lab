@@ -806,7 +806,7 @@ Scheduled prompt notifications MUST NOT be drained by ordinary user query rounds
 
 ### Requirement: Ink TSX CLI prompt MUST show an input cursor
 
-Ink/TSX CLI surface MUST render a visible prompt cursor while running in interactive mode. The cursor MUST be visible when the draft is empty and when the user has typed text.
+Ink/TSX CLI surface MUST render a visible prompt cursor while running in interactive mode. The cursor MUST be visible when the draft is empty and when the user has typed text. The cursor MUST be part of the final visible prompt text, not only an internal render flag.
 
 #### Scenario: Empty prompt remains visibly focused
 
@@ -814,6 +814,7 @@ Ink/TSX CLI surface MUST render a visible prompt cursor while running in interac
 - **AND** prompt draft is empty
 - **THEN** prompt input renders a visible cursor
 - **AND** placeholder text remains visible
+- **AND** the final visible prompt text includes the cursor before the placeholder
 
 #### Scenario: Typed prompt shows insertion point
 
@@ -821,4 +822,5 @@ Ink/TSX CLI surface MUST render a visible prompt cursor while running in interac
 - **AND** prompt draft contains text
 - **THEN** prompt input renders the draft
 - **AND** cursor appears at the draft insertion point
+- **AND** the final visible prompt text includes the cursor after the draft
 
