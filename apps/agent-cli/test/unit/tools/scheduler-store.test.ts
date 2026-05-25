@@ -53,6 +53,13 @@ describe("tools/scheduler-store", () => {
         durable: true,
         created_at: Date.parse("2026-05-10T05:58:30.805Z"),
         last_fired_at: Date.parse("2026-05-10T05:58:32.000Z"),
+        kind: "cron",
+        once_at: null,
+        status: "enabled",
+        next_run_at: null,
+        last_run_at: Date.parse("2026-05-10T05:58:32.000Z"),
+        last_error: null,
+        run_count: 1,
         enabled: true,
       },
     ]);
@@ -79,6 +86,35 @@ describe("tools/scheduler-store", () => {
         prompt: "follow up",
         recurring: true,
         firedAt: 123,
+      },
+    ]);
+  });
+
+  it("persists run history in stable JSON shape", async () => {
+    const { root, store } = await makeStore();
+    await store.saveHistory([
+      {
+        id: "sched_run_1",
+        scheduleId: "sch_1",
+        prompt: "follow up",
+        status: "fired",
+        startedAt: 123,
+        finishedAt: 124,
+        error: null,
+      },
+    ]);
+
+    const raw = await readFile(path.join(root, "history.json"), "utf8");
+    expect(raw).toContain('"scheduleId": "sch_1"');
+    expect(await store.loadHistory()).toEqual([
+      {
+        id: "sched_run_1",
+        scheduleId: "sch_1",
+        prompt: "follow up",
+        status: "fired",
+        startedAt: 123,
+        finishedAt: 124,
+        error: null,
       },
     ]);
   });

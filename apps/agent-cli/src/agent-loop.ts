@@ -18,5 +18,6 @@ export async function agentLoop(opts: QueryLoopOptions): Promise<void> {
     tools: opts.tools,
     messages: opts.messages,
     runtimeState: opts.runtimeState,
+    includeScheduledNotifications: opts.includeScheduledNotifications,
   });
 }

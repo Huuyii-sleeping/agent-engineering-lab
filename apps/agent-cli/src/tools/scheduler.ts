@@ -16,16 +16,24 @@ export const SCHEDULER_TOOLS: ChatCompletionTool[] = [
     function: {
       name: "schedule_create",
       description:
-        "Create a durable future prompt schedule. Supports 6-field cron (second minute hour day month weekday) and 5-field cron (minute hour day month weekday, defaults second=0). Example: every 3 seconds => */3 * * * * *.",
+        "Create a durable future prompt schedule. Use delay_ms or once_at for one-shot reminders; use 6-field cron (second minute hour day month weekday) or 5-field cron (minute hour day month weekday, defaults second=0) for cron schedules.",
       parameters: {
         type: "object",
         properties: {
           cron: { type: "string" },
+          once_at: {
+            type: "number",
+            description: "Absolute one-shot reminder time in Unix epoch milliseconds.",
+          },
+          delay_ms: {
+            type: "number",
+            description: "Relative one-shot reminder delay in milliseconds. Prefer this for requests like 'in 5 seconds'.",
+          },
           prompt: { type: "string" },
           recurring: { type: "boolean" },
           durable: { type: "boolean" },
         },
-        required: ["cron", "prompt"],
+        required: ["prompt"],
       },
     },
   },
@@ -56,12 +64,14 @@ export async function runScheduleCreate(
   prompt: unknown,
   recurring: unknown,
   durable: unknown,
+  onceAt?: unknown,
+  delayMs?: unknown,
 ): Promise<string> {
-  return toJson(await SCHEDULER.createSchedule(cron, prompt, recurring, durable));
+  return toJson(await SCHEDULER.createSchedule(cron, prompt, recurring, durable, { onceAt, delayMs }));
 }
 
 export async function runScheduleList(): Promise<string> {
-  return toJson({ ok: true, schedules: await SCHEDULER.listSchedules() });
+  return toJson({ ok: true, ...(await SCHEDULER.listScheduleState()) });
 }
 
 export async function runScheduleRemove(id: unknown): Promise<string> {

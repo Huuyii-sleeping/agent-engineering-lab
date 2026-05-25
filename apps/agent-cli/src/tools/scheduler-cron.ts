@@ -122,3 +122,18 @@ export function isCronValid(cron: string): boolean {
     expandToken(fields[5], 0, 6) !== null
   );
 }
+
+export function findNextCronRun(cron: string, after: Date, maxLookaheadMs = 7 * 24 * 60 * 60 * 1000): Date | null {
+  if (!isCronValid(cron)) {
+    return null;
+  }
+  const start = Math.floor(after.getTime() / 1000) * 1000 + 1000;
+  const end = after.getTime() + maxLookaheadMs;
+  for (let timestamp = start; timestamp <= end; timestamp += 1000) {
+    const candidate = new Date(timestamp);
+    if (cronMatches(cron, candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}

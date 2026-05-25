@@ -113,6 +113,7 @@ async function main(): Promise<void> {
       tools: [] as ChatCompletionTool[],
       messages,
       runtimeState: createRuntimeState(),
+      includeScheduledNotifications: true,
     });
 
     assert(seenRequests.length === 1, "agent loop should make one request");

@@ -138,7 +138,7 @@ const BASE_HANDLERS: Record<string, ToolHandler> = {
   task_list: async () => runTaskList(),
   task_get: async (args) => runTaskGet(args.task_id),
   schedule_create: async (args) =>
-    runScheduleCreate(args.cron, args.prompt, args.recurring, args.durable),
+    runScheduleCreate(args.cron, args.prompt, args.recurring, args.durable, args.once_at, args.delay_ms),
   schedule_list: async () => runScheduleList(),
   schedule_remove: async (args) => runScheduleRemove(args.id),
   estimate_tokens: async () => runEstimateTokens(getCompactRuntimeContext()),

@@ -31,6 +31,7 @@ export type QueryLoopOptions = {
   tools: ChatCompletionTool[];
   messages: ChatCompletionMessageParam[];
   runtimeState: AgentRuntimeState;
+  includeScheduledNotifications?: boolean;
 };
 
 export type QueryEngineRunInput = {
