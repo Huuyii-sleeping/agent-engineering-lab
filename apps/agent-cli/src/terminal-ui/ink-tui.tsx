@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import { CliPaletteStore } from "../cli/palette.js";
 import type { CliWorkflowMode } from "../cli/workflow.js";
@@ -187,13 +187,17 @@ export function buildInkTuiPreviewSnapshot(
 export function InkTuiPreviewApp({
   snapshot,
   onSubmitInput,
+  onScheduledTick,
   onExit,
   interactive = true,
+  schedulerIntervalMs,
 }: {
   snapshot: InkTuiPreviewSnapshot;
   onSubmitInput?: (line: string) => Promise<InkTuiPreviewMessage[]>;
+  onScheduledTick?: () => Promise<InkTuiPreviewMessage[]>;
   onExit?: () => void;
   interactive?: boolean;
+  schedulerIntervalMs?: number;
 }) {
   const [state, setState] = useState<InkTuiInputState>({
     draft: snapshot.prompt.value,
@@ -201,6 +205,31 @@ export function InkTuiPreviewApp({
     shouldExit: false,
   });
   const [busy, setBusy] = useState(false);
+  const [scheduledBusy, setScheduledBusy] = useState(false);
+
+  useEffect(() => {
+    if (!interactive || !onScheduledTick || !schedulerIntervalMs) {
+      return;
+    }
+    const interval = setInterval(() => {
+      if (scheduledBusy) {
+        return;
+      }
+      setScheduledBusy(true);
+      void onScheduledTick()
+        .then((messages) => {
+          if (messages.length === 0) {
+            return;
+          }
+          setState((current) => ({
+            ...current,
+            messages: [...current.messages, ...messages],
+          }));
+        })
+        .finally(() => setScheduledBusy(false));
+    }, schedulerIntervalMs);
+    return () => clearInterval(interval);
+  }, [interactive, onScheduledTick, scheduledBusy, schedulerIntervalMs]);
 
   useInput(
     (input, key) => {
