@@ -20,6 +20,8 @@ export type ScheduleRecord = {
   run_count: number;
   status: ScheduleStatus;
   enabled: boolean;
+  lease_owner: string | null;
+  lease_until: number | null;
 };
 
 export type ScheduleRunRecord = {
@@ -39,6 +41,36 @@ export type ScheduledPromptNotification = {
   recurring: boolean;
   firedAt: number;
 };
+
+export type ScheduleExplainResult =
+  | {
+      ok: true;
+      schedule: {
+        id: string;
+        status: ScheduleStatus;
+        kind: ScheduleKind;
+        enabled: boolean;
+        recurring: boolean;
+        cron: string;
+        once_at: number | null;
+      };
+      due: boolean;
+      next_run_at: number | null;
+      last_run_at: number | null;
+      run_count: number;
+      last_error: string | null;
+      lease: {
+        owner: string | null;
+        until: number | null;
+        active: boolean;
+      };
+      recent_history: ScheduleRunRecord[];
+      reason: string;
+    }
+  | {
+      ok: false;
+      error: { code: string; message: string };
+    };
 
 export type TickResult = {
   scannedAt: number;

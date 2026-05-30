@@ -28,6 +28,7 @@ import {
 } from "./task-board.js";
 import {
   runScheduleCreate,
+  runScheduleExplain,
   runScheduleList,
   runScheduleRemove,
   SCHEDULER_TOOLS,
@@ -79,6 +80,8 @@ const REPLAY_SAFE_TOOLS = new Set([
   "memory_doctor",
   "task_list",
   "task_get",
+  "schedule_list",
+  "schedule_explain",
   "estimate_tokens",
   "security_check",
   "security_list_approvals",
@@ -139,6 +142,7 @@ const BASE_HANDLERS: Record<string, ToolHandler> = {
   task_get: async (args) => runTaskGet(args.task_id),
   schedule_create: async (args) =>
     runScheduleCreate(args.cron, args.prompt, args.recurring, args.durable, args.once_at, args.delay_ms),
+  schedule_explain: async (args) => runScheduleExplain(args.id),
   schedule_list: async () => runScheduleList(),
   schedule_remove: async (args) => runScheduleRemove(args.id),
   estimate_tokens: async () => runEstimateTokens(getCompactRuntimeContext()),

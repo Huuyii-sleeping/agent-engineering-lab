@@ -135,6 +135,112 @@ describe("scheduler manager", () => {
     expect(state.history[0]?.prompt).toBe("history prompt");
   });
 
+  it("skips due schedules held by an active foreign lease", async () => {
+    const { root, scheduler } = await createManager();
+    const now = new Date("2026-05-11T09:05:12+08:00");
+    const created = await scheduler.createSchedule("*/1 * * * * *", "leased prompt", true, true);
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error("expected created schedule");
+    }
+    await writeFile(
+      path.join(root, ".schedule", "records.json"),
+      `${JSON.stringify(
+        [
+          {
+            ...created.schedule,
+            lease_owner: "other-owner",
+            lease_until: now.getTime() + 10_000,
+          },
+        ],
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const result = await scheduler.tick(now);
+
+    expect(result.fired).toHaveLength(0);
+    expect(await scheduler.peekNotificationCount()).toBe(0);
+    const listed = await scheduler.listSchedules();
+    expect(listed[0]?.run_count).toBe(0);
+  });
+
+  it("recovers stale schedule leases and clears the lease after firing", async () => {
+    const { root, scheduler } = await createManager();
+    const now = new Date("2026-05-11T09:05:12+08:00");
+    const created = await scheduler.createSchedule("*/1 * * * * *", "stale lease prompt", true, true);
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error("expected created schedule");
+    }
+    await writeFile(
+      path.join(root, ".schedule", "records.json"),
+      `${JSON.stringify(
+        [
+          {
+            ...created.schedule,
+            lease_owner: "dead-owner",
+            lease_until: now.getTime() - 1,
+          },
+        ],
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const result = await scheduler.tick(now);
+
+    expect(result.fired).toHaveLength(1);
+    const listed = await scheduler.listSchedules();
+    expect((listed[0] as { lease_owner?: unknown }).lease_owner).toBeNull();
+    expect((listed[0] as { lease_until?: unknown }).lease_until).toBeNull();
+    expect(listed[0]?.run_count).toBe(1);
+  });
+
+  it("explains active leases and missing schedules", async () => {
+    const { root, scheduler } = await createManager();
+    const now = new Date("2026-05-11T09:05:12+08:00");
+    const created = await scheduler.createSchedule("*/1 * * * * *", "explain leased prompt", true, true);
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error("expected created schedule");
+    }
+    await writeFile(
+      path.join(root, ".schedule", "records.json"),
+      `${JSON.stringify(
+        [
+          {
+            ...created.schedule,
+            lease_owner: "other-owner",
+            lease_until: now.getTime() + 10_000,
+          },
+        ],
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const explained = await scheduler.explainSchedule(created.schedule.id, now);
+    expect(explained.ok).toBe(true);
+    if (!explained.ok) {
+      throw new Error("expected schedule explain result");
+    }
+    expect(explained.lease.owner).toBe("other-owner");
+    expect(explained.lease.active).toBe(true);
+    expect(explained.reason).toContain("active lease");
+
+    const missing = await scheduler.explainSchedule("missing", now);
+    expect(missing.ok).toBe(false);
+    if (missing.ok) {
+      throw new Error("expected missing schedule error");
+    }
+    expect(missing.error.code).toBe("SCHEDULE_NOT_FOUND");
+  });
+
   it("restores durable schedules after restart", async () => {
     const { root, scheduler } = await createManager();
     await scheduler.createSchedule("0 45 7 * * *", "durable prompt", true, true);

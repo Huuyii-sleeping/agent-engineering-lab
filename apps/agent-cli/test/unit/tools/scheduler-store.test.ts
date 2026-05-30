@@ -61,6 +61,8 @@ describe("tools/scheduler-store", () => {
         last_error: null,
         run_count: 1,
         enabled: true,
+        lease_owner: null,
+        lease_until: null,
       },
     ]);
   });

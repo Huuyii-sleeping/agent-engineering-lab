@@ -84,6 +84,10 @@ export class SchedulerStore {
           : lastRunAt === null ? 0 : 1,
         status: enabled ? "enabled" : "disabled",
         enabled,
+        lease_owner: typeof item.lease_owner === "string" && item.lease_owner.trim()
+          ? item.lease_owner
+          : null,
+        lease_until: toTimestampMs(item.lease_until, null),
       };
     });
   }

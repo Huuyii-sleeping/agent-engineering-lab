@@ -1,6 +1,12 @@
 import { cronMatches, findNextCronRun, isCronValid, secondKey } from "./scheduler-cron.js";
 import { SchedulerStore } from "./scheduler-store.js";
-import type { ScheduleRecord, ScheduleRunRecord, ScheduledPromptNotification, TickResult } from "./scheduler-types.js";
+import type {
+  ScheduleExplainResult,
+  ScheduleRecord,
+  ScheduleRunRecord,
+  ScheduledPromptNotification,
+  TickResult,
+} from "./scheduler-types.js";
 import { toTimestampMs } from "./scheduler-types.js";
 
 function makeId(prefix: string): string {
@@ -39,10 +45,24 @@ function computeNextRunAt(record: ScheduleRecord, now: Date): number | null {
   return findNextCronRun(record.cron, now)?.getTime() ?? null;
 }
 
+function scheduleMatches(record: ScheduleRecord, now: Date, scannedAt: number): boolean {
+  return record.kind === "once"
+    ? record.once_at !== null && record.once_at <= scannedAt
+    : cronMatches(record.cron, now);
+}
+
+function leaseActiveForOtherOwner(record: ScheduleRecord, owner: string, nowMs: number): boolean {
+  return record.lease_owner !== null
+    && record.lease_owner !== owner
+    && record.lease_until !== null
+    && record.lease_until > nowMs;
+}
+
 export class SchedulerManager {
   private readonly store: SchedulerStore;
   private readonly lockOwner = makeId("scheduler_owner");
   private readonly lockTtlMs = 10_000;
+  private readonly scheduleLeaseTtlMs = 30_000;
 
   constructor(storeOrRootResolver: SchedulerStore | (() => string) = new SchedulerStore()) {
     this.store = storeOrRootResolver instanceof SchedulerStore
@@ -98,6 +118,8 @@ export class SchedulerManager {
       run_count: 0,
       status: "enabled",
       enabled: true,
+      lease_owner: null,
+      lease_until: null,
     };
     records.push(schedule);
     await this.store.saveRecords(records);
@@ -112,6 +134,51 @@ export class SchedulerManager {
     return {
       schedules: await this.store.loadRecords(),
       history: await this.store.loadHistory(),
+    };
+  }
+
+  async explainSchedule(idArg: unknown, nowArg?: Date): Promise<ScheduleExplainResult> {
+    const id = String(idArg ?? "").trim();
+    if (!id) {
+      return { ok: false, error: { code: "INVALID_ARGUMENT", message: "schedule_explain requires id" } };
+    }
+    const now = nowArg ?? nowProvider();
+    const scannedAt = now.getTime();
+    const records = await this.store.loadRecords();
+    const record = records.find((item) => item.id === id);
+    if (!record) {
+      return { ok: false, error: { code: "SCHEDULE_NOT_FOUND", message: `schedule ${id} not found` } };
+    }
+    const history = (await this.store.loadHistory())
+      .filter((item) => item.scheduleId === record.id)
+      .slice(-10);
+    const due = scheduleEnabled(record) && scheduleMatches(record, now, scannedAt);
+    const leaseActive = record.lease_owner !== null && record.lease_until !== null && record.lease_until > scannedAt;
+    const lastFiredSecond = record.last_fired_at ? secondKey(new Date(record.last_fired_at)) : null;
+    const alreadyFiredThisSecond = lastFiredSecond === secondKey(now);
+    return {
+      ok: true,
+      schedule: {
+        id: record.id,
+        status: record.status,
+        kind: record.kind,
+        enabled: record.enabled,
+        recurring: record.recurring,
+        cron: record.cron,
+        once_at: record.once_at,
+      },
+      due,
+      next_run_at: record.next_run_at,
+      last_run_at: record.last_run_at,
+      run_count: record.run_count,
+      last_error: record.last_error,
+      lease: {
+        owner: record.lease_owner,
+        until: record.lease_until,
+        active: leaseActive,
+      },
+      recent_history: history,
+      reason: this.explainReason(record, due, leaseActive, alreadyFiredThisSecond, scannedAt),
     };
   }
 
@@ -153,9 +220,7 @@ export class SchedulerManager {
         if (!scheduleEnabled(record)) {
           continue;
         }
-        const matched = record.kind === "once"
-          ? record.once_at !== null && record.once_at <= scannedAt
-          : cronMatches(record.cron, now);
+        const matched = scheduleMatches(record, now, scannedAt);
         if (!matched) {
           record.next_run_at = computeNextRunAt(record, now);
           continue;
@@ -164,8 +229,13 @@ export class SchedulerManager {
         if (lastFiredSecond === currentSecond) {
           continue;
         }
+        if (leaseActiveForOtherOwner(record, this.lockOwner, scannedAt)) {
+          continue;
+        }
 
         const firedAt = now.getTime();
+        record.lease_owner = this.lockOwner;
+        record.lease_until = firedAt + this.scheduleLeaseTtlMs;
         const notification: ScheduledPromptNotification = {
           id: makeId("sched_evt"),
           scheduleId: record.id,
@@ -193,6 +263,8 @@ export class SchedulerManager {
         } else {
           record.next_run_at = computeNextRunAt(record, now);
         }
+        record.lease_owner = null;
+        record.lease_until = null;
       }
 
       if (fired.length > 0) {
@@ -218,5 +290,36 @@ export class SchedulerManager {
 
   async peekNotificationCount(): Promise<number> {
     return (await this.store.loadNotifications()).length;
+  }
+
+  private explainReason(
+    record: ScheduleRecord,
+    due: boolean,
+    leaseActive: boolean,
+    alreadyFiredThisSecond: boolean,
+    nowMs: number,
+  ): string {
+    if (!scheduleEnabled(record)) {
+      return "schedule is disabled and will not fire";
+    }
+    if (leaseActive && record.lease_owner !== this.lockOwner) {
+      return `schedule is blocked by active lease owner ${record.lease_owner} until ${record.lease_until}`;
+    }
+    if (leaseActive) {
+      return `schedule is currently claimed by this scheduler owner until ${record.lease_until}`;
+    }
+    if (record.lease_owner !== null && record.lease_until !== null && record.lease_until <= nowMs) {
+      return `schedule has a stale lease from owner ${record.lease_owner} and can be recovered`;
+    }
+    if (alreadyFiredThisSecond) {
+      return "schedule already fired in this second and duplicate firing is suppressed";
+    }
+    if (due) {
+      return "schedule is due now and eligible to fire";
+    }
+    if (record.next_run_at !== null) {
+      return `schedule is not due yet; next_run_at is ${record.next_run_at}`;
+    }
+    return "schedule is enabled but has no next run time";
   }
 }

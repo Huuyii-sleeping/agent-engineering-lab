@@ -57,6 +57,19 @@ export const SCHEDULER_TOOLS: ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "schedule_explain",
+      description:
+        "Explain why a future prompt schedule is or is not firing, including due status, lease state, timestamps, last error, and recent history.",
+      parameters: {
+        type: "object",
+        properties: { id: { type: "string" } },
+        required: ["id"],
+      },
+    },
+  },
 ];
 
 export async function runScheduleCreate(
@@ -76,6 +89,10 @@ export async function runScheduleList(): Promise<string> {
 
 export async function runScheduleRemove(id: unknown): Promise<string> {
   return toJson(await SCHEDULER.removeSchedule(id));
+}
+
+export async function runScheduleExplain(id: unknown): Promise<string> {
+  return toJson(await SCHEDULER.explainSchedule(id));
 }
 
 export async function tickScheduler(nowArg?: Date): Promise<TickResult> {
