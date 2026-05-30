@@ -62,7 +62,7 @@ function buildClient(
 async function main(): Promise<void> {
   await withWorkspace("prd17-scheduler", async () => {
     const { agentLoop } = await import("../../src/agent-loop.js");
-    const { SchedulerManager } = await import("../../src/tools/scheduler.js");
+    const { SchedulerManager, setSchedulerNowProvider } = await import("../../src/tools/scheduler.js");
     const scheduler = new SchedulerManager(() => path.join(process.cwd(), ".schedule"));
 
     const created = await scheduler.createSchedule("5 1 10 * * *", "Follow up on the durable scheduled task.", true, true);
@@ -106,15 +106,20 @@ async function main(): Promise<void> {
     });
 
     const messages: ChatCompletionMessageParam[] = [{ role: "user", content: "run scheduled smoke" }];
-    await agentLoop({
-      client,
-      model: "smoke-model",
-      promptSource: PROMPT_SOURCE,
-      tools: [] as ChatCompletionTool[],
-      messages,
-      runtimeState: createRuntimeState(),
-      includeScheduledNotifications: true,
-    });
+    setSchedulerNowProvider(() => new Date("2026-05-11T10:01:05.600+08:00"));
+    try {
+      await agentLoop({
+        client,
+        model: "smoke-model",
+        promptSource: PROMPT_SOURCE,
+        tools: [] as ChatCompletionTool[],
+        messages,
+        runtimeState: createRuntimeState(),
+        includeScheduledNotifications: true,
+      });
+    } finally {
+      setSchedulerNowProvider(null);
+    }
 
     assert(seenRequests.length === 1, "agent loop should make one request");
     const firstRequest = seenRequests[0] ?? [];

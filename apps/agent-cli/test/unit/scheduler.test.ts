@@ -86,6 +86,24 @@ describe("scheduler manager", () => {
     expect(await scheduler.peekNotificationCount()).toBe(0);
   });
 
+  it("fires overdue cron schedules from next_run_at when tick runs late", async () => {
+    const { scheduler } = await createManager();
+    const createdAt = new Date("2026-05-11T09:05:10+08:00");
+    const created = await scheduler.createSchedule("*/5 * * * * *", "late prompt", true, true, { now: createdAt });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error("expected created schedule");
+    }
+    expect(created.schedule.next_run_at).toBe(new Date("2026-05-11T09:05:15+08:00").getTime());
+
+    const late = await scheduler.tick(new Date("2026-05-11T09:05:16+08:00"));
+
+    expect(late.fired).toHaveLength(1);
+    expect(late.fired[0]?.prompt).toBe("late prompt");
+    const listed = await scheduler.listSchedules();
+    expect(listed[0]?.next_run_at).toBe(new Date("2026-05-11T09:05:20+08:00").getTime());
+  });
+
   it("keeps 5-field cron semantics minute-based with seconds defaulting to zero", async () => {
     const { scheduler } = await createManager();
     await scheduler.createSchedule("5 9 * * *", "minute prompt", true, true);
@@ -239,6 +257,27 @@ describe("scheduler manager", () => {
       throw new Error("expected missing schedule error");
     }
     expect(missing.error.code).toBe("SCHEDULE_NOT_FOUND");
+  });
+
+  it("explains overdue cron schedules using next_run_at", async () => {
+    const { scheduler } = await createManager();
+    const createdAt = new Date("2026-05-11T09:05:10+08:00");
+    const created = await scheduler.createSchedule("*/5 * * * * *", "explain late prompt", true, true, {
+      now: createdAt,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error("expected created schedule");
+    }
+
+    const explained = await scheduler.explainSchedule(created.schedule.id, new Date("2026-05-11T09:05:16+08:00"));
+
+    expect(explained.ok).toBe(true);
+    if (!explained.ok) {
+      throw new Error("expected schedule explain result");
+    }
+    expect(explained.due).toBe(true);
+    expect(explained.reason).toContain("next_run_at");
   });
 
   it("restores durable schedules after restart", async () => {

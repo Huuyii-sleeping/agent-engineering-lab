@@ -45,10 +45,19 @@ function computeNextRunAt(record: ScheduleRecord, now: Date): number | null {
   return findNextCronRun(record.cron, now)?.getTime() ?? null;
 }
 
+function effectiveNextRunAt(record: ScheduleRecord, now: Date): number | null {
+  if (record.kind === "once") {
+    return record.once_at;
+  }
+  return record.next_run_at ?? computeNextRunAt(record, now);
+}
+
 function scheduleMatches(record: ScheduleRecord, now: Date, scannedAt: number): boolean {
-  return record.kind === "once"
-    ? record.once_at !== null && record.once_at <= scannedAt
-    : cronMatches(record.cron, now);
+  if (record.kind === "once") {
+    return record.once_at !== null && record.once_at <= scannedAt;
+  }
+  const nextRunAt = effectiveNextRunAt(record, now);
+  return (nextRunAt !== null && nextRunAt <= scannedAt) || cronMatches(record.cron, now);
 }
 
 function leaseActiveForOtherOwner(record: ScheduleRecord, owner: string, nowMs: number): boolean {
@@ -215,14 +224,23 @@ export class SchedulerManager {
       const notifications = await this.store.loadNotifications();
       const fired: ScheduledPromptNotification[] = [];
       const history = await this.store.loadHistory();
+      let recordsChanged = false;
 
       for (const record of records) {
         if (!scheduleEnabled(record)) {
           continue;
         }
+        if (record.kind === "cron" && record.next_run_at === null) {
+          record.next_run_at = computeNextRunAt(record, now);
+          recordsChanged = true;
+        }
         const matched = scheduleMatches(record, now, scannedAt);
         if (!matched) {
-          record.next_run_at = computeNextRunAt(record, now);
+          const nextRunAt = computeNextRunAt(record, now);
+          if (record.next_run_at !== nextRunAt) {
+            record.next_run_at = nextRunAt;
+            recordsChanged = true;
+          }
           continue;
         }
         const lastFiredSecond = record.last_fired_at ? secondKey(new Date(record.last_fired_at)) : null;
@@ -249,6 +267,7 @@ export class SchedulerManager {
         record.last_run_at = firedAt;
         record.last_error = null;
         record.run_count += 1;
+        recordsChanged = true;
         history.push({
           id: makeId("sched_run"),
           scheduleId: record.id,
@@ -267,8 +286,10 @@ export class SchedulerManager {
         record.lease_until = null;
       }
 
-      if (fired.length > 0) {
+      if (recordsChanged) {
         await this.store.saveRecords(records);
+      }
+      if (fired.length > 0) {
         await this.store.saveNotifications(notifications);
         await this.store.saveHistory(history);
       }
@@ -315,6 +336,9 @@ export class SchedulerManager {
       return "schedule already fired in this second and duplicate firing is suppressed";
     }
     if (due) {
+      if (record.kind === "cron" && record.next_run_at !== null && record.next_run_at <= nowMs) {
+        return `schedule is due because next_run_at ${record.next_run_at} has already arrived`;
+      }
       return "schedule is due now and eligible to fire";
     }
     if (record.next_run_at !== null) {
