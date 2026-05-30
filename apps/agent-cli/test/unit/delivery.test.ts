@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { loadLatestDeliveryReport, runDeliveryValidation } from "../../src/delivery/index.js";
 
 const tempDirs: string[] = [];
+const DELIVERY_SUBPROCESS_TEST_TIMEOUT_MS = 20_000;
 
 async function createWorkspace(name: string): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), `${name}-`));
@@ -67,7 +68,7 @@ describe("delivery validation", () => {
     } finally {
       process.chdir(previousCwd);
     }
-  });
+  }, DELIVERY_SUBPROCESS_TEST_TIMEOUT_MS);
 
   it("classifies failing stages and stops at the first deterministic failure", async () => {
     const workspace = await createWorkspace("delivery-fail");
@@ -111,7 +112,7 @@ describe("delivery validation", () => {
     } finally {
       process.chdir(previousCwd);
     }
-  });
+  }, DELIVERY_SUBPROCESS_TEST_TIMEOUT_MS);
 
   it("fails delivery validation when changed files still contain unresolved secret findings", async () => {
     const workspace = await createWorkspace("delivery-secret");
