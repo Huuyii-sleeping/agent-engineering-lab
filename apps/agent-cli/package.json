@@ -29,7 +29,7 @@
     "test:service-api": "tsx test/smoke/prd12-service-api-smoke.ts",
     "test:daemon": "tsx test/smoke/prd20-daemon-control-smoke.ts",
     "test:ink-tui": "tsx test/smoke/prd80-ink-tui-smoke.ts",
-    "test:harness": "vitest run test/unit/harness/harness.test.ts",
+    "test:harness": "vitest run test/unit/harness",
     "replay:trace": "tsx src/observability/replay-cli.ts",
     "test": "vitest run --no-cache",
     "lint": "eslint . --ext .ts,.tsx",
