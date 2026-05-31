@@ -606,8 +606,8 @@ export async function runHarnessAgentScenario(
   const steps: HarnessAgentScenarioStepResult[] = [];
   let failedStep: string | null = null;
   let stopReason: string | null = null;
-  let messages = (scenario.messages ?? []).map(cloneMessage);
-  let runtimeState = createHarnessRuntimeState(scenario.runtimeState);
+  const messages = (scenario.messages ?? []).map(cloneMessage);
+  const runtimeState = createHarnessRuntimeState(scenario.runtimeState);
   let client: DeterministicOpenAIClient | null = null;
   let toolService: HarnessToolService | null = null;
   let hookService: HarnessHookService | null = null;

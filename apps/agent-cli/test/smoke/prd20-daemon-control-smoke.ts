@@ -227,6 +227,7 @@ async function main(): Promise<void> {
       MODEL_ID: process.env.MODEL_ID || "smoke-daemon-model",
       OPENAI_API_KEY: process.env.OPENAI_API_KEY || "smoke-daemon-key",
       AGENT_HTTP_PORT: String(port),
+      AGENT_PRIVACY_REMOTE_ATTACH_MODE: "default",
     };
 
     daemon = spawn(process.execPath, [MAIN_PATH, "daemon"], {
@@ -312,11 +313,15 @@ async function main(): Promise<void> {
       "header replay should return the second shared session event",
     );
 
-    const attached = await runAgentCli(workspace, env, [], "exit\n");
+    const attached = await runAgentCli(workspace, env, ["classic"], "exit\n");
     assert(attached.exitCode === 0, `interactive CLI should exit cleanly\n${attached.stderr}`);
     assert(
       attached.stdout.includes("Connected to daemon"),
-      "interactive CLI should attach to daemon",
+      `interactive CLI should attach to daemon
+stdout:
+${attached.stdout}
+stderr:
+${attached.stderr}`,
     );
     assert(
       !attached.stdout.includes("daemon attach failed"),

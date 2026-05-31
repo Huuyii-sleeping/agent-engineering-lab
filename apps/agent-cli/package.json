@@ -35,7 +35,7 @@
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write \"src/**/*.{ts,tsx}\" \"test/**/*.ts\" \"*.json\" \"*.md\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"test/**/*.ts\" \"*.json\" \"*.md\"",
-    "release:check": "pnpm lint && pnpm test && pnpm build && pnpm test:security && pnpm test:memory && pnpm test:observability && pnpm test:delivery && pnpm test:model-policy && pnpm test:service-api && pnpm test:daemon && pnpm test:regression && pnpm test:hooks && pnpm test:recovery && pnpm test:scheduler && pnpm test:worktree-closeout && pnpm test:mcp"
+    "release:check": "tsx test/smoke/release-gate.ts"
   },
   "dependencies": {
     "dotenv": "^17.2.0",

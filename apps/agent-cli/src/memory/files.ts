@@ -18,7 +18,7 @@ function sanitizeSegment(value: string): string {
     .replace(/^[a-zA-Z]:/, "")
     .replace(/\\/g, "/")
     .replace(/[^a-zA-Z0-9._/-]+/g, "-")
-    .replace(/[\/]+/g, "_")
+    .replace(/[/]+/g, "_")
     .replace(/^-+|-+$/g, "");
   return normalized.slice(0, 80) || "workspace";
 }
@@ -259,7 +259,6 @@ export class DurableMemoryStore {
   }
 
   private toTopic(entry: MemoryEntry, rawContent: string): DurableMemoryTopic {
-    const paths = this.paths();
     const relativePath = `memories/${topicFilename(entry)}`;
     return {
       ...entry,
