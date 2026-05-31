@@ -32,6 +32,15 @@ export const SCHEDULER_TOOLS: ChatCompletionTool[] = [
           prompt: { type: "string" },
           recurring: { type: "boolean" },
           durable: { type: "boolean" },
+          misfire_policy: {
+            type: "string",
+            enum: ["fire_once", "skip", "catch_up"],
+            description: "Cron misfire behavior. Defaults to fire_once.",
+          },
+          max_catch_up: {
+            type: "number",
+            description: "Maximum catch-up notifications for catch_up misfires. Clamped to 1..20.",
+          },
         },
         required: ["prompt"],
       },
@@ -70,6 +79,57 @@ export const SCHEDULER_TOOLS: ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "schedule_pause",
+      description: "Pause a future prompt schedule so it will not fire until resumed.",
+      parameters: {
+        type: "object",
+        properties: { id: { type: "string" } },
+        required: ["id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "schedule_resume",
+      description: "Resume a paused future prompt schedule and recompute its next run time.",
+      parameters: {
+        type: "object",
+        properties: { id: { type: "string" } },
+        required: ["id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "schedule_update",
+      description: "Update prompt, cron, recurring, misfire policy, or catch-up limit for a schedule.",
+      parameters: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          prompt: { type: "string" },
+          cron: { type: "string" },
+          recurring: { type: "boolean" },
+          misfire_policy: { type: "string", enum: ["fire_once", "skip", "catch_up"] },
+          max_catch_up: { type: "number" },
+        },
+        required: ["id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "schedule_stats",
+      description: "Return production scheduler counts for schedules, notifications, history, leases, overdue items, and last tick metadata.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
 ];
 
 export async function runScheduleCreate(
@@ -79,8 +139,15 @@ export async function runScheduleCreate(
   durable: unknown,
   onceAt?: unknown,
   delayMs?: unknown,
+  misfirePolicy?: unknown,
+  maxCatchUp?: unknown,
 ): Promise<string> {
-  return toJson(await SCHEDULER.createSchedule(cron, prompt, recurring, durable, { onceAt, delayMs }));
+  return toJson(await SCHEDULER.createSchedule(cron, prompt, recurring, durable, {
+    onceAt,
+    delayMs,
+    misfirePolicy,
+    maxCatchUp,
+  }));
 }
 
 export async function runScheduleList(): Promise<string> {
@@ -93,6 +160,35 @@ export async function runScheduleRemove(id: unknown): Promise<string> {
 
 export async function runScheduleExplain(id: unknown): Promise<string> {
   return toJson(await SCHEDULER.explainSchedule(id));
+}
+
+export async function runSchedulePause(id: unknown): Promise<string> {
+  return toJson(await SCHEDULER.pauseSchedule(id));
+}
+
+export async function runScheduleResume(id: unknown): Promise<string> {
+  return toJson(await SCHEDULER.resumeSchedule(id));
+}
+
+export async function runScheduleUpdate(
+  id: unknown,
+  prompt: unknown,
+  cron: unknown,
+  recurring: unknown,
+  misfirePolicy: unknown,
+  maxCatchUp: unknown,
+): Promise<string> {
+  return toJson(await SCHEDULER.updateSchedule(id, {
+    prompt,
+    cron,
+    recurring,
+    misfire_policy: misfirePolicy,
+    max_catch_up: maxCatchUp,
+  }));
+}
+
+export async function runScheduleStats(): Promise<string> {
+  return toJson(await SCHEDULER.getStats());
 }
 
 export async function tickScheduler(nowArg?: Date): Promise<TickResult> {

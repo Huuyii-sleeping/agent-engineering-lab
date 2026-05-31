@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -23,6 +23,41 @@ async function makeStore(): Promise<{ root: string; store: SchedulerStore }> {
 }
 
 describe("tools/scheduler-store", () => {
+  it("replaces records through a temporary file", async () => {
+    const { root, store } = await makeStore();
+    await store.ensureInit();
+    const recordsPath = path.join(root, "records.json");
+    const before = await stat(recordsPath);
+
+    await store.saveRecords([
+      {
+        id: "sch_atomic",
+        cron: "*/5 * * * * *",
+        kind: "cron",
+        once_at: null,
+        prompt: "atomic save",
+        recurring: true,
+        durable: true,
+        created_at: 1,
+        last_fired_at: null,
+        last_run_at: null,
+        next_run_at: 5,
+        last_error: null,
+        run_count: 0,
+        status: "enabled",
+        enabled: true,
+        lease_owner: null,
+        lease_until: null,
+        misfire_policy: "fire_once",
+        max_catch_up: 5,
+      },
+    ]);
+
+    const after = await stat(recordsPath);
+    expect(after.ino).not.toBe(before.ino);
+    expect(await readFile(recordsPath, "utf8")).toContain('"id": "sch_atomic"');
+  });
+
   it("loads legacy ISO timestamps as numeric milliseconds", async () => {
     const { root, store } = await makeStore();
     await store.ensureInit();
@@ -63,6 +98,8 @@ describe("tools/scheduler-store", () => {
         enabled: true,
         lease_owner: null,
         lease_until: null,
+        misfire_policy: "fire_once",
+        max_catch_up: 5,
       },
     ]);
   });

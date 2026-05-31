@@ -7,7 +7,7 @@ import type {
   ScheduledPromptNotification,
   TickResult,
 } from "./scheduler-types.js";
-import { toTimestampMs } from "./scheduler-types.js";
+import { normalizeMaxCatchUp, normalizeMisfirePolicy, toTimestampMs } from "./scheduler-types.js";
 
 function makeId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -23,6 +23,30 @@ type CreateScheduleOptions = {
   delayMs?: unknown;
   onceAt?: unknown;
   now?: Date;
+  misfirePolicy?: unknown;
+  maxCatchUp?: unknown;
+};
+
+type ScheduleUpdate = {
+  prompt?: unknown;
+  cron?: unknown;
+  recurring?: unknown;
+  misfire_policy?: unknown;
+  max_catch_up?: unknown;
+};
+
+type ScheduleStatsResult = {
+  ok: true;
+  schedules: {
+    total: number;
+    enabled: number;
+    disabled: number;
+    overdue: number;
+    active_leases: number;
+  };
+  pending_notifications: number;
+  history_entries: number;
+  last_tick_at: number | null;
 };
 
 function scheduleEnabled(record: ScheduleRecord): boolean {
@@ -60,6 +84,10 @@ function scheduleMatches(record: ScheduleRecord, now: Date, scannedAt: number): 
   return (nextRunAt !== null && nextRunAt <= scannedAt) || cronMatches(record.cron, now);
 }
 
+function nextCronRunAfter(record: ScheduleRecord, timestamp: number): number | null {
+  return findNextCronRun(record.cron, new Date(timestamp))?.getTime() ?? null;
+}
+
 function leaseActiveForOtherOwner(record: ScheduleRecord, owner: string, nowMs: number): boolean {
   return record.lease_owner !== null
     && record.lease_owner !== owner
@@ -72,11 +100,135 @@ export class SchedulerManager {
   private readonly lockOwner = makeId("scheduler_owner");
   private readonly lockTtlMs = 10_000;
   private readonly scheduleLeaseTtlMs = 30_000;
+  private lastTickAt: number | null = null;
 
   constructor(storeOrRootResolver: SchedulerStore | (() => string) = new SchedulerStore()) {
     this.store = storeOrRootResolver instanceof SchedulerStore
       ? storeOrRootResolver
       : new SchedulerStore(storeOrRootResolver);
+  }
+
+  async pauseSchedule(idArg: unknown): Promise<{ ok: true; schedule: ScheduleRecord } | { ok: false; error: { code: string; message: string } }> {
+    const id = String(idArg ?? "").trim();
+    if (!id) {
+      return { ok: false, error: { code: "INVALID_ARGUMENT", message: "schedule_pause requires id" } };
+    }
+    const records = await this.store.loadRecords();
+    const record = records.find((item) => item.id === id);
+    if (!record) {
+      return { ok: false, error: { code: "SCHEDULE_NOT_FOUND", message: `schedule ${id} not found` } };
+    }
+    disableSchedule(record);
+    record.lease_owner = null;
+    record.lease_until = null;
+    await this.store.saveRecords(records);
+    return { ok: true, schedule: record };
+  }
+
+  async resumeSchedule(idArg: unknown, nowArg?: Date): Promise<{ ok: true; schedule: ScheduleRecord } | { ok: false; error: { code: string; message: string } }> {
+    const id = String(idArg ?? "").trim();
+    if (!id) {
+      return { ok: false, error: { code: "INVALID_ARGUMENT", message: "schedule_resume requires id" } };
+    }
+    const now = nowArg ?? nowProvider();
+    const records = await this.store.loadRecords();
+    const record = records.find((item) => item.id === id);
+    if (!record) {
+      return { ok: false, error: { code: "SCHEDULE_NOT_FOUND", message: `schedule ${id} not found` } };
+    }
+    record.enabled = true;
+    record.status = "enabled";
+    record.last_error = null;
+    record.lease_owner = null;
+    record.lease_until = null;
+    record.next_run_at = computeNextRunAt(record, now);
+    await this.store.saveRecords(records);
+    return { ok: true, schedule: record };
+  }
+
+  async updateSchedule(
+    idArg: unknown,
+    updates: ScheduleUpdate,
+    nowArg?: Date,
+  ): Promise<{ ok: true; schedule: ScheduleRecord } | { ok: false; error: { code: string; message: string } }> {
+    const id = String(idArg ?? "").trim();
+    if (!id) {
+      return { ok: false, error: { code: "INVALID_ARGUMENT", message: "schedule_update requires id" } };
+    }
+    const now = nowArg ?? nowProvider();
+    const records = await this.store.loadRecords();
+    const record = records.find((item) => item.id === id);
+    if (!record) {
+      return { ok: false, error: { code: "SCHEDULE_NOT_FOUND", message: `schedule ${id} not found` } };
+    }
+    if (updates.prompt !== undefined) {
+      const prompt = String(updates.prompt ?? "").trim();
+      if (!prompt) {
+        return { ok: false, error: { code: "INVALID_ARGUMENT", message: "schedule_update prompt must not be empty" } };
+      }
+      record.prompt = prompt;
+    }
+    if (updates.cron !== undefined) {
+      const cron = String(updates.cron ?? "").trim();
+      if (!isCronValid(cron)) {
+        return {
+          ok: false,
+          error: { code: "INVALID_CRON", message: "cron must be a valid 5-field or 6-field expression" },
+        };
+      }
+      record.kind = "cron";
+      record.cron = cron;
+      record.once_at = null;
+    }
+    if (updates.recurring !== undefined) {
+      record.recurring = Boolean(updates.recurring);
+    }
+    if (updates.misfire_policy !== undefined) {
+      const policy = normalizeMisfirePolicy(updates.misfire_policy);
+      if (policy !== updates.misfire_policy) {
+        return {
+          ok: false,
+          error: { code: "INVALID_ARGUMENT", message: "misfire_policy must be fire_once, skip, or catch_up" },
+        };
+      }
+      record.misfire_policy = policy;
+    }
+    if (updates.max_catch_up !== undefined) {
+      record.max_catch_up = normalizeMaxCatchUp(updates.max_catch_up);
+    }
+    record.last_error = null;
+    record.next_run_at = computeNextRunAt(record, now);
+    await this.store.saveRecords(records);
+    return { ok: true, schedule: record };
+  }
+
+  async getStats(nowArg?: Date): Promise<ScheduleStatsResult> {
+    const now = nowArg ?? nowProvider();
+    const scannedAt = now.getTime();
+    const records = await this.store.loadRecords();
+    const notifications = await this.store.loadNotifications();
+    const history = await this.store.loadHistory();
+    const enabled = records.filter(scheduleEnabled);
+    const activeLeases = records.filter(
+      (record) => record.lease_owner !== null && record.lease_until !== null && record.lease_until > scannedAt,
+    );
+    const overdue = enabled.filter((record) => scheduleMatches(record, now, scannedAt));
+    const lastTickAt = this.lastTickAt ?? (history.length > 0
+      ? Math.max(...history.map((item) => item.finishedAt))
+      : null);
+    return {
+      ok: true,
+      schedules: {
+        total: records.length,
+        enabled: enabled.length,
+        disabled: records.length - enabled.length,
+        overdue: overdue.length,
+        active_leases: activeLeases.length,
+      },
+      pending_notifications: notifications.length,
+      history_entries: history.length,
+      last_tick_at: lastTickAt,
+    };
   }
 
   async createSchedule(
@@ -129,6 +281,8 @@ export class SchedulerManager {
       enabled: true,
       lease_owner: null,
       lease_until: null,
+      misfire_policy: normalizeMisfirePolicy(options.misfirePolicy),
+      max_catch_up: normalizeMaxCatchUp(options.maxCatchUp),
     };
     records.push(schedule);
     await this.store.saveRecords(records);
@@ -175,6 +329,8 @@ export class SchedulerManager {
         recurring: record.recurring,
         cron: record.cron,
         once_at: record.once_at,
+        misfire_policy: record.misfire_policy,
+        max_catch_up: record.max_catch_up,
       },
       due,
       next_run_at: record.next_run_at,
@@ -210,6 +366,7 @@ export class SchedulerManager {
   async tick(nowArg?: Date): Promise<TickResult> {
     const now = nowArg ?? nowProvider();
     const scannedAt = now.getTime();
+    this.lastTickAt = scannedAt;
     const lock = await this.store.acquireTickLock(this.lockOwner, scannedAt, this.lockTtlMs);
     if (!lock.acquired) {
       return {
@@ -225,6 +382,8 @@ export class SchedulerManager {
       const fired: ScheduledPromptNotification[] = [];
       const history = await this.store.loadHistory();
       let recordsChanged = false;
+      let notificationsChanged = false;
+      let historyChanged = false;
 
       for (const record of records) {
         if (!scheduleEnabled(record)) {
@@ -248,39 +407,79 @@ export class SchedulerManager {
           continue;
         }
         if (leaseActiveForOtherOwner(record, this.lockOwner, scannedAt)) {
+          history.push({
+            id: makeId("sched_run"),
+            scheduleId: record.id,
+            prompt: record.prompt,
+            status: "skipped",
+            startedAt: scannedAt,
+            finishedAt: scannedAt,
+            error: `skipped due schedule because active lease is held by ${record.lease_owner}`,
+          });
+          historyChanged = true;
           continue;
         }
 
-        const firedAt = now.getTime();
+        const runTimes = this.dueRunTimes(record, now, scannedAt);
+        if (runTimes.length === 0) {
+          continue;
+        }
+        const nextRunAt = effectiveNextRunAt(record, now);
+        const isOverdueCron = record.kind === "cron" && nextRunAt !== null && nextRunAt < scannedAt;
+        if (isOverdueCron && record.misfire_policy === "skip") {
+          const skippedAt = scannedAt;
+          history.push({
+            id: makeId("sched_run"),
+            scheduleId: record.id,
+            prompt: record.prompt,
+            status: "skipped",
+            startedAt: skippedAt,
+            finishedAt: skippedAt,
+            error: "skipped overdue cron run because misfire_policy=skip",
+          });
+          record.last_run_at = skippedAt;
+          record.last_error = "misfire_policy=skip skipped overdue cron run";
+          record.next_run_at = computeNextRunAt(record, now);
+          recordsChanged = true;
+          historyChanged = true;
+          continue;
+        }
         record.lease_owner = this.lockOwner;
-        record.lease_until = firedAt + this.scheduleLeaseTtlMs;
-        const notification: ScheduledPromptNotification = {
-          id: makeId("sched_evt"),
-          scheduleId: record.id,
-          prompt: record.prompt,
-          recurring: record.recurring,
-          firedAt,
-        };
-        notifications.push(notification);
-        fired.push(notification);
-        record.last_fired_at = firedAt;
-        record.last_run_at = firedAt;
+        record.lease_until = scannedAt + this.scheduleLeaseTtlMs;
+        for (const firedAt of runTimes) {
+          const notification: ScheduledPromptNotification = {
+            id: makeId("sched_evt"),
+            scheduleId: record.id,
+            prompt: record.prompt,
+            recurring: record.recurring,
+            firedAt,
+          };
+          notifications.push(notification);
+          fired.push(notification);
+          history.push({
+            id: makeId("sched_run"),
+            scheduleId: record.id,
+            prompt: record.prompt,
+            status: "fired",
+            startedAt: firedAt,
+            finishedAt: firedAt,
+            error: null,
+          });
+        }
+        const lastRunAt = runTimes[runTimes.length - 1] ?? scannedAt;
+        record.last_fired_at = lastRunAt;
+        record.last_run_at = lastRunAt;
         record.last_error = null;
-        record.run_count += 1;
+        record.run_count += runTimes.length;
         recordsChanged = true;
-        history.push({
-          id: makeId("sched_run"),
-          scheduleId: record.id,
-          prompt: record.prompt,
-          status: "fired",
-          startedAt: firedAt,
-          finishedAt: firedAt,
-          error: null,
-        });
+        notificationsChanged = true;
+        historyChanged = true;
         if (!record.recurring) {
           disableSchedule(record);
-        } else {
+        } else if (record.kind === "cron" && record.misfire_policy === "catch_up") {
           record.next_run_at = computeNextRunAt(record, now);
+        } else {
+          record.next_run_at = nextCronRunAfter(record, lastRunAt) ?? computeNextRunAt(record, now);
         }
         record.lease_owner = null;
         record.lease_until = null;
@@ -289,8 +488,10 @@ export class SchedulerManager {
       if (recordsChanged) {
         await this.store.saveRecords(records);
       }
-      if (fired.length > 0) {
+      if (notificationsChanged) {
         await this.store.saveNotifications(notifications);
+      }
+      if (historyChanged) {
         await this.store.saveHistory(history);
       }
 
@@ -337,13 +538,37 @@ export class SchedulerManager {
     }
     if (due) {
       if (record.kind === "cron" && record.next_run_at !== null && record.next_run_at <= nowMs) {
-        return `schedule is due because next_run_at ${record.next_run_at} has already arrived`;
+        return `schedule is due because next_run_at ${record.next_run_at} has already arrived; misfire_policy=${record.misfire_policy}`;
       }
-      return "schedule is due now and eligible to fire";
+      return `schedule is due now and eligible to fire; misfire_policy=${record.misfire_policy}`;
     }
     if (record.next_run_at !== null) {
       return `schedule is not due yet; next_run_at is ${record.next_run_at}`;
     }
     return "schedule is enabled but has no next run time";
+  }
+
+  private dueRunTimes(record: ScheduleRecord, now: Date, scannedAt: number): number[] {
+    if (record.kind === "once") {
+      return record.once_at !== null ? [record.once_at] : [];
+    }
+    const firstDueAt = effectiveNextRunAt(record, now);
+    if (firstDueAt === null) {
+      return [];
+    }
+    if (record.misfire_policy !== "catch_up" || !record.recurring) {
+      return [firstDueAt <= scannedAt ? firstDueAt : scannedAt];
+    }
+    const runTimes: number[] = [];
+    let cursor = firstDueAt;
+    while (cursor <= scannedAt && runTimes.length < record.max_catch_up) {
+      runTimes.push(cursor);
+      const next = nextCronRunAfter(record, cursor);
+      if (next === null || next <= cursor) {
+        break;
+      }
+      cursor = next;
+    }
+    return runTimes;
   }
 }

@@ -1,8 +1,8 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
 import type { ScheduleRecord, ScheduleRunRecord, ScheduledPromptNotification } from "./scheduler-types.js";
-import { toTimestampMs } from "./scheduler-types.js";
+import { normalizeMaxCatchUp, normalizeMisfirePolicy, toTimestampMs } from "./scheduler-types.js";
 
 type Paths = {
   root: string;
@@ -40,7 +40,7 @@ export class SchedulerStore {
     try {
       await readFile(filePath, "utf8");
     } catch {
-      await writeFile(filePath, defaultContent, "utf8");
+      await this.writeAtomic(filePath, defaultContent);
     }
   }
 
@@ -88,13 +88,15 @@ export class SchedulerStore {
           ? item.lease_owner
           : null,
         lease_until: toTimestampMs(item.lease_until, null),
+        misfire_policy: normalizeMisfirePolicy(item.misfire_policy),
+        max_catch_up: normalizeMaxCatchUp(item.max_catch_up),
       };
     });
   }
 
   async saveRecords(records: ScheduleRecord[]): Promise<void> {
     await this.ensureInit();
-    await writeFile(this.paths().recordsPath, `${JSON.stringify(records, null, 2)}\n`, "utf8");
+    await this.writeAtomic(this.paths().recordsPath, `${JSON.stringify(records, null, 2)}\n`);
   }
 
   async loadNotifications(): Promise<ScheduledPromptNotification[]> {
@@ -112,7 +114,7 @@ export class SchedulerStore {
 
   async saveNotifications(notifications: ScheduledPromptNotification[]): Promise<void> {
     await this.ensureInit();
-    await writeFile(this.paths().notificationsPath, `${JSON.stringify(notifications, null, 2)}\n`, "utf8");
+    await this.writeAtomic(this.paths().notificationsPath, `${JSON.stringify(notifications, null, 2)}\n`);
   }
 
   async loadHistory(): Promise<ScheduleRunRecord[]> {
@@ -133,7 +135,7 @@ export class SchedulerStore {
   async saveHistory(history: ScheduleRunRecord[], limit = 200): Promise<void> {
     await this.ensureInit();
     const trimmed = history.slice(Math.max(0, history.length - limit));
-    await writeFile(this.paths().historyPath, `${JSON.stringify(trimmed, null, 2)}\n`, "utf8");
+    await this.writeAtomic(this.paths().historyPath, `${JSON.stringify(trimmed, null, 2)}\n`);
   }
 
   async acquireTickLock(owner: string, nowMs: number, ttlMs: number): Promise<{ acquired: boolean; lock: SchedulerLockRecord | null }> {
@@ -149,7 +151,7 @@ export class SchedulerStore {
       acquiredAt: nowMs,
       expiresAt: nowMs + ttlMs,
     };
-    await writeFile(paths.lockPath, `${JSON.stringify(lock, null, 2)}\n`, "utf8");
+    await this.writeAtomic(paths.lockPath, `${JSON.stringify(lock, null, 2)}\n`);
     const verified = await this.readLock();
     return { acquired: verified?.owner === owner, lock: verified };
   }
@@ -177,6 +179,20 @@ export class SchedulerStore {
       };
     } catch {
       return null;
+    }
+  }
+
+  private async writeAtomic(filePath: string, content: string): Promise<void> {
+    const tmpPath = path.join(
+      path.dirname(filePath),
+      `.${path.basename(filePath)}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`,
+    );
+    try {
+      await writeFile(tmpPath, content, "utf8");
+      await rename(tmpPath, filePath);
+    } catch (error) {
+      await rm(tmpPath, { force: true }).catch(() => {});
+      throw error;
     }
   }
 }

@@ -104,6 +104,57 @@ describe("scheduler manager", () => {
     expect(listed[0]?.next_run_at).toBe(new Date("2026-05-11T09:05:20+08:00").getTime());
   });
 
+  it("skips overdue cron schedules when misfire policy is skip", async () => {
+    const { root, scheduler } = await createManager();
+    const createdAt = new Date("2026-05-11T09:05:10+08:00");
+    const created = await scheduler.createSchedule("*/5 * * * * *", "skip late prompt", true, true, { now: createdAt });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error("expected created schedule");
+    }
+    await writeFile(
+      path.join(root, ".schedule", "records.json"),
+      `${JSON.stringify([{ ...created.schedule, misfire_policy: "skip", max_catch_up: 5 }], null, 2)}\n`,
+      "utf8",
+    );
+
+    const late = await scheduler.tick(new Date("2026-05-11T09:05:16+08:00"));
+
+    expect(late.fired).toHaveLength(0);
+    expect(await scheduler.peekNotificationCount()).toBe(0);
+    const state = await scheduler.listScheduleState();
+    expect(state.schedules[0]?.next_run_at).toBe(new Date("2026-05-11T09:05:20+08:00").getTime());
+    expect(state.history[0]?.status).toBe("skipped");
+    expect(state.history[0]?.error).toContain("misfire_policy=skip");
+  });
+
+  it("catches up overdue cron schedules within max_catch_up", async () => {
+    const { root, scheduler } = await createManager();
+    const createdAt = new Date("2026-05-11T09:05:10+08:00");
+    const created = await scheduler.createSchedule("*/5 * * * * *", "catch up prompt", true, true, { now: createdAt });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error("expected created schedule");
+    }
+    await writeFile(
+      path.join(root, ".schedule", "records.json"),
+      `${JSON.stringify([{ ...created.schedule, misfire_policy: "catch_up", max_catch_up: 3 }], null, 2)}\n`,
+      "utf8",
+    );
+
+    const late = await scheduler.tick(new Date("2026-05-11T09:05:31+08:00"));
+
+    expect(late.fired).toHaveLength(3);
+    expect(late.fired.map((item) => item.firedAt)).toEqual([
+      new Date("2026-05-11T09:05:15+08:00").getTime(),
+      new Date("2026-05-11T09:05:20+08:00").getTime(),
+      new Date("2026-05-11T09:05:25+08:00").getTime(),
+    ]);
+    const listed = await scheduler.listSchedules();
+    expect(listed[0]?.run_count).toBe(3);
+    expect(listed[0]?.next_run_at).toBe(new Date("2026-05-11T09:05:35+08:00").getTime());
+  });
+
   it("keeps 5-field cron semantics minute-based with seconds defaulting to zero", async () => {
     const { scheduler } = await createManager();
     await scheduler.createSchedule("5 9 * * *", "minute prompt", true, true);
@@ -183,6 +234,9 @@ describe("scheduler manager", () => {
     expect(await scheduler.peekNotificationCount()).toBe(0);
     const listed = await scheduler.listSchedules();
     expect(listed[0]?.run_count).toBe(0);
+    const state = await scheduler.listScheduleState();
+    expect(state.history[0]?.status).toBe("skipped");
+    expect(state.history[0]?.error).toContain("active lease");
   });
 
   it("recovers stale schedule leases and clears the lease after firing", async () => {
@@ -278,6 +332,91 @@ describe("scheduler manager", () => {
     }
     expect(explained.due).toBe(true);
     expect(explained.reason).toContain("next_run_at");
+  });
+
+  it("pauses, resumes, and updates schedules", async () => {
+    const { scheduler } = await createManager();
+    const createdAt = new Date("2026-05-11T09:05:10+08:00");
+    const created = await scheduler.createSchedule("*/5 * * * * *", "managed prompt", true, true, { now: createdAt });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error("expected created schedule");
+    }
+
+    const paused = await (
+      scheduler as unknown as { pauseSchedule: (id: unknown) => Promise<{ ok: true }> }
+    ).pauseSchedule(created.schedule.id);
+    expect(paused.ok).toBe(true);
+    expect((await scheduler.tick(new Date("2026-05-11T09:05:16+08:00"))).fired).toHaveLength(0);
+
+    const resumed = await (
+      scheduler as unknown as { resumeSchedule: (id: unknown, now?: Date) => Promise<{ ok: true }> }
+    ).resumeSchedule(created.schedule.id, new Date("2026-05-11T09:05:16+08:00"));
+    expect(resumed.ok).toBe(true);
+
+    const updated = await (
+      scheduler as unknown as {
+        updateSchedule: (
+          id: unknown,
+          updates: Record<string, unknown>,
+          now?: Date,
+        ) => Promise<{ ok: true; schedule: { prompt: string; cron: string; next_run_at: number | null } }>;
+      }
+    ).updateSchedule(
+      created.schedule.id,
+      { prompt: "updated prompt", cron: "*/10 * * * * *", misfire_policy: "catch_up", max_catch_up: 2 },
+      new Date("2026-05-11T09:05:16+08:00"),
+    );
+    expect(updated.ok).toBe(true);
+    expect(updated.schedule.prompt).toBe("updated prompt");
+    expect(updated.schedule.cron).toBe("*/10 * * * * *");
+    expect(updated.schedule.next_run_at).toBe(new Date("2026-05-11T09:05:20+08:00").getTime());
+  });
+
+  it("reports scheduler production stats", async () => {
+    const { root, scheduler } = await createManager();
+    const createdAt = new Date("2026-05-11T09:05:10+08:00");
+    const created = await scheduler.createSchedule("*/5 * * * * *", "stats prompt", true, true, { now: createdAt });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error("expected created schedule");
+    }
+    await scheduler.tick(new Date("2026-05-11T09:05:11+08:00"));
+    await writeFile(
+      path.join(root, ".schedule", "records.json"),
+      `${JSON.stringify(
+        [
+          {
+            ...created.schedule,
+            lease_owner: "other-owner",
+            lease_until: new Date("2026-05-11T09:05:30+08:00").getTime(),
+          },
+        ],
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const stats = await (
+      scheduler as unknown as {
+        getStats: (now?: Date) => Promise<{
+          ok: true;
+          schedules: { total: number; enabled: number; disabled: number; overdue: number; active_leases: number };
+          pending_notifications: number;
+          history_entries: number;
+          last_tick_at: number | null;
+        }>;
+      }
+    ).getStats(new Date("2026-05-11T09:05:16+08:00"));
+
+    expect(stats.ok).toBe(true);
+    expect(stats.schedules.total).toBe(1);
+    expect(stats.schedules.enabled).toBe(1);
+    expect(stats.schedules.disabled).toBe(0);
+    expect(stats.schedules.overdue).toBe(1);
+    expect(stats.schedules.active_leases).toBe(1);
+    expect(stats.last_tick_at).toBe(new Date("2026-05-11T09:05:11+08:00").getTime());
   });
 
   it("restores durable schedules after restart", async () => {

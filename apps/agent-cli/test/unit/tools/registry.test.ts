@@ -37,6 +37,15 @@ describe("tools/registry", () => {
     expect(registrations.some((tool) => tool.name === "task_create")).toBe(true);
     expect(registrations.some((tool) => tool.name === "task_claim")).toBe(true);
     expect(registrations.some((tool) => tool.name === "team_mark_inbox_read")).toBe(true);
+    expect(registrations.some((tool) => tool.name === "schedule_pause")).toBe(true);
+    expect(registrations.some((tool) => tool.name === "schedule_resume")).toBe(true);
+    expect(registrations.some((tool) => tool.name === "schedule_update")).toBe(true);
+    expect(resolveBuiltinToolRegistration("schedule_stats")?.execution).toMatchObject({
+      readOnly: true,
+      mutatesWorkspace: false,
+      parallelSafe: true,
+      riskLevel: "low",
+    });
   });
 
   it("previews subagent calls using shared registry behavior", () => {
