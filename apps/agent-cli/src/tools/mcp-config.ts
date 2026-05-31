@@ -13,6 +13,7 @@ export type McpServerConfig = {
   trusted: boolean;
   provenance: string;
   credentialMode: "none" | "configured";
+  startupTimeoutMs?: number;
   requestTimeoutMs: number;
   allowedTools?: string[];
   disabledTools?: string[];
@@ -64,6 +65,7 @@ function normalizeServerConfig(item: unknown, configPath: string): McpServerConf
   const args = Array.isArray(input.args) ? input.args.map((value) => String(value)) : [];
   const cwd = input.cwd ? path.resolve(process.cwd(), String(input.cwd)) : process.cwd();
   const timeoutOverride = Number(input.requestTimeoutMs);
+  const startupTimeoutOverride = Number(input.startupTimeoutMs);
   const maxConcurrentCalls = Number(input.maxConcurrentCalls);
   return {
     name,
@@ -75,6 +77,10 @@ function normalizeServerConfig(item: unknown, configPath: string): McpServerConf
     trusted: input.trusted === true,
     provenance: `${configPath}#${name}`,
     credentialMode: Object.keys(normalizeStringMap(input.env)).length > 0 ? "configured" : "none",
+    startupTimeoutMs:
+      Number.isFinite(startupTimeoutOverride) && startupTimeoutOverride >= 100
+        ? Math.trunc(startupTimeoutOverride)
+        : undefined,
     requestTimeoutMs:
       Number.isFinite(timeoutOverride) && timeoutOverride >= 100
         ? Math.trunc(timeoutOverride)

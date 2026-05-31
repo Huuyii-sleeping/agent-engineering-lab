@@ -54,6 +54,7 @@ describe("tools/mcp-config", () => {
           env: { TOKEN: 123, EMPTY: null },
           cwd: "nested",
           trusted: true,
+          startupTimeoutMs: 500.7,
           requestTimeoutMs: 250.9,
           allowedTools: ["Echo_Upper", "echo_upper", 7],
           disabledTools: "Fail_Now, fail_now",
@@ -81,6 +82,7 @@ describe("tools/mcp-config", () => {
         trusted: true,
         provenance: `${path.join(process.cwd(), ".codex", "mcp.json")}#demo`,
         credentialMode: "configured",
+        startupTimeoutMs: 500,
         requestTimeoutMs: 250,
         allowedTools: ["echo_upper", "7"],
         disabledTools: ["fail_now"],
@@ -89,14 +91,19 @@ describe("tools/mcp-config", () => {
     ]);
   });
 
-  it("uses the runtime default timeout when overrides are too small", async () => {
+  it("uses runtime default request timeout and no startup override when overrides are too small", async () => {
     await writeConfig({
-      servers: [{ name: "demo", command: "node", trusted: true, requestTimeoutMs: 50 }],
+      servers: [
+        { name: "demo", command: "node", trusted: true, startupTimeoutMs: 50, requestTimeoutMs: 50 },
+      ],
     });
 
-    expect((await loadMcpServerConfigs())[0]?.requestTimeoutMs).toBe(
-      RUNTIME_CONFIG.mcpRequestTimeoutMs,
-    );
+    expect(await loadMcpServerConfigs()).toEqual([
+      expect.objectContaining({
+        startupTimeoutMs: undefined,
+        requestTimeoutMs: RUNTIME_CONFIG.mcpRequestTimeoutMs,
+      }),
+    ]);
   });
 
   it("defaults servers to untrusted until the config opts in", async () => {

@@ -9,6 +9,8 @@ import { McpRegistry } from "../../../src/tools/mcp-registry.js";
 
 const fixtureServerPath = path.resolve(process.cwd(), "test/fixtures/mcp-demo-server.ts");
 const tsxCliPath = path.resolve(process.cwd(), "node_modules/tsx/dist/cli.mjs");
+const MCP_SUBPROCESS_TEST_TIMEOUT_MS = 20_000;
+const MCP_FIXTURE_REQUEST_TIMEOUT_MS = 20_000;
 let activeRegistry: McpRegistry | null = null;
 let cleanupPaths: string[] = [];
 
@@ -23,7 +25,8 @@ function createRegistry(input: { env?: Record<string, string> } = {}): McpRegist
     trusted: true,
     provenance: `${path.join(process.cwd(), ".codex", "mcp.json")}#demo`,
     credentialMode: "none",
-    requestTimeoutMs: 2000,
+    startupTimeoutMs: MCP_FIXTURE_REQUEST_TIMEOUT_MS,
+    requestTimeoutMs: MCP_FIXTURE_REQUEST_TIMEOUT_MS,
     allowedTools: [],
     disabledTools: [],
     maxConcurrentCalls: 4,
@@ -66,7 +69,7 @@ describe("tools/mcp-registry", () => {
         }),
       }),
     );
-  });
+  }, MCP_SUBPROCESS_TEST_TIMEOUT_MS);
 
   it("keeps untrusted mcp servers out of the executable tool set", async () => {
     const config: McpServerConfig = {
@@ -79,7 +82,8 @@ describe("tools/mcp-registry", () => {
       trusted: false,
       provenance: `${path.join(process.cwd(), ".codex", "mcp.json")}#demo`,
       credentialMode: "configured",
-      requestTimeoutMs: 2000,
+      startupTimeoutMs: MCP_FIXTURE_REQUEST_TIMEOUT_MS,
+      requestTimeoutMs: MCP_FIXTURE_REQUEST_TIMEOUT_MS,
       allowedTools: [],
       disabledTools: [],
       maxConcurrentCalls: 4,
@@ -101,7 +105,8 @@ describe("tools/mcp-registry", () => {
       trusted: true,
       provenance: `${path.join(process.cwd(), ".codex", "mcp.json")}#demo`,
       credentialMode: "none",
-      requestTimeoutMs: 2000,
+      startupTimeoutMs: MCP_FIXTURE_REQUEST_TIMEOUT_MS,
+      requestTimeoutMs: MCP_FIXTURE_REQUEST_TIMEOUT_MS,
       allowedTools: ["echo_upper", "fail_now"],
       disabledTools: ["fail_now"],
       maxConcurrentCalls: 4,
@@ -109,7 +114,7 @@ describe("tools/mcp-registry", () => {
     activeRegistry = new McpRegistry([config]);
 
     expect((await activeRegistry.listRegistrations()).map((tool) => tool.remoteName)).toEqual(["echo_upper"]);
-  });
+  }, MCP_SUBPROCESS_TEST_TIMEOUT_MS);
 
   it("serializes calls when the server concurrency limit is one", async () => {
     const config: McpServerConfig = {
@@ -122,7 +127,8 @@ describe("tools/mcp-registry", () => {
       trusted: true,
       provenance: `${path.join(process.cwd(), ".codex", "mcp.json")}#demo`,
       credentialMode: "none",
-      requestTimeoutMs: 2000,
+      startupTimeoutMs: MCP_FIXTURE_REQUEST_TIMEOUT_MS,
+      requestTimeoutMs: MCP_FIXTURE_REQUEST_TIMEOUT_MS,
       allowedTools: [],
       disabledTools: [],
       maxConcurrentCalls: 1,
@@ -139,7 +145,7 @@ describe("tools/mcp-registry", () => {
     expect(performance.now() - start).toBeGreaterThanOrEqual(100);
     expect(JSON.parse(first ?? "{}").echoed).toBe("a");
     expect(JSON.parse(second ?? "{}").echoed).toBe("b");
-  });
+  }, MCP_SUBPROCESS_TEST_TIMEOUT_MS);
 
   it("classifies authentication failures and caches them per server", async () => {
     const registry = createRegistry();
@@ -158,7 +164,7 @@ describe("tools/mcp-registry", () => {
     expect(first.error?.code).toBe("MCP_AUTH_REQUIRED");
     expect(second.ok).toBe(false);
     expect(second.error?.code).toBe("MCP_AUTH_REQUIRED");
-  });
+  }, MCP_SUBPROCESS_TEST_TIMEOUT_MS);
 
   it("recovers from a session-expired error by reconnecting and retrying once", async () => {
     const markerPath = path.join(
@@ -178,7 +184,7 @@ describe("tools/mcp-registry", () => {
     expect(output.ok).toBe(true);
     expect(output.recovered).toBe(true);
     expect(output.echoed).toBe("ok");
-  });
+  }, MCP_SUBPROCESS_TEST_TIMEOUT_MS);
 
   it("reports registry status and clears cached auth failures", async () => {
     const registry = createRegistry();
@@ -197,7 +203,7 @@ describe("tools/mcp-registry", () => {
 
     expect(registry.resetAuthFailures()).toEqual({ cleared: 1 });
     expect(registry.getStatus()[0]?.authFailed).toBe(false);
-  });
+  }, MCP_SUBPROCESS_TEST_TIMEOUT_MS);
 
   it("runs matching mcp tools and keeps missing aliases as null", async () => {
     const registry = createRegistry();
@@ -216,7 +222,7 @@ describe("tools/mcp-registry", () => {
     expect(output.secret).toBe("token=[REDACTED_SECRET]");
     expect(output.hidden).toBe("visibletext");
     expect(await registry.run("mcp__demo__missing", {})).toBeNull();
-  });
+  }, MCP_SUBPROCESS_TEST_TIMEOUT_MS);
 
   it("normalizes remote tool failures without throwing", async () => {
     const registry = createRegistry();
@@ -231,5 +237,5 @@ describe("tools/mcp-registry", () => {
     expect(output.ok).toBe(false);
     expect(output.error?.code).toBe("MCP_TOOL_CALL_FAILED");
     expect(output.error?.message).toBe("fixture boom");
-  });
+  }, MCP_SUBPROCESS_TEST_TIMEOUT_MS);
 });

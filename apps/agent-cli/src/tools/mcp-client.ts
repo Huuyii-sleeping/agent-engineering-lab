@@ -158,7 +158,7 @@ export class McpServerClient {
         clientInfo: { name: "agent-cli", version: "0.1.0" },
         capabilities: {},
       },
-      RUNTIME_CONFIG.mcpStartupTimeoutMs,
+      this.config.startupTimeoutMs ?? RUNTIME_CONFIG.mcpStartupTimeoutMs,
     );
     if (!initializeResult || typeof initializeResult !== "object") {
       this.close("initialize_invalid");

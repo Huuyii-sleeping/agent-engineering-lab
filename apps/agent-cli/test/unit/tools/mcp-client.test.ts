@@ -6,6 +6,8 @@ import { McpServerClient } from "../../../src/tools/mcp-client.js";
 
 const fixtureServerPath = path.resolve(process.cwd(), "test/fixtures/mcp-demo-server.ts");
 const tsxCliPath = path.resolve(process.cwd(), "node_modules/tsx/dist/cli.mjs");
+const MCP_SUBPROCESS_TEST_TIMEOUT_MS = 20_000;
+const MCP_FIXTURE_REQUEST_TIMEOUT_MS = 20_000;
 let activeClient: McpServerClient | null = null;
 
 function createConfig(): McpServerConfig {
@@ -19,7 +21,8 @@ function createConfig(): McpServerConfig {
     trusted: true,
     provenance: `${path.join(process.cwd(), ".codex", "mcp.json")}#demo`,
     credentialMode: "none",
-    requestTimeoutMs: 2000,
+    startupTimeoutMs: MCP_FIXTURE_REQUEST_TIMEOUT_MS,
+    requestTimeoutMs: MCP_FIXTURE_REQUEST_TIMEOUT_MS,
   };
 }
 
@@ -40,7 +43,7 @@ describe("tools/mcp-client", () => {
         description: "Uppercase an input string. token=[REDACTED_SECRET]",
       }),
     );
-  });
+  }, MCP_SUBPROCESS_TEST_TIMEOUT_MS);
 
   it("calls remote tools and returns parsed call results", async () => {
     activeClient = new McpServerClient(createConfig());
@@ -54,5 +57,5 @@ describe("tools/mcp-client", () => {
       hidden: "visible\u202Etext",
       source: "mcp-demo-server",
     });
-  });
+  }, MCP_SUBPROCESS_TEST_TIMEOUT_MS);
 });
