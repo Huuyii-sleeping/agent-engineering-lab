@@ -21,6 +21,10 @@ describe("harness scenario matrix", () => {
           name: "serial-write-side-effects",
           description: expect.stringContaining("serial"),
         },
+        {
+          name: "service-session-resume",
+          description: expect.stringContaining("session resume"),
+        },
       ]),
     );
   });
@@ -73,6 +77,7 @@ describe("harness scenario matrix", () => {
       "scheduled-notification",
       "read-write-side-effects",
       "serial-write-side-effects",
+      "service-session-resume",
     ]);
   });
 });

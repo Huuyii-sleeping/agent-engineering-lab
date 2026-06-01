@@ -3,13 +3,20 @@ import type {
   HarnessAgentScenarioResult,
 } from "./agent.js";
 import { runHarnessAgentScenario } from "./agent.js";
+import { runHarnessServiceSessionResumeScenario } from "./service-session.js";
 
 /** A stable production harness scenario registered in the local matrix. */
 export type HarnessMatrixScenario = {
   name: string;
   description: string;
-  scenario: HarnessAgentScenario;
-};
+} & (
+  | {
+      scenario: HarnessAgentScenario;
+    }
+  | {
+      run: () => Promise<HarnessMatrixResultItem>;
+    }
+);
 
 /** Options for running the local harness scenario matrix. */
 export type HarnessMatrixRunOptions = {
@@ -215,6 +222,11 @@ const PRODUCTION_HARNESS_SCENARIOS: HarnessMatrixScenario[] = [
       ],
     },
   },
+  {
+    name: "service-session-resume",
+    description: "service-level session resume continues chat through AgentService and QueryEngine",
+    run: runHarnessServiceSessionResumeScenario,
+  },
 ];
 
 /** Lists stable harness matrix scenarios without exposing mutable scenario definitions. */
@@ -256,6 +268,8 @@ export async function runHarnessScenarioMatrix(
         failedStep: result.failedStep,
         steps: result.steps,
       });
+    } else if ("run" in item) {
+      results.push(await item.run());
     } else {
       results.push(item);
     }
