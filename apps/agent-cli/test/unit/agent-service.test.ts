@@ -1,6 +1,10 @@
 import type OpenAI from "openai";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { Readable, Writable } from "node:stream";
 import { afterEach, describe, expect, it } from "vitest";
+import { readAuditEvents } from "../../src/audit/runtime.js";
 import { AgentService, createAgentHttpServer } from "../../src/service-api/index.js";
 import { AgentHost } from "../../src/host/agent-host.js";
 import type { DeliveryServiceLike } from "../../src/services/delivery-service.js";
@@ -19,6 +23,15 @@ const PROMPT_SOURCE: StaticPromptSource = {
   skills: [],
   rules: [],
 };
+
+let tempDir = "";
+let previousCwd = "";
+
+async function withAuditWorkspace(): Promise<void> {
+  tempDir = await mkdtemp(path.join(tmpdir(), "agent-service-audit-test-"));
+  previousCwd = process.cwd();
+  process.chdir(tempDir);
+}
 
 function createLoopRunner() {
   return {
@@ -251,8 +264,16 @@ function openEventStream(
   };
 }
 
-afterEach(() => {
+afterEach(async () => {
   delete process.env.MODEL_ID;
+  if (previousCwd) {
+    process.chdir(previousCwd);
+    previousCwd = "";
+  }
+  if (tempDir) {
+    await rm(tempDir, { recursive: true, force: true });
+    tempDir = "";
+  }
 });
 
 describe("agent service", () => {
@@ -373,6 +394,41 @@ describe("agent service", () => {
     expect(String(resultA.assistant)).toContain("alpha");
     expect(String(resultB.assistant)).toContain("beta");
     expect(String(resultA.assistant)).not.toContain("beta");
+  });
+
+  it("writes redacted audit events for chat lifecycle", async () => {
+    await withAuditWorkspace();
+    const service = new AgentService({
+      client: {} as OpenAI,
+      model: "fake-model",
+      promptSource: PROMPT_SOURCE,
+      toolService: createToolService(),
+      deliveryService: createDeliveryService(),
+      hookService: createHookService(),
+      memoryService: createMemoryService(),
+      modelPolicyService: createModelPolicyService(),
+      observabilityService: createObservabilityService(),
+      queryEngine: createLoopRunner(),
+    });
+    const session = service.createSession();
+
+    await service.chat({
+      session_id: session.id,
+      message: "please handle token=sk-123456789012345678901234",
+    });
+
+    const events = await readAuditEvents({ sessionId: session.id, category: "session" });
+    expect(events.map((event) => [event.action, event.outcome])).toEqual([
+      ["chat", "started"],
+      ["chat", "completed"],
+    ]);
+    expect(JSON.stringify(events)).not.toContain("sk-123456789012345678901234");
+    expect(events[0]).toMatchObject({
+      subject: session.id,
+      metadata: {
+        messageLength: 47,
+      },
+    });
   });
 
   it("surfaces target-aware tool metadata from the shared tool registration layer", async () => {

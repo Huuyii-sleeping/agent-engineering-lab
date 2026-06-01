@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
+import { recordAuditEvent, type AuditOutcome } from "../audit/runtime.js";
 import { sanitizeAndRedactValue, stableScopeHash } from "../security/data-hygiene.js";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
 import { nowTimestampMs, plusSecondsMs } from "../time.js";
@@ -88,6 +89,49 @@ export class SecurityManager {
     await this.ensureInit();
     const event = { at: nowTimestampMs(), type, payload: sanitizeAndRedactValue(payload) as Record<string, unknown> };
     await writeFile(this.auditPath, `${JSON.stringify(event)}\n`, { flag: "a", encoding: "utf8" });
+    await recordAuditEvent(
+      {
+        category: "security",
+        action: type,
+        outcome: this.auditOutcome(type, event.payload),
+        subject: this.auditSubject(type, event.payload),
+        summary: type,
+        metadata: event.payload,
+      },
+      { auditRoot: this.auditRoot },
+    );
+  }
+
+  private auditOutcome(type: string, payload: Record<string, unknown>): AuditOutcome {
+    if (type === "approval_created") {
+      return "created";
+    }
+    if (type === "approval_consumed") {
+      return "consumed";
+    }
+    if (type === "approval_decision") {
+      return payload.decision === "rejected" ? "denied" : "succeeded";
+    }
+    if (type === "execution_blocked") {
+      return "blocked";
+    }
+    if (type === "policy_decision") {
+      return payload.decision === "allow" ? "succeeded" : "blocked";
+    }
+    return "succeeded";
+  }
+
+  private auditSubject(type: string, payload: Record<string, unknown>): string {
+    if (typeof payload.request_id === "string" && payload.request_id) {
+      return payload.request_id;
+    }
+    if (typeof payload.toolName === "string" && payload.toolName) {
+      return payload.toolName;
+    }
+    if (typeof payload.action === "string" && payload.action) {
+      return payload.action;
+    }
+    return type;
   }
 
   async evaluate(toolName: string, args: Record<string, unknown>): Promise<PolicyDecision> {

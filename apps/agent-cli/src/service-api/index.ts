@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { recordAuditEvent } from "../audit/runtime.js";
 import type { AgentAppRuntimeDeps } from "../bootstrap/app-runtime.js";
 import { AgentHost } from "../host/agent-host.js";
 import type { AgentHostEvent } from "../host/events.js";
@@ -228,6 +229,18 @@ export class AgentService {
 
     session.busy = true;
     session.updatedAt = Date.now();
+    await recordAuditEvent({
+      category: "session",
+      action: "chat",
+      outcome: "started",
+      subject: session.id,
+      summary: "chat started",
+      sessionId: session.id,
+      metadata: {
+        messageLength: prompt.length,
+        rounds: session.runtimeState.roundCounter,
+      },
+    });
     this.host.emitEvent("chat.started", {
       session: summarizeSession(session),
       message: prompt,
@@ -255,6 +268,18 @@ export class AgentService {
         includeScheduledNotifications: input.include_scheduled_notifications === true,
       });
       if (!result.ok) {
+        await recordAuditEvent({
+          category: "session",
+          action: "chat",
+          outcome: "failed",
+          subject: session.id,
+          summary: result.error.message,
+          sessionId: session.id,
+          metadata: {
+            errorCode: result.error.code,
+            rounds: session.runtimeState.roundCounter,
+          },
+        });
         this.host.emitEvent("chat.failed", {
           session: summarizeSession(session),
           error: result.error,
@@ -266,6 +291,18 @@ export class AgentService {
         };
       }
       session.updatedAt = Date.now();
+      await recordAuditEvent({
+        category: "session",
+        action: "chat",
+        outcome: "completed",
+        subject: session.id,
+        summary: "chat completed",
+        sessionId: session.id,
+        metadata: {
+          messageCount: session.history.length,
+          rounds: session.runtimeState.roundCounter,
+        },
+      });
       this.host.emitEvent("chat.completed", {
         session: summarizeSession(session),
         assistant: result.assistant,

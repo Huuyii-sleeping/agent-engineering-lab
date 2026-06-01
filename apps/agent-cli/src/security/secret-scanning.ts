@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
+import { recordAuditEvent } from "../audit/runtime.js";
 import { recordObservabilityEvent, type ExecutionContext } from "../observability/runtime.js";
 import { nowTimestampMs } from "../time.js";
 import { sanitizeAndRedactText, sanitizeAndRedactValue } from "./data-hygiene.js";
@@ -283,6 +284,15 @@ export async function reportSecretScan(input: {
     })),
   };
   await appendAudit("secret_scan_finding", payload);
+  await recordAuditEvent({
+    category: "security",
+    action: "secret_scan_finding",
+    outcome: input.action === "block" ? "blocked" : input.action === "warn" ? "failed" : "succeeded",
+    subject: input.toolName ?? input.targetPath ?? input.sourceKind,
+    summary: "secret scan finding",
+    traceId: input.traceId,
+    metadata: payload,
+  });
   const recorder = input.recordEvent ?? recordObservabilityEvent;
   await recorder("secret_scan", payload, {
     traceId: input.traceId,

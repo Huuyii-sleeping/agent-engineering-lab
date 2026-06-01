@@ -1,4 +1,5 @@
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import { recordAuditEvent, type AuditOutcome } from "../audit/runtime.js";
 import type { HookServiceLike, ObservabilityServiceLike } from "../services/index.js";
 import type { ToolServiceLike } from "../tools/service.js";
 import { renderCliEvent } from "../cli/ui.js";
@@ -13,6 +14,17 @@ import { makeHookBlockedOutput, runPreToolUseHooks } from "./query-tool-hooks.js
 import type { AgentRuntimeState } from "./query-types.js";
 import type { QueryFunctionToolCall, QueryToolExecutionResult } from "./query-tool-types.js";
 import { parseToolArgs } from "./tool-runtime.js";
+
+function auditOutcomeForTool(input: {
+  blocked: boolean;
+  ok: boolean;
+  errorCode: string | null;
+}): AuditOutcome {
+  if (input.blocked || input.errorCode?.startsWith("SECURITY_")) {
+    return "blocked";
+  }
+  return input.ok ? "completed" : "failed";
+}
 
 export async function executeQueryFunctionToolCall(input: {
   toolCall: QueryFunctionToolCall;
@@ -96,6 +108,25 @@ export async function executeQueryFunctionToolCall(input: {
     },
     { traceId: input.traceId, spanId },
   );
+  await recordAuditEvent({
+    category: "tool",
+    action: "execute",
+    outcome: auditOutcomeForTool({
+      blocked: preToolHooks.blocked,
+      ok: analyzed.ok,
+      errorCode: analyzed.errorCode,
+    }),
+    subject: toolName,
+    summary: analyzed.summary,
+    sessionId: input.runtimeState.sessionId,
+    traceId: input.traceId,
+    metadata: {
+      spanId,
+      preview,
+      durationMs,
+      errorCode: analyzed.errorCode,
+    },
+  });
   if (analyzed.errorCode?.startsWith("SECURITY_")) {
     await input.observabilityService.recordEvent(
       "security_blocked",

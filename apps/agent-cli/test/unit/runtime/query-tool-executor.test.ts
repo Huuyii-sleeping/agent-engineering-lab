@@ -1,6 +1,11 @@
 import type OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import { describe, expect, it, vi } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import * as process from "node:process";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { readAuditEvents } from "../../../src/audit/runtime.js";
 import type { HookServiceLike, ObservabilityServiceLike } from "../../../src/services/index.js";
 import { executeQueryFunctionToolCall } from "../../../src/runtime/query-tool-executor.js";
 import type { AgentRuntimeState } from "../../../src/runtime/query-types.js";
@@ -71,6 +76,26 @@ function createToolCall(name: string, argumentsJson: string) {
   } as NonNullable<OpenAI.Chat.Completions.ChatCompletionMessage["tool_calls"]>[number] & { type: "function" };
 }
 
+let tempDir = "";
+let previousCwd = "";
+
+async function withAuditWorkspace(): Promise<void> {
+  tempDir = await mkdtemp(path.join(tmpdir(), "query-tool-audit-test-"));
+  previousCwd = process.cwd();
+  process.chdir(tempDir);
+}
+
+afterEach(async () => {
+  if (previousCwd) {
+    process.chdir(previousCwd);
+    previousCwd = "";
+  }
+  if (tempDir) {
+    await rm(tempDir, { recursive: true, force: true });
+    tempDir = "";
+  }
+});
+
 describe("runtime/query-tool-executor", () => {
   it("executes a tool call, records telemetry, and appends tool output", async () => {
     const messages: ChatCompletionMessageParam[] = [];
@@ -135,6 +160,34 @@ describe("runtime/query-tool-executor", () => {
       },
       { traceId: "trace-security", spanId: "span-executor" },
     );
+  });
+
+  it("writes audit events for security-blocked tool execution", async () => {
+    await withAuditWorkspace();
+
+    await executeQueryFunctionToolCall({
+      toolCall: createToolCall("write_file", '{"path":"tmp/demo.txt","content":"token=sk-123456789012345678901234"}'),
+      messages: [],
+      runtimeState: createRuntimeState(),
+      traceId: "trace-security-audit",
+      toolService: createToolService('{"ok":false,"error":{"code":"SECURITY_APPROVAL_REQUIRED"}}'),
+      hookService: createHookService(),
+      observabilityService: createObservabilityService(),
+    });
+
+    const events = await readAuditEvents({ category: "tool" });
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      action: "execute",
+      outcome: "blocked",
+      subject: "write_file",
+      sessionId: "query-tool-executor-session",
+      traceId: "trace-security-audit",
+      metadata: {
+        errorCode: "SECURITY_APPROVAL_REQUIRED",
+      },
+    });
+    expect(JSON.stringify(events)).not.toContain("sk-123456789012345678901234");
   });
 
   it("blocks high-confidence secret tool output before it is appended to the session", async () => {

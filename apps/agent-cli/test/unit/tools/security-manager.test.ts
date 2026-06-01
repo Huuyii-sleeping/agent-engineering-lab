@@ -92,6 +92,33 @@ describe("tools/security-manager", () => {
     );
   });
 
+  it("also writes normalized local runtime audit events for approvals", async () => {
+    const manager = await makeManager();
+    const args = { path: "tmp/out.txt", content: "token=sk-12345678901234567890" };
+
+    const approval = JSON.parse(await manager.createApproval("write_file", args)) as {
+      request?: ApprovalRequest;
+    };
+    await manager.approve(approval.request?.request_id);
+    await manager.gate("write_file", args);
+
+    const rawAudit = await readFile(path.join(tempDir, ".audit", "events.jsonl"), "utf8");
+    const events = rawAudit
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { category?: string; action?: string; outcome?: string; metadata?: unknown });
+
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ category: "security", action: "approval_created", outcome: "created" }),
+        expect.objectContaining({ category: "security", action: "approval_decision", outcome: "succeeded" }),
+        expect.objectContaining({ category: "security", action: "approval_consumed", outcome: "consumed" }),
+        expect.objectContaining({ category: "security", action: "execution_allowed", outcome: "succeeded" }),
+      ]),
+    );
+    expect(rawAudit).not.toContain("sk-12345678901234567890");
+  });
+
   it("keeps legacy scope matching compatibility for older approval records", async () => {
     const manager = await makeManager();
     const args = { path: "tmp/legacy.txt", content: "secret=legacy-token" };
