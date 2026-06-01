@@ -2,6 +2,7 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as process from "node:process";
 import { sanitizeAndRedactText, sanitizeMcpIdentifier } from "../security/data-hygiene.js";
+import { buildArtifactMetadata } from "../security/local-retention.js";
 import {
   RUNTIME_CONFIG,
   getPrivacyConfig,
@@ -47,6 +48,7 @@ export type ObservabilityEvent = {
   schemaVersion: number;
   id: string;
   at: number;
+  expiresAt: number;
   trace_id: string | null;
   span_id: string | null;
   kind: string;
@@ -285,10 +287,12 @@ class ObservabilityRuntime {
     const traceId = context?.traceId ?? active?.traceId ?? null;
     const spanId = context?.spanId ?? active?.spanId ?? null;
     const mcpContext = kind.startsWith("mcp") || String(payload.toolName ?? "").startsWith("mcp__");
+    const at = nowTimestampMs();
     const event: ObservabilityEvent = {
       schemaVersion: 1,
       id: makeId("evt"),
-      at: nowTimestampMs(),
+      at,
+      expiresAt: buildArtifactMetadata("observability_event", at).expiresAt,
       trace_id: traceId,
       span_id: spanId,
       kind,
@@ -324,6 +328,7 @@ class ObservabilityRuntime {
           schemaVersion: Number(parsed.schemaVersion ?? 1) || 1,
           id: String(parsed.id ?? ""),
           at: parseTimestampMs(parsed.at, 0),
+          expiresAt: parseTimestampMs(parsed.expiresAt, 0),
           trace_id: typeof parsed.trace_id === "string" ? parsed.trace_id : null,
           span_id: typeof parsed.span_id === "string" ? parsed.span_id : null,
           kind: String(parsed.kind ?? ""),
