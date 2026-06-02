@@ -11,15 +11,29 @@ import {
   type SessionDetail,
   type SessionSummary,
 } from "./api";
+import { getNextTheme, readStoredTheme, writeStoredTheme, type ThemeMode } from "./theme";
 import "./styles.css";
 
 type LoadState = "idle" | "loading" | "sending";
 
+type NavItem = {
+  label: string;
+  icon: string;
+};
+
+const navItems: NavItem[] = [
+  { label: "AI 浏览器", icon: "browser" },
+  { label: "应用生成", icon: "code" },
+  { label: "AI 创作", icon: "pen" },
+  { label: "云盘", icon: "folder" },
+  { label: "更多", icon: "grid" },
+];
+
 function formatTime(value: number | null): string {
   if (!value) {
-    return "not recorded";
+    return "未记录";
   }
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat("zh-CN", {
     hour: "2-digit",
     minute: "2-digit",
     month: "short",
@@ -31,7 +45,7 @@ function messageText(message: ChatMessage): string {
   if (typeof message.content === "string" && message.content.trim()) {
     return message.content;
   }
-  return message.role === "assistant" ? "(empty assistant response)" : "(empty message)";
+  return message.role === "assistant" ? "（空回复）" : "（空消息）";
 }
 
 function roleLabel(role: ChatMessage["role"]): string {
@@ -39,26 +53,32 @@ function roleLabel(role: ChatMessage["role"]): string {
     return "Agent";
   }
   if (role === "user") {
-    return "You";
+    return "我";
   }
-  return role;
+  if (role === "tool") {
+    return "工具";
+  }
+  return "系统";
 }
 
-function sessionTitle(session: SessionSummary): string {
+function sessionTitle(session: SessionSummary | SessionDetail): string {
   return session.id.slice(0, 8);
 }
 
 function StatusPill({ health, loading }: { health: HealthStatus | null; loading: boolean }) {
   const connected = health?.connected === true;
   return (
-    <div className={`status-pill ${connected ? "status-pill--ok" : "status-pill--down"}`}>
+    <span className={`status-pill ${connected ? "status-pill--ok" : "status-pill--down"}`}>
       <span className="status-dot" />
-      <span>{loading ? "Checking" : connected ? "Connected" : "Disconnected"}</span>
-    </div>
+      {loading ? "连接中" : connected ? "已连接" : "未连接"}
+    </span>
   );
 }
 
 function App() {
+  const [theme, setTheme] = useState<ThemeMode>(() =>
+    typeof window === "undefined" ? "dark" : readStoredTheme(window.localStorage),
+  );
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -73,6 +93,7 @@ function App() {
   );
   const isBusy = loadState === "sending" || activeSummary?.busy === true;
   const canSend = Boolean(activeSessionId && draft.trim() && !isBusy);
+  const messages = activeSession?.messages ?? [];
 
   async function refreshHealth(): Promise<void> {
     try {
@@ -161,6 +182,18 @@ function App() {
     }
   }
 
+  function handleThemeToggle(): void {
+    setTheme((current) => {
+      const next = getNextTheme(current);
+      writeStoredTheme(window.localStorage, next);
+      return next;
+    });
+  }
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
+
   useEffect(() => {
     void bootstrap();
   }, []);
@@ -171,47 +204,36 @@ function App() {
     }
   }, [activeSessionId]);
 
-  const messages = activeSession?.messages ?? [];
-
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">Local Agent Console</p>
-          <h1>Chat</h1>
+      <aside className="sidebar" aria-label="本地控制台导航">
+        <div className="profile-row">
+          <div className="avatar" aria-hidden="true">
+            A
+          </div>
+          <strong>Agent</strong>
         </div>
-        <div className="topbar-actions">
-          <StatusPill health={health} loading={loadState === "loading" && !health} />
-          <button className="button button--secondary" type="button" onClick={() => void bootstrap()}>
-            Refresh
-          </button>
-        </div>
-      </header>
 
-      {error ? (
-        <div className="error-banner" role="alert">
-          <strong>Request failed</strong>
-          <span>{error}</span>
-        </div>
-      ) : null}
+        <nav className="primary-nav" aria-label="功能导航">
+          {navItems.map((item) => (
+            <button className="nav-item" key={item.label} type="button">
+              <span className={`nav-icon nav-icon--${item.icon}`} aria-hidden="true" />
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
 
-      <main className="workspace">
-        <aside className="session-pane" aria-label="Sessions">
-          <div className="pane-header">
-            <div>
-              <h2>Sessions</h2>
-              <span>{sessions.length} total</span>
-            </div>
-            <button className="button button--primary" type="button" onClick={() => void handleCreateSession()}>
-              New
+        <div className="history-section">
+          <div className="history-header">
+            <span>历史对话</span>
+            <button className="icon-button" type="button" onClick={() => void handleCreateSession()} aria-label="新建会话">
+              <span className="plus-icon" aria-hidden="true" />
             </button>
           </div>
+
           <div className="session-list">
             {sessions.length === 0 ? (
-              <div className="empty-block">
-                <strong>No sessions yet</strong>
-                <span>Create one to start chatting with the local agent.</span>
-              </div>
+              <div className="history-empty">暂无会话</div>
             ) : (
               sessions.map((session) => (
                 <button
@@ -220,134 +242,134 @@ function App() {
                   type="button"
                   onClick={() => setActiveSessionId(session.id)}
                 >
-                  <span className="session-name">{sessionTitle(session)}</span>
-                  <span>{session.messageCount} messages</span>
-                  <small>{session.busy ? "busy" : formatTime(session.updatedAt)}</small>
+                  <span className="session-dot" aria-hidden="true" />
+                  <span className="session-copy">
+                    <strong>Agent 会话 {sessionTitle(session)}</strong>
+                    <small>
+                      {session.messageCount} 条消息 · {session.busy ? "运行中" : formatTime(session.updatedAt)}
+                    </small>
+                  </span>
                 </button>
               ))
             )}
           </div>
-        </aside>
+        </div>
 
-        <section className="chat-pane" aria-label="Chat transcript">
-          <div className="chat-header">
-            <div>
-              <h2>{activeSession ? `Session ${sessionTitle(activeSession)}` : "No session selected"}</h2>
-              <span>{activeSession ? `${activeSession.messageCount} messages` : "Create or select a session"}</span>
-            </div>
-            {isBusy ? <span className="busy-badge">Running</span> : null}
+        <div className="sidebar-footer">
+          <span>BFF: {health?.bffStatus ?? "unknown"}</span>
+          <StatusPill health={health} loading={loadState === "loading" && !health} />
+        </div>
+      </aside>
+
+      <main className={`chat-shell ${error ? "chat-shell--has-error" : ""}`}>
+        <header className="conversation-header">
+          <button className="icon-button header-icon" type="button" aria-label="切换侧栏显示">
+            <span className="panel-icon" aria-hidden="true" />
+          </button>
+          <div className="conversation-title">
+            <h1>{activeSession ? `Agent 会话 ${sessionTitle(activeSession)}` : "Agent Chat Console"}</h1>
+            <span>{activeSession ? `${activeSession.messageCount} 条消息` : "本地开发控制台"}</span>
           </div>
+          <div className="header-actions">
+            <button className="icon-button" type="button" onClick={() => void bootstrap()} aria-label="刷新连接与会话">
+              <span className="refresh-icon" aria-hidden="true" />
+            </button>
+            <button
+              className="theme-toggle"
+              type="button"
+              onClick={handleThemeToggle}
+              aria-label={theme === "dark" ? "切换到浅色主题" : "切换到深色主题"}
+            >
+              <span aria-hidden="true">{theme === "dark" ? "Light" : "Dark"}</span>
+            </button>
+          </div>
+        </header>
 
-          <div className="messages">
-            {!activeSessionId ? (
-              <div className="empty-chat">
-                <h3>Start a local agent session</h3>
-                <p>Create a session, then send a message through the BFF-backed chat workflow.</p>
-                <button className="button button--primary" type="button" onClick={() => void handleCreateSession()}>
-                  Create session
-                </button>
-              </div>
-            ) : messages.length === 0 ? (
-              <div className="empty-chat">
-                <h3>Session is ready</h3>
-                <p>Ask the agent to inspect code, run tools, or continue your local development task.</p>
-              </div>
-            ) : (
-              messages.map((message, index) => (
-                <article className={`message message--${message.role}`} key={`${message.role}-${index}`}>
+        {error ? (
+          <div className="error-toast" role="alert">
+            <strong>请求失败</strong>
+            <span>{error}</span>
+            <button type="button" onClick={() => void bootstrap()}>
+              重试
+            </button>
+          </div>
+        ) : null}
+
+        <section className="transcript" aria-label="聊天内容">
+          {!activeSessionId ? (
+            <div className="starter-panel">
+              <h2>开始一个本地 Agent 会话</h2>
+              <p>创建会话后，可以在这里继续 agent 的核心工作流。</p>
+              <button className="primary-action" type="button" onClick={() => void handleCreateSession()}>
+                新建会话
+              </button>
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="starter-panel">
+              <h2>会话已就绪</h2>
+              <p>输入下一条消息，BFF 会把请求转发到本地 agent service。</p>
+            </div>
+          ) : (
+            messages.map((message, index) => (
+              <article className={`message-row message-row--${message.role}`} key={`${message.role}-${index}`}>
+                {message.role !== "user" ? (
+                  <div className="message-avatar" aria-hidden="true">
+                    A
+                  </div>
+                ) : null}
+                <div className="message-content">
                   <div className="message-meta">
                     <strong>{roleLabel(message.role)}</strong>
                     {message.name ? <span>{message.name}</span> : null}
                   </div>
                   <p>{messageText(message)}</p>
-                </article>
-              ))
-            )}
-            {loadState === "sending" ? (
-              <article className="message message--assistant message--pending">
+                </div>
+              </article>
+            ))
+          )}
+
+          {loadState === "sending" ? (
+            <article className="message-row message-row--assistant">
+              <div className="message-avatar" aria-hidden="true">
+                A
+              </div>
+              <div className="message-content message-content--pending">
                 <div className="message-meta">
                   <strong>Agent</strong>
-                  <span>working</span>
+                  <span>运行中</span>
                 </div>
-                <p>Waiting for the agent response...</p>
-              </article>
-            ) : null}
-          </div>
-
-          <form className="composer" onSubmit={(event) => void handleSend(event)}>
-            <label htmlFor="message-input">Message</label>
-            <textarea
-              id="message-input"
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder={activeSessionId ? "Send a message to the local agent..." : "Create a session first..."}
-              disabled={!activeSessionId || isBusy}
-              rows={3}
-            />
-            <div className="composer-actions">
-              <span>{activeSessionId ? "BFF route: POST /api/sessions/:id/messages" : "No active session"}</span>
-              <button className="button button--primary" type="submit" disabled={!canSend}>
-                {loadState === "sending" ? "Sending" : "Send"}
-              </button>
-            </div>
-          </form>
+                <p>正在等待本地 agent 返回结果...</p>
+              </div>
+            </article>
+          ) : null}
         </section>
 
-        <aside className="detail-pane" aria-label="Session details">
-          <section>
-            <h2>Runtime</h2>
-            <dl className="detail-list">
-              <div>
-                <dt>BFF</dt>
-                <dd>{health?.bffStatus ?? "unknown"}</dd>
-              </div>
-              <div>
-                <dt>Agent</dt>
-                <dd>{health?.agentStatus ?? "unknown"}</dd>
-              </div>
-              <div>
-                <dt>Transport</dt>
-                <dd>HTTP via BFF</dd>
-              </div>
-            </dl>
-          </section>
-
-          <section>
-            <h2>Current Session</h2>
-            {activeSession ? (
-              <dl className="detail-list">
-                <div>
-                  <dt>ID</dt>
-                  <dd className="mono">{activeSession.id}</dd>
-                </div>
-                <div>
-                  <dt>Updated</dt>
-                  <dd>{formatTime(activeSession.updatedAt)}</dd>
-                </div>
-                <div>
-                  <dt>Rounds</dt>
-                  <dd>{activeSession.rounds ?? "n/a"}</dd>
-                </div>
-                <div>
-                  <dt>Status</dt>
-                  <dd>{activeSession.busy ? "busy" : "idle"}</dd>
-                </div>
-              </dl>
-            ) : (
-              <p className="muted">No session selected.</p>
-            )}
-          </section>
-
-          <section>
-            <h2>Scope</h2>
-            <ul className="scope-list">
-              <li>Local developer console</li>
-              <li>Chat-first workflow</li>
-              <li>Web calls BFF only</li>
-              <li>Tool approval UI later</li>
-            </ul>
-          </section>
-        </aside>
+        <form className="composer" onSubmit={(event) => void handleSend(event)}>
+          <label className="sr-only" htmlFor="message-input">
+            消息
+          </label>
+          <textarea
+            id="message-input"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder={activeSessionId ? "发送消息或输入 / 选择技能" : "先新建一个会话..."}
+            disabled={!activeSessionId || isBusy}
+            rows={3}
+          />
+          <div className="composer-toolbar">
+            <div className="quick-actions" aria-label="快捷操作">
+              <span>快速</span>
+              <span>帮我写作</span>
+              <span>图像生成</span>
+              <span>编程</span>
+              <span>更多</span>
+            </div>
+            <button className="send-button" type="submit" disabled={!canSend} aria-label="发送消息">
+              <span className="send-icon" aria-hidden="true" />
+              <span>{loadState === "sending" ? "发送中" : "发送"}</span>
+            </button>
+          </div>
+        </form>
       </main>
     </div>
   );
