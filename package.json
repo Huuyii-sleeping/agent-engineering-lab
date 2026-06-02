@@ -11,6 +11,9 @@
     "dev:agent": "pnpm --filter agent-cli dev",
     "build:agent": "pnpm --filter agent-cli build",
     "start:agent": "pnpm --filter agent-cli start",
+    "dev:bff": "pnpm --filter agent-bff dev",
+    "build:bff": "pnpm --filter agent-bff build",
+    "test:bff": "pnpm --filter agent-bff test",
     "dev:web": "pnpm --filter agent-web-console dev",
     "build:web": "pnpm --filter agent-web-console build"
   }

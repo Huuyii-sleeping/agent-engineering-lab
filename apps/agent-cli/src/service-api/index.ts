@@ -1,7 +1,8 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { recordAuditEvent } from "../audit/runtime.js";
+import { readAuditEvents, recordAuditEvent, type AuditCategory } from "../audit/runtime.js";
 import type { AgentAppRuntimeDeps } from "../bootstrap/app-runtime.js";
 import { AgentHost } from "../host/agent-host.js";
+import { readTrackedWorkspaceFindings } from "../security/secret-scanning.js";
 import type { AgentHostEvent } from "../host/events.js";
 import type { AgentHostEventSubscriber } from "../host/events.js";
 import { createAgentBridgeManifest, type AgentBridgeState } from "./bridge.js";
@@ -90,6 +91,21 @@ function resolveReplayCursor(url: URL | null, req: IncomingMessage): ParsedEvent
     return { ok: false, source: "Last-Event-ID", raw: headerValue ?? "" };
   }
   return { ok: true, value: parsedHeader ?? parsedQuery };
+}
+
+function parseAuditCategory(raw: string | null): AuditCategory | undefined {
+  if (raw === "session" || raw === "tool" || raw === "security" || raw === "retention") {
+    return raw;
+  }
+  return undefined;
+}
+
+function parseLimit(raw: string | null): number | undefined {
+  if (!raw) {
+    return undefined;
+  }
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 function writeSseEvent(
@@ -341,6 +357,25 @@ export function createAgentHttpServer(service: AgentService): Server {
       }
       if (method === "GET" && pathname === "/tools") {
         json(res, 200, { ok: true, tools: await service.toolsMetadata() });
+        return;
+      }
+      if (method === "GET" && pathname === "/audit/events") {
+        json(res, 200, {
+          ok: true,
+          events: await readAuditEvents({
+            limit: parseLimit(url?.searchParams.get("limit") ?? null),
+            sessionId: url?.searchParams.get("session_id") ?? undefined,
+            traceId: url?.searchParams.get("trace_id") ?? undefined,
+            category: parseAuditCategory(url?.searchParams.get("category") ?? null),
+          }),
+        });
+        return;
+      }
+      if (method === "GET" && pathname === "/security/findings") {
+        json(res, 200, {
+          ok: true,
+          findings: await readTrackedWorkspaceFindings(),
+        });
         return;
       }
       if (method === "POST" && pathname === "/tools/call") {
