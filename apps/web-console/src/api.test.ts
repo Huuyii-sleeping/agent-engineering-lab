@@ -1,0 +1,97 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  createSession,
+  fetchHealth,
+  fetchSession,
+  fetchSessions,
+  sendSessionMessage,
+} from "./api";
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("web-console api client", () => {
+  it("calls BFF health, session, and message endpoints", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(String(input), "http://localhost");
+      const method = init?.method ?? "GET";
+
+      if (method === "GET" && url.pathname === "/api/health") {
+        return jsonResponse({ ok: true, bff: { status: "ok" }, agent: { ok: true } });
+      }
+      if (method === "GET" && url.pathname === "/api/sessions") {
+        return jsonResponse({ ok: true, sessions: [{ id: "s1", busy: false, messageCount: 1 }] });
+      }
+      if (method === "POST" && url.pathname === "/api/sessions") {
+        return jsonResponse({ ok: true, session: { id: "s2", busy: false, messageCount: 0 } }, 201);
+      }
+      if (method === "GET" && url.pathname === "/api/sessions/s1") {
+        return jsonResponse({
+          ok: true,
+          session: {
+            id: "s1",
+            busy: false,
+            messageCount: 2,
+            messages: [
+              { role: "user", content: "hello" },
+              { role: "assistant", content: "world" },
+            ],
+          },
+        });
+      }
+      if (method === "POST" && url.pathname === "/api/sessions/s1/messages") {
+        return jsonResponse({
+          ok: true,
+          assistant: "reply",
+          session: { id: "s1", busy: false, messageCount: 3 },
+        });
+      }
+
+      return jsonResponse({ ok: false, error: { code: "NOT_FOUND", message: url.pathname } }, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchHealth()).resolves.toMatchObject({ ok: true, connected: true });
+    await expect(fetchSessions()).resolves.toMatchObject([{ id: "s1", messageCount: 1 }]);
+    await expect(createSession()).resolves.toMatchObject({ id: "s2" });
+    await expect(fetchSession("s1")).resolves.toMatchObject({
+      id: "s1",
+      messages: [
+        { role: "user", content: "hello" },
+        { role: "assistant", content: "world" },
+      ],
+    });
+    await expect(sendSessionMessage("s1", "continue")).resolves.toMatchObject({
+      ok: true,
+      assistant: "reply",
+    });
+
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/sessions/s1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "continue" }),
+    });
+  });
+
+  it("normalizes BFF errors into thrown Error objects", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async () =>
+        jsonResponse(
+          { ok: false, error: { code: "AGENT_UPSTREAM_UNAVAILABLE", message: "agent down" } },
+          502,
+        ),
+      ),
+    );
+
+    await expect(fetchSessions()).rejects.toThrow("agent down");
+  });
+});
