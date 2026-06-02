@@ -11,48 +11,56 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --app-bg: #202020;
-  --sidebar-bg: #242424;
-  --chat-bg: #202020;
-  --panel-bg: #2b2b2b;
-  --panel-bg-strong: #303030;
-  --surface-hover: #343434;
-  --surface-active: #3a3a3a;
-  --composer-bg: #27292b;
-  --text-main: #f4f4f2;
-  --text-soft: #c9c7c2;
-  --text-muted: #8f8d88;
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.15);
-  --accent: #22c55e;
-  --accent-strong: #16a34a;
-  --accent-soft: rgba(34, 197, 94, 0.15);
-  --danger: #ff8a80;
-  --danger-bg: rgba(255, 82, 82, 0.14);
-  --shadow-panel: 0 22px 80px rgba(0, 0, 0, 0.28);
+  --app-bg: #1d1c1a;
+  --sidebar-bg: #24231f;
+  --chat-bg: #1d1c1a;
+  --panel-bg: #2c2a26;
+  --panel-bg-strong: #34312c;
+  --surface-hover: #302e29;
+  --surface-active: #39362f;
+  --composer-bg: #292824;
+  --text-main: #f6f3ec;
+  --text-soft: #d3cec2;
+  --text-muted: #9a9385;
+  --border-subtle: rgba(246, 243, 236, 0.08);
+  --border-strong: rgba(246, 243, 236, 0.16);
+  --accent: #20c66f;
+  --accent-strong: #12a85a;
+  --accent-soft: rgba(32, 198, 111, 0.16);
+  --danger: #ff9b8f;
+  --danger-bg: rgba(255, 115, 101, 0.15);
+  --ring: rgba(32, 198, 111, 0.34);
+  --shadow-panel: 0 22px 80px rgba(0, 0, 0, 0.34);
+  --shadow-subtle: 0 10px 30px rgba(0, 0, 0, 0.22);
+  --scrollbar-thumb: rgba(246, 243, 236, 0.28);
+  --scrollbar-track: rgba(246, 243, 236, 0.04);
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --app-bg: #f4f1eb;
-  --sidebar-bg: #ebe6dc;
-  --chat-bg: #f8f6f1;
-  --panel-bg: #ffffff;
-  --panel-bg-strong: #f0ece3;
-  --surface-hover: #e9e4da;
-  --surface-active: #e1dbcE;
+  --app-bg: #f7f4ee;
+  --sidebar-bg: #ece6d9;
+  --chat-bg: #fbf8f1;
+  --panel-bg: #fffdf8;
+  --panel-bg-strong: #f0eadf;
+  --surface-hover: #e8dfd0;
+  --surface-active: #ded4c3;
   --composer-bg: #ffffff;
-  --text-main: #24211d;
-  --text-soft: #514c45;
-  --text-muted: #81796c;
-  --border-subtle: rgba(36, 33, 29, 0.09);
-  --border-strong: rgba(36, 33, 29, 0.16);
-  --accent: #0f9f55;
-  --accent-strong: #087c40;
-  --accent-soft: rgba(15, 159, 85, 0.13);
+  --text-main: #211f1a;
+  --text-soft: #4e473d;
+  --text-muted: #817667;
+  --border-subtle: rgba(33, 31, 26, 0.1);
+  --border-strong: rgba(33, 31, 26, 0.17);
+  --accent: #0c9b53;
+  --accent-strong: #087741;
+  --accent-soft: rgba(12, 155, 83, 0.13);
   --danger: #b42318;
   --danger-bg: rgba(180, 35, 24, 0.1);
-  --shadow-panel: 0 24px 70px rgba(96, 78, 42, 0.14);
+  --ring: rgba(12, 155, 83, 0.28);
+  --shadow-panel: 0 24px 70px rgba(99, 79, 42, 0.16);
+  --shadow-subtle: 0 10px 28px rgba(99, 79, 42, 0.1);
+  --scrollbar-thumb: rgba(33, 31, 26, 0.24);
+  --scrollbar-track: rgba(33, 31, 26, 0.05);
 }
 
 * {
@@ -72,6 +80,8 @@ body {
   height: 100vh;
   background: var(--app-bg);
   color: var(--text-main);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 button,
@@ -123,6 +133,7 @@ p {
   border-right: 1px solid var(--border-subtle);
   background: var(--sidebar-bg);
   padding: 18px 10px 14px;
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.02);
 }
 
 .profile-row {
@@ -143,7 +154,8 @@ p {
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: linear-gradient(135deg, #2dd4bf, #22c55e);
+  background: linear-gradient(135deg, #60ead4, #20c66f);
+  box-shadow: 0 8px 24px rgba(32, 198, 111, 0.28);
   color: #082018;
   font-size: 13px;
   font-weight: 800;
@@ -178,6 +190,9 @@ p {
   color: var(--text-soft);
   font-size: 14px;
   text-align: left;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
 }
 
 .nav-item:hover,
@@ -185,6 +200,7 @@ p {
 .icon-button:hover,
 .theme-toggle:hover {
   background: var(--surface-hover);
+  color: var(--text-main);
 }
 
 .nav-icon,
@@ -266,6 +282,7 @@ p {
   padding: 0 8px;
   color: var(--text-muted);
   font-size: 13px;
+  font-weight: 650;
 }
 
 .icon-button {
@@ -277,6 +294,9 @@ p {
   border-radius: 10px;
   background: transparent;
   color: var(--text-soft);
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
 }
 
 .plus-icon::before,
@@ -303,6 +323,24 @@ p {
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 0 0 8px;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-width: thin;
+}
+
+.session-list::-webkit-scrollbar,
+.transcript::-webkit-scrollbar {
+  width: 8px;
+}
+
+.session-list::-webkit-scrollbar-track,
+.transcript::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+.session-list::-webkit-scrollbar-thumb,
+.transcript::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--scrollbar-thumb);
 }
 
 .session-item {
@@ -312,14 +350,21 @@ p {
   grid-template-columns: 20px minmax(0, 1fr);
   align-items: center;
   gap: 8px;
+  border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
   padding: 6px 8px;
   text-align: left;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease;
 }
 
 .session-item--active {
+  border-color: var(--border-subtle);
   background: var(--surface-active);
+  box-shadow: var(--shadow-subtle);
 }
 
 .session-dot {
@@ -327,6 +372,12 @@ p {
   height: 18px;
   border: 1px solid var(--border-strong);
   border-radius: 999px;
+}
+
+.session-item--active .session-dot {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
 }
 
 .session-copy {
@@ -383,6 +434,7 @@ p {
   align-items: center;
   gap: 12px;
   border-bottom: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--chat-bg) 86%, var(--panel-bg));
   padding: 12px 24px;
 }
 
@@ -445,11 +497,17 @@ p {
   align-items: center;
   justify-content: center;
   border-radius: 999px;
+  border: 1px solid var(--border-subtle);
   background: var(--panel-bg);
   color: var(--text-soft);
   padding: 0 14px;
   font-size: 13px;
   font-weight: 700;
+  box-shadow: var(--shadow-subtle);
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
 }
 
 .status-pill {
@@ -464,11 +522,13 @@ p {
 }
 
 .status-pill--ok {
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
   background: var(--accent-soft);
   color: var(--accent);
 }
 
 .status-pill--down {
+  border: 1px solid color-mix(in srgb, var(--danger) 32%, transparent);
   background: var(--danger-bg);
   color: var(--danger);
 }
@@ -523,6 +583,8 @@ p {
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 46px max(28px, calc((100vw - 248px - 860px) / 2)) 150px;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-width: thin;
 }
 
 .starter-panel {
@@ -536,6 +598,7 @@ p {
   font-size: 26px;
   font-weight: 800;
   letter-spacing: 0;
+  text-wrap: balance;
 }
 
 .starter-panel p {
@@ -553,6 +616,11 @@ p {
   color: #ffffff;
   padding: 0 18px;
   font-weight: 800;
+  box-shadow: 0 14px 36px color-mix(in srgb, var(--accent) 28%, transparent);
+  transition:
+    background-color 140ms ease,
+    box-shadow 140ms ease,
+    opacity 140ms ease;
 }
 
 .primary-action:hover {
@@ -573,8 +641,10 @@ p {
 .message-row--user .message-content {
   max-width: min(620px, 78%);
   border-radius: 14px;
+  border: 1px solid var(--border-subtle);
   background: var(--panel-bg-strong);
   padding: 12px 16px;
+  box-shadow: var(--shadow-subtle);
 }
 
 .message-row--assistant .message-content,
@@ -620,6 +690,17 @@ p {
   background: var(--composer-bg);
   box-shadow: var(--shadow-panel);
   padding: 12px 14px 12px 16px;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease;
+}
+
+.composer:focus-within {
+  border-color: var(--ring);
+  box-shadow:
+    0 0 0 4px var(--accent-soft),
+    var(--shadow-panel);
 }
 
 .composer textarea {
@@ -659,7 +740,19 @@ p {
 }
 
 .quick-actions span {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 4px;
   white-space: nowrap;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.quick-actions span:hover {
+  color: var(--text-main);
 }
 
 .send-button {
@@ -674,6 +767,11 @@ p {
   color: #ffffff;
   padding: 0 14px;
   font-weight: 800;
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--accent) 26%, transparent);
+  transition:
+    background-color 140ms ease,
+    box-shadow 140ms ease,
+    opacity 140ms ease;
 }
 
 .send-button:hover:not(:disabled) {
@@ -711,7 +809,7 @@ p {
 .send-button:focus-visible,
 .error-toast button:focus-visible,
 .composer textarea:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 
