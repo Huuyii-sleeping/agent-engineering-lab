@@ -62,12 +62,14 @@
 html,
 body,
 #root {
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 body {
   margin: 0;
-  min-height: 100vh;
+  height: 100vh;
   background: var(--app-bg);
   color: var(--text-main);
 }
@@ -105,15 +107,19 @@ p {
 
 .app-shell {
   display: grid;
-  min-height: 100dvh;
+  height: 100dvh;
+  min-height: 0;
   grid-template-columns: 248px minmax(0, 1fr);
+  overflow: hidden;
   background: var(--app-bg);
 }
 
 .sidebar {
   display: grid;
   min-width: 0;
+  min-height: 0;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
+  overflow: hidden;
   border-right: 1px solid var(--border-subtle);
   background: var(--sidebar-bg);
   padding: 18px 10px 14px;
@@ -248,6 +254,7 @@ p {
   display: grid;
   min-height: 0;
   grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
   gap: 8px;
 }
 
@@ -292,7 +299,9 @@ p {
   align-content: start;
   gap: 3px;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 0 0 8px;
 }
 
@@ -360,8 +369,10 @@ p {
   position: relative;
   display: grid;
   min-width: 0;
-  min-height: 100dvh;
+  min-height: 0;
+  height: 100dvh;
   grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
   background: var(--chat-bg);
 }
 
@@ -508,7 +519,9 @@ p {
   min-height: 0;
   flex-direction: column;
   gap: 26px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 46px max(28px, calc((100vw - 248px - 860px) / 2)) 150px;
 }
 
