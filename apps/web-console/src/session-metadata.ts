@@ -9,8 +9,13 @@ export type SessionMetadata = {
 export type SessionMetadataMap = Record<string, SessionMetadata>;
 
 type MetadataStorage = Pick<Storage, "getItem" | "setItem">;
+type TitleMessage = {
+  role?: string;
+  content?: string | null;
+};
 
 const STORAGE_KEY = "agent-web-console-session-metadata-v2";
+const SUMMARY_TITLE_LIMIT = 24;
 
 function asMetadataMap(value: unknown): SessionMetadataMap {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -66,9 +71,38 @@ export function writeSessionMetadata(
   storage?.setItem(STORAGE_KEY, JSON.stringify(metadata));
 }
 
-/** Returns the display title for a session, honoring local rename metadata. */
-export function sessionDisplayTitle(input: { id: string }, metadata: SessionMetadataMap): string {
-  return metadata[input.id]?.title ?? `会话 ${input.id.slice(0, 8)}`;
+function cleanSummaryTitle(value: string): string {
+  return value
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^[\s>*-]+/gm, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Builds a compact local title from the first user message in a transcript. */
+export function summarizeSessionTitle(messages: TitleMessage[]): string | null {
+  const firstUserMessage = messages.find((message) => message.role === "user" && message.content?.trim());
+  if (!firstUserMessage?.content) {
+    return null;
+  }
+  const cleaned = cleanSummaryTitle(firstUserMessage.content);
+  if (!cleaned) {
+    return null;
+  }
+  return cleaned.length > SUMMARY_TITLE_LIMIT ? `${cleaned.slice(0, SUMMARY_TITLE_LIMIT)}...` : cleaned;
+}
+
+/** Returns the display title for a session, honoring local rename metadata and generated summaries. */
+export function sessionDisplayTitle(
+  input: { id: string; messageCount?: number },
+  metadata: SessionMetadataMap,
+  summaryTitle?: string | null,
+): string {
+  return metadata[input.id]?.title ?? summaryTitle ?? (input.messageCount === 0 ? "新对话" : `会话 ${input.id.slice(0, 8)}`);
 }
 
 /** Returns true when a session is hidden from the local Web history list. */

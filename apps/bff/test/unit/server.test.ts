@@ -220,4 +220,32 @@ describe("bff server", () => {
       search: "?since_id=7",
     });
   });
+
+  it("streams chat message responses as SSE events", async () => {
+    const agent = await startMockAgent();
+    const bffBaseUrl = await startBff(agent.baseUrl);
+
+    const response = await fetch(`${bffBaseUrl}/api/sessions/s1/messages/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "continue" }),
+    });
+    const text = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+    expect(text).toContain("event: message.start");
+    expect(text).toContain("event: message.delta");
+    expect(text).toContain("event: message.done");
+    expect(text).toContain("\"delta\":\"reply\"");
+    expect(agent.seen.at(-1)).toMatchObject({
+      method: "POST",
+      pathname: "/chat",
+      body: {
+        session_id: "s1",
+        message: "continue",
+        include_scheduled_notifications: false,
+      },
+    });
+  });
 });

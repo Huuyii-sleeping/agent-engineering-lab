@@ -103,6 +103,23 @@ function writeProxyResult(res: ServerResponse, result: ProxyResult): void {
   json(res, result.status, result.body);
 }
 
+function writeSseEvent(res: ServerResponse, event: string, data: unknown): void {
+  res.write(`event: ${event}\n`);
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+function assistantChunks(value: string): string[] {
+  const normalized = value || "";
+  if (!normalized) {
+    return [""];
+  }
+  const chunks: string[] = [];
+  for (let index = 0; index < normalized.length; index += 8) {
+    chunks.push(normalized.slice(index, index + 8));
+  }
+  return chunks;
+}
+
 function sessionIdFromPath(pathname: string, suffix = ""): string | null {
   const prefix = "/api/sessions/";
   if (!pathname.startsWith(prefix)) {
@@ -218,6 +235,55 @@ async function proxyEventStream(input: {
   }
 }
 
+async function proxyChatMessageStream(input: {
+  res: ServerResponse;
+  fetchImpl: typeof fetch;
+  agentBaseUrl: string;
+  sessionId: string;
+  body: JsonObject;
+}): Promise<void> {
+  applyCommonHeaders(input.res);
+  input.res.statusCode = 200;
+  input.res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  input.res.setHeader("Connection", "keep-alive");
+  input.res.flushHeaders?.();
+  writeSseEvent(input.res, "message.start", { session_id: input.sessionId });
+
+  const result = await proxyJson({
+    fetchImpl: input.fetchImpl,
+    agentBaseUrl: input.agentBaseUrl,
+    method: "POST",
+    pathname: "/chat",
+    body: {
+      session_id: input.sessionId,
+      message: input.body.message,
+      include_scheduled_notifications: input.body.include_scheduled_notifications === true,
+    },
+  });
+
+  const body = getObject(result.body);
+  if (!result.ok || body.ok === false) {
+    const error = getObject(body.error);
+    writeSseEvent(input.res, "message.error", {
+      code: String(error.code ?? "CHAT_STREAM_FAILED"),
+      message: String(error.message ?? "chat stream failed"),
+    });
+    input.res.end();
+    return;
+  }
+
+  const assistant = typeof body.assistant === "string" ? body.assistant : "";
+  for (const chunk of assistantChunks(assistant)) {
+    writeSseEvent(input.res, "message.delta", { delta: chunk });
+  }
+  writeSseEvent(input.res, "message.done", {
+    ok: true,
+    assistant,
+    session: body.session,
+  });
+  input.res.end();
+}
+
 /** Create the Web BFF HTTP server that forwards Web-facing APIs to agent service. */
 export function createBffHttpServer(options: BffServerOptions): Server {
   const fetchImpl = options.fetchImpl ?? fetch;
@@ -313,6 +379,19 @@ export function createBffHttpServer(options: BffServerOptions): Server {
             },
           }),
         );
+        return;
+      }
+
+      const streamMessageSessionId = sessionIdFromPath(pathname, "/messages/stream");
+      if (method === "POST" && streamMessageSessionId) {
+        const body = await parseBody(req);
+        await proxyChatMessageStream({
+          res,
+          fetchImpl,
+          agentBaseUrl,
+          sessionId: streamMessageSessionId,
+          body,
+        });
         return;
       }
 

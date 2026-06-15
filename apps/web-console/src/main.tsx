@@ -40,7 +40,7 @@ import {
   fetchHealth,
   fetchSession,
   fetchSessions,
-  sendSessionMessage,
+  sendSessionMessageStream,
   type ChatMessage,
   type HealthStatus,
   type SessionDetail,
@@ -52,6 +52,7 @@ import {
   readSessionMetadata,
   renameSession,
   sessionDisplayTitle,
+  summarizeSessionTitle,
   toggleSessionPinned,
   writeSessionMetadata,
   type SessionMetadataMap,
@@ -76,6 +77,8 @@ type SidebarSetting = {
   label: string;
   icon: LucideIcon;
 };
+
+type SessionSummaryTitleMap = Record<string, string>;
 
 const shortcutHints = ["Ctrl K", "Ctrl Enter", "Shift Enter", "Ctrl C"];
 
@@ -174,6 +177,9 @@ function streamLabel(state: StreamState): string {
 
 function MessageBody({ message }: { message: ChatMessage }) {
   const content = messageText(message);
+  if (message.role === "assistant" && message.name === "streaming" && !message.content?.trim()) {
+    return <p className="typing-placeholder">正在等待本地 agent 返回结果...</p>;
+  }
   if (message.role === "user") {
     return <p>{content}</p>;
   }
@@ -222,6 +228,7 @@ function App() {
   const [streamState, setStreamState] = useState<StreamState>("connecting");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [openSessionMenuId, setOpenSessionMenuId] = useState<string | null>(null);
+  const [sessionSummaryTitles, setSessionSummaryTitles] = useState<SessionSummaryTitleMap>({});
   const [sessionMetadata, setSessionMetadata] = useState<SessionMetadataMap>(() =>
     typeof window === "undefined" ? {} : readSessionMetadata(window.localStorage),
   );
@@ -240,7 +247,14 @@ function App() {
   const isBusy = loadState === "sending" || activeSummary?.busy === true;
   const canSend = Boolean(activeSessionId && draft.trim() && !isBusy);
   const messages = activeSession?.messages ?? [];
+  const activeSessionSummaryTitle = activeSession ? summarizeSessionTitle(activeSession.messages) : null;
   const conversationRuntimeState = loadState === "loading" ? "loading" : isBusy ? "running" : activeSessionId ? "completed" : "idle";
+
+  function sessionTitleFor(session: SessionSummary | SessionDetail): string {
+    const generatedTitle =
+      activeSession?.id === session.id ? activeSessionSummaryTitle : sessionSummaryTitles[session.id] ?? null;
+    return sessionDisplayTitle(session, sessionMetadata, generatedTitle);
+  }
 
   async function refreshHealth(): Promise<void> {
     try {
@@ -264,7 +278,12 @@ function App() {
       setLoadState("loading");
     }
     try {
-      setActiveSession(await fetchSession(sessionId));
+      const detail = await fetchSession(sessionId);
+      const generatedTitle = summarizeSessionTitle(detail.messages);
+      setActiveSession(detail);
+      if (generatedTitle) {
+        setSessionSummaryTitles((current) => ({ ...current, [detail.id]: generatedTitle }));
+      }
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -314,15 +333,49 @@ function App() {
       session
         ? {
             ...session,
-            messages: [...session.messages, { role: "user", content: message }],
+            messages: [...session.messages, { role: "user", content: message }, { role: "assistant", content: "", name: "streaming" }],
           }
         : session,
     );
     try {
-      const result = await sendSessionMessage(activeSessionId, message);
-      if (!result.ok) {
-        throw new Error(result.error?.message ?? "message request failed");
-      }
+      await sendSessionMessageStream(activeSessionId, message, (event) => {
+        if (event.type === "message.delta") {
+          const delta = event.data.delta ?? "";
+          if (!delta) {
+            return;
+          }
+          setActiveSession((session) =>
+            session
+              ? {
+                  ...session,
+                  messages: session.messages.map((item, index) =>
+                    index === session.messages.length - 1 && item.role === "assistant"
+                      ? { role: "assistant", content: `${item.content ?? ""}${delta}` }
+                      : item,
+                  ),
+                }
+              : session,
+          );
+        }
+        if (event.type === "message.done" && event.data.assistant) {
+          const assistant = event.data.assistant;
+          setActiveSession((session) =>
+            session
+              ? {
+                  ...session,
+                  messages: session.messages.map((item, index) =>
+                    index === session.messages.length - 1 && item.role === "assistant"
+                      ? { role: "assistant", content: assistant }
+                      : item,
+                  ),
+                }
+              : session,
+          );
+        }
+        if (event.type === "message.error") {
+          throw new Error(event.data.message ?? "message stream failed");
+        }
+      });
       await Promise.all([refreshSessions(), loadSession(activeSessionId)]);
       setError(null);
     } catch (err) {
@@ -366,7 +419,7 @@ function App() {
 
   function handleRenameSession(session: SessionSummary): void {
     setOpenSessionMenuId(null);
-    const currentTitle = sessionDisplayTitle(session, sessionMetadata);
+    const currentTitle = sessionTitleFor(session);
     const nextTitle = window.prompt("重命名会话", currentTitle);
     if (nextTitle === null) {
       return;
@@ -429,6 +482,43 @@ function App() {
   }, [activeSessionId]);
 
   useEffect(() => {
+    const sessionsNeedingTitle = sessions.filter(
+      (session) =>
+        session.messageCount > 0 &&
+        !sessionMetadata[session.id]?.title &&
+        !sessionSummaryTitles[session.id] &&
+        activeSession?.id !== session.id,
+    );
+    if (sessionsNeedingTitle.length === 0) {
+      return undefined;
+    }
+    let cancelled = false;
+    void Promise.all(
+      sessionsNeedingTitle.map(async (session) => {
+        try {
+          const detail = await fetchSession(session.id);
+          const title = summarizeSessionTitle(detail.messages);
+          return title ? [session.id, title] : null;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((entries) => {
+      if (cancelled) {
+        return;
+      }
+      const nextEntries = entries.filter((entry): entry is [string, string] => Boolean(entry));
+      if (nextEntries.length === 0) {
+        return;
+      }
+      setSessionSummaryTitles((current) => ({ ...current, ...Object.fromEntries(nextEntries) }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSession?.id, sessionMetadata, sessionSummaryTitles, sessions]);
+
+  useEffect(() => {
     function handleGlobalKeyDown(event: KeyboardEvent): void {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
@@ -484,7 +574,7 @@ function App() {
                     <span className="session-copy">
                       <strong>
                         {sessionMetadata[session.id]?.pinned ? "置顶 " : ""}
-                        {sessionDisplayTitle(session, sessionMetadata)}
+                        {sessionTitleFor(session)}
                       </strong>
                       <small>
                         {session.messageCount} 条消息 · {session.busy ? "运行中" : formatTime(session.updatedAt)}
@@ -558,7 +648,7 @@ function App() {
             )}
           </button>
           <div className="conversation-title">
-            <h1>{activeSession ? sessionDisplayTitle(activeSession, sessionMetadata) : "AI Studio"}</h1>
+            <h1>{activeSession ? sessionTitleFor(activeSession) : "AI Studio"}</h1>
             <span className={`conversation-state conversation-state--${conversationRuntimeState}`}>
               {conversationRuntimeState}
             </span>
@@ -610,7 +700,7 @@ function App() {
                   <div className="message-stack">
                     <div className="message-meta">
                       <strong>{roleLabel(message.role)}</strong>
-                      {message.name ? <span>{message.name}</span> : null}
+                      {message.name && message.name !== "streaming" ? <span>{message.name}</span> : null}
                     </div>
                     <div className="message-content">
                       <MessageBody message={message} />
@@ -622,20 +712,6 @@ function App() {
             })
           )}
 
-          {loadState === "sending" ? (
-            <article className="message-row message-row--assistant">
-              <MessageAvatar role="assistant" />
-              <div className="message-stack">
-                <div className="message-meta">
-                  <strong>AI Studio</strong>
-                  <span>运行中</span>
-                </div>
-                <div className="message-content message-content--pending">
-                  <p>正在等待本地 agent 返回结果...</p>
-                </div>
-              </div>
-            </article>
-          ) : null}
         </section>
 
         <form className="composer" onSubmit={(event) => void handleSend(event)}>

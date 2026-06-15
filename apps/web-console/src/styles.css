@@ -824,6 +824,10 @@ p {
   color: var(--text-muted);
 }
 
+.typing-placeholder {
+  color: var(--text-muted) !important;
+}
+
 .message-meta {
   display: flex;
   align-items: center;

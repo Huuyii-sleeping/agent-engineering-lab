@@ -6,6 +6,7 @@ import {
   fetchSession,
   fetchSessions,
   sendSessionMessage,
+  sendSessionMessageStream,
 } from "./api";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -141,5 +142,41 @@ describe("web-console api client", () => {
     );
 
     await expect(fetchSessions()).rejects.toThrow("agent down");
+  });
+
+  it("parses message-level SSE events from streamed sends", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      new Response(
+        [
+          "event: message.start\n",
+          "data: {\"session_id\":\"s1\"}\n\n",
+          "event: message.delta\n",
+          "data: {\"delta\":\"hel\"}\n\n",
+          "event: message.delta\n",
+          "data: {\"delta\":\"lo\"}\n\n",
+          "event: message.done\n",
+          "data: {\"ok\":true,\"assistant\":\"hello\",\"session\":{\"id\":\"s1\",\"messageCount\":2}}\n\n",
+        ].join(""),
+        { status: 200, headers: { "Content-Type": "text/event-stream" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const events: string[] = [];
+
+    await sendSessionMessageStream("s1", "continue", (event) => {
+      if (event.type === "message.delta") {
+        events.push(event.data.delta ?? "");
+      }
+      if (event.type === "message.done") {
+        events.push(event.data.assistant ?? "");
+      }
+    });
+
+    expect(events).toEqual(["hel", "lo", "hello"]);
+    expect(fetchMock).toHaveBeenCalledWith("/api/sessions/s1/messages/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+      body: JSON.stringify({ message: "continue" }),
+    });
   });
 });

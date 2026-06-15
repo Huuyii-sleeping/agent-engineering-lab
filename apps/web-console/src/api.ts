@@ -43,6 +43,12 @@ export type SendMessageResult = {
   };
 };
 
+export type StreamMessageEvent =
+  | { type: "message.start"; data: { session_id?: string } }
+  | { type: "message.delta"; data: { delta?: string } }
+  | { type: "message.done"; data: SendMessageResult }
+  | { type: "message.error"; data: { code?: string; message?: string } };
+
 /** Agent bridge events delivered by the BFF SSE endpoint. */
 export type AgentStreamEvent = {
   type: string;
@@ -135,6 +141,96 @@ function parseEventData(raw: string): unknown {
   }
 }
 
+function parseStreamMessageEvent(type: string, data: unknown): StreamMessageEvent | null {
+  const record = asObject(data);
+  if (type === "message.start") {
+    return { type, data: { session_id: asString(record.session_id) || undefined } };
+  }
+  if (type === "message.delta") {
+    return { type, data: { delta: asString(record.delta) } };
+  }
+  if (type === "message.done") {
+    return {
+      type,
+      data: {
+        ok: record.ok !== false,
+        assistant: typeof record.assistant === "string" ? record.assistant : undefined,
+        session: record.session ? normalizeSessionSummary(record.session) : undefined,
+      },
+    };
+  }
+  if (type === "message.error") {
+    return {
+      type,
+      data: {
+        code: asString(record.code) || "CHAT_STREAM_FAILED",
+        message: asString(record.message) || "chat stream failed",
+      },
+    };
+  }
+  return null;
+}
+
+function parseSseBlock(raw: string): { type: string; data: unknown } | null {
+  const lines = raw.split(/\r?\n/);
+  let type = "message";
+  const dataLines: string[] = [];
+  for (const line of lines) {
+    if (line.startsWith("event:")) {
+      type = line.slice("event:".length).trim();
+    }
+    if (line.startsWith("data:")) {
+      dataLines.push(line.slice("data:".length).trimStart());
+    }
+  }
+  if (dataLines.length === 0) {
+    return null;
+  }
+  return { type, data: parseEventData(dataLines.join("\n")) };
+}
+
+async function readSseResponse(
+  response: Response,
+  onEvent: (event: StreamMessageEvent) => void,
+): Promise<void> {
+  if (!response.body) {
+    throw new Error("stream response body is not available");
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffered = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      buffered += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+      const blocks = buffered.split(/\n\n/);
+      buffered = blocks.pop() ?? "";
+      for (const block of blocks) {
+        const parsed = parseSseBlock(block.trim());
+        if (!parsed) {
+          continue;
+        }
+        const event = parseStreamMessageEvent(parsed.type, parsed.data);
+        if (event) {
+          onEvent(event);
+        }
+      }
+      if (done) {
+        break;
+      }
+    }
+    const tail = parseSseBlock(buffered.trim());
+    if (tail) {
+      const event = parseStreamMessageEvent(tail.type, tail.data);
+      if (event) {
+        onEvent(event);
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 /** Opens the BFF SSE stream and forwards known agent events to the caller. */
 export function createAgentEventStream(input: {
   onOpen?: () => void;
@@ -205,4 +301,22 @@ export async function sendSessionMessage(sessionId: string, message: string): Pr
     assistant: typeof response.assistant === "string" ? response.assistant : undefined,
     session: response.session ? normalizeSessionSummary(response.session) : undefined,
   };
+}
+
+/** Sends a user message and consumes message-level SSE events from the BFF. */
+export async function sendSessionMessageStream(
+  sessionId: string,
+  message: string,
+  onEvent: (event: StreamMessageEvent) => void,
+): Promise<void> {
+  const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/messages/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+    body: JSON.stringify({ message }),
+  });
+  if (!response.ok) {
+    const raw = await response.text();
+    throw new Error(raw.trim() || `${response.status} ${response.statusText}`);
+  }
+  await readSseResponse(response, onEvent);
 }
