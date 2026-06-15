@@ -27,6 +27,7 @@ export type RequestQueryModelOptions = {
   dynamicSystemMessages: string[];
   modelPolicyService: ModelPolicyServiceLike;
   observabilityService: ObservabilityServiceLike;
+  onAssistantDelta?: (delta: string) => void | Promise<void>;
 };
 
 export type QueryModelCompletionResult = {

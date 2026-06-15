@@ -6,10 +6,11 @@ Web 发送消息目前使用普通 POST，等待 agent 完整返回后一次性�
 
 In Scope:
 - BFF 新增消息级 SSE endpoint。
+- Agent service 新增消息级 SSE endpoint。
+- Agent runtime 支持模型 token delta 回调。
 - Web API 新增 fetch-based SSE parser，用于 POST 后读取流式事件。
 - Web 发送消息时先插入 assistant 占位，再按 SSE delta 更新内容。
 - 完成后刷新 session list 和 active session。
 
 Out of Scope:
-- 不修改底层模型调用为 token 级 streaming。
 - 不改变 agent session 存储格式。

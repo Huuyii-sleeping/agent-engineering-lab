@@ -6,8 +6,11 @@
 2. BFF SSE 事件类型为 `message.delta`、`message.done`、`message.error`。
    - 理由：前端只关心增量文本、完成状态和错误状态，事件语义稳定。
 
-3. 当前 BFF 从现有 `/chat` JSON response 切分 assistant 文本为 delta。
-   - 理由：现有 agent runtime 暂不暴露 token delta，本轮先落地 SSE 传输与前端流式渲染；后续可把 BFF 上游替换为真正 token stream。
+3. agent service 暴露 `/chat/stream`，BFF 只负责透传上游 SSE。
+   - 理由：BFF 如果等待 `/chat` 完整 JSON 再切分文本，用户仍会感知为非流式；delta 必须从模型请求层一路传到 Web。
 
-4. 前端保留最终刷新。
+4. agent runtime 在提供 `onAssistantDelta` 时使用模型 stream 请求。
+   - 理由：Web 对话区需要随着模型输出实时追加内容，而不是在模型完成后一次性刷新。
+
+5. 前端保留最终刷新。
    - 理由：SSE 增量用于即时视觉反馈，最终仍以 agent service 持久化 session 为准。

@@ -1,10 +1,13 @@
 ## 1. 消息级 SSE
 
 - [x] 1.1 BFF 新增消息级 SSE endpoint。
-- [x] 1.2 Web API 新增 POST SSE parser。
-- [x] 1.3 Web 发送消息时按 SSE delta 更新 assistant 占位消息。
-- [x] 1.4 保留最终刷新 session 的一致性。
-- [x] 1.5 新增 BFF 和 Web API 单元测试。
+- [x] 1.2 Agent service 新增 `/chat/stream` SSE endpoint。
+- [x] 1.3 Agent runtime 支持模型 stream delta 回调。
+- [x] 1.4 BFF 透传 agent `/chat/stream`，不再对完整 assistant 文本做切片。
+- [x] 1.5 Web API 新增 POST SSE parser。
+- [x] 1.6 Web 发送消息时按 SSE delta 更新 assistant 占位消息。
+- [x] 1.7 保留最终刷新 session 的一致性。
+- [x] 1.8 新增 Agent、BFF 和 Web API 单元测试。
 
 ## 2. 验证与收口
 

@@ -24,6 +24,7 @@ type RunUserQueryOptions = {
   runtimeState: AgentRuntimeState;
   prompt: string;
   includeScheduledNotifications?: boolean;
+  onAssistantDelta?: (delta: string) => void | Promise<void>;
 };
 
 export async function runUserQuery(opts: RunUserQueryOptions): Promise<QueryRuntimeResult> {
@@ -45,6 +46,7 @@ export async function runUserQuery(opts: RunUserQueryOptions): Promise<QueryRunt
       messages: opts.history,
       runtimeState: opts.runtimeState,
       includeScheduledNotifications: opts.includeScheduledNotifications,
+      onAssistantDelta: opts.onAssistantDelta,
     }),
   );
 

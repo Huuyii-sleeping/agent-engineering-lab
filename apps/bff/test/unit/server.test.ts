@@ -78,6 +78,20 @@ async function startMockAgent(): Promise<{ baseUrl: string; seen: SeenRequest[] 
       json(res, 200, { ok: true, session: { id: "s1" }, assistant: "reply" });
       return;
     }
+    if (method === "POST" && url.pathname === "/chat/stream") {
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+      res.write("event: message.start\n");
+      res.write("data: {\"session_id\":\"s1\"}\n\n");
+      res.write("event: message.delta\n");
+      res.write("data: {\"delta\":\"re\"}\n\n");
+      res.write("event: message.delta\n");
+      res.write("data: {\"delta\":\"ply\"}\n\n");
+      res.write("event: message.done\n");
+      res.write("data: {\"ok\":true,\"assistant\":\"reply\",\"session\":{\"id\":\"s1\"}}\n\n");
+      res.end();
+      return;
+    }
     if (method === "GET" && url.pathname === "/audit/events") {
       json(res, 200, { ok: true, events: [{ id: "aud1" }], query: url.searchParams.get("limit") });
       return;
@@ -237,10 +251,11 @@ describe("bff server", () => {
     expect(text).toContain("event: message.start");
     expect(text).toContain("event: message.delta");
     expect(text).toContain("event: message.done");
-    expect(text).toContain("\"delta\":\"reply\"");
+    expect(text).toContain("\"delta\":\"re\"");
+    expect(text).toContain("\"delta\":\"ply\"");
     expect(agent.seen.at(-1)).toMatchObject({
       method: "POST",
-      pathname: "/chat",
+      pathname: "/chat/stream",
       body: {
         session_id: "s1",
         message: "continue",

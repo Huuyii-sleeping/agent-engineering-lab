@@ -84,6 +84,7 @@ export class QueryEngine {
           dynamicSystemMessages: preparedRound.dynamicSystemMessages,
           modelPolicyService: this.runtimeServices.modelPolicyService,
           observabilityService: this.runtimeServices.observabilityService,
+          onAssistantDelta: opts.onAssistantDelta,
         });
         if (!modelResult.ok) {
           stopReason = modelResult.stopReason;

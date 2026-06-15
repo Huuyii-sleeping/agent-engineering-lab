@@ -106,6 +106,7 @@ export async function requestQueryModel(opts: RequestQueryModelOptions): Promise
         model: selectedModel,
         messages: requestMessages,
         tools: opts.tools,
+        onAssistantDelta: opts.onAssistantDelta,
       });
       if (!completion) {
         await opts.observabilityService.recordEvent(

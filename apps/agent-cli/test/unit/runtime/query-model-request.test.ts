@@ -142,4 +142,36 @@ describe("runtime/query-model-request", () => {
 
     expect(requests[0]).toMatchObject({ max_tokens: 8_000 });
   });
+
+  it("streams assistant deltas when a delta callback is provided", async () => {
+    const requests: unknown[] = [];
+    const client = createClient(
+      (async function* () {
+        yield { choices: [{ delta: { role: "assistant" }, finish_reason: null }] };
+        yield { choices: [{ delta: { content: "hel" }, finish_reason: null }] };
+        yield { choices: [{ delta: { content: "lo" }, finish_reason: "stop" }] };
+      })(),
+      requests,
+    );
+    const deltas: string[] = [];
+
+    await expect(
+      runQueryModelCompletionRequest({
+        client,
+        model: "test-model",
+        messages: [{ role: "user", content: "hello" }],
+        tools: [] as ChatCompletionTool[],
+        onAssistantDelta: (delta) => {
+          deltas.push(delta);
+        },
+      }),
+    ).resolves.toMatchObject({
+      content: "hello",
+      finishReason: "stop",
+      toolCallCount: 0,
+    });
+
+    expect(deltas).toEqual(["hel", "lo"]);
+    expect(requests[0]).toMatchObject({ stream: true });
+  });
 });

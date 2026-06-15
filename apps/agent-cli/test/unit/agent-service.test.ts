@@ -35,11 +35,16 @@ async function withAuditWorkspace(): Promise<void> {
 
 function createLoopRunner() {
   return {
-    run: async ({ messages, runtimeState }: {
+    run: async ({ messages, runtimeState, onAssistantDelta }: {
       messages: ChatCompletionMessageParam[];
       runtimeState: AgentRuntimeState;
+      onAssistantDelta?: (delta: string) => void | Promise<void>;
     }): Promise<void> => {
       const latestUser = [...messages].reverse().find((item) => item.role === "user");
+      await onAssistantDelta?.("reply:");
+      await onAssistantDelta?.(runtimeState.sessionId);
+      await onAssistantDelta?.(":");
+      await onAssistantDelta?.(typeof latestUser?.content === "string" ? latestUser.content : "");
       messages.push({
         role: "assistant",
         content: `reply:${runtimeState.sessionId}:${typeof latestUser?.content === "string" ? latestUser.content : ""}`,
@@ -260,6 +265,73 @@ function openEventStream(
     },
     close(): void {
       req.emit("close");
+    },
+  };
+}
+
+function openPostEventStream(
+  server: ReturnType<typeof createAgentHttpServer>,
+  url: string,
+  body: unknown,
+) {
+  let sent = false;
+  let output = "";
+  let consumed = 0;
+  const req = new Readable({
+    read() {
+      if (sent) {
+        return;
+      }
+      sent = true;
+      this.push(JSON.stringify(body));
+      this.push(null);
+    },
+  }) as Readable & {
+    method?: string;
+    url?: string;
+    headers?: Record<string, string>;
+  };
+  req.method = "POST";
+  req.url = url;
+  req.headers = { "content-type": "application/json" };
+  const res = new Writable({
+    write(chunk, _encoding, callback) {
+      output += Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk);
+      callback();
+    },
+  }) as Writable & {
+    statusCode: number;
+    setHeader(name: string, value: string): void;
+    flushHeaders(): void;
+  };
+  res.statusCode = 200;
+  res.setHeader = () => {};
+  res.flushHeaders = () => {};
+
+  const finished = new Promise<void>((resolve, reject) => {
+    res.on("finish", resolve);
+    res.on("error", reject);
+  });
+  server.emit("request", req, res);
+
+  return {
+    statusCode(): number {
+      return res.statusCode;
+    },
+    async wait(): Promise<void> {
+      await finished;
+    },
+    readEvents(): Array<{ id: number | null; event: string; data: unknown }> {
+      const events: Array<{ id: number | null; event: string; data: unknown }> = [];
+      while (true) {
+        const boundary = output.indexOf("\n\n", consumed);
+        if (boundary === -1) {
+          return events;
+        }
+        const block = output.slice(consumed, boundary);
+        consumed = boundary + 2;
+        events.push(parseSseBlock(block));
+      }
     },
   };
 }
@@ -727,5 +799,38 @@ describe("agent service", () => {
       ok: true,
       output: "tool:bash:{\"command\":\"pwd\"}",
     });
+  });
+
+  it("streams chat deltas from the query runner over /chat/stream", async () => {
+    const service = new AgentService({
+      client: {} as OpenAI,
+      model: "fake-model",
+      promptSource: PROMPT_SOURCE,
+      toolService: createToolService(),
+      deliveryService: createDeliveryService(),
+      hookService: createHookService(),
+      memoryService: createMemoryService(),
+      modelPolicyService: createModelPolicyService(),
+      observabilityService: createObservabilityService(),
+      queryEngine: createLoopRunner(),
+    });
+    const session = service.createSession();
+    const server = createAgentHttpServer(service);
+
+    const stream = openPostEventStream(server, "/chat/stream", {
+      session_id: session.id,
+      message: "delta",
+    });
+    await stream.wait();
+
+    expect(stream.statusCode()).toBe(200);
+    expect(stream.readEvents()).toMatchObject([
+      { event: "message.start", data: { session_id: session.id } },
+      { event: "message.delta", data: { delta: "reply:" } },
+      { event: "message.delta", data: { delta: session.id } },
+      { event: "message.delta", data: { delta: ":" } },
+      { event: "message.delta", data: { delta: "delta" } },
+      { event: "message.done", data: { ok: true, assistant: `reply:${session.id}:delta` } },
+    ]);
   });
 });

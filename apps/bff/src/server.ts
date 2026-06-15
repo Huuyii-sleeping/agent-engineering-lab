@@ -108,18 +108,6 @@ function writeSseEvent(res: ServerResponse, event: string, data: unknown): void 
   res.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
-function assistantChunks(value: string): string[] {
-  const normalized = value || "";
-  if (!normalized) {
-    return [""];
-  }
-  const chunks: string[] = [];
-  for (let index = 0; index < normalized.length; index += 8) {
-    chunks.push(normalized.slice(index, index + 8));
-  }
-  return chunks;
-}
-
 function sessionIdFromPath(pathname: string, suffix = ""): string | null {
   const prefix = "/api/sessions/";
   if (!pathname.startsWith(prefix)) {
@@ -242,46 +230,67 @@ async function proxyChatMessageStream(input: {
   sessionId: string;
   body: JsonObject;
 }): Promise<void> {
-  applyCommonHeaders(input.res);
-  input.res.statusCode = 200;
-  input.res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-  input.res.setHeader("Connection", "keep-alive");
-  input.res.flushHeaders?.();
-  writeSseEvent(input.res, "message.start", { session_id: input.sessionId });
-
-  const result = await proxyJson({
-    fetchImpl: input.fetchImpl,
-    agentBaseUrl: input.agentBaseUrl,
-    method: "POST",
-    pathname: "/chat",
-    body: {
-      session_id: input.sessionId,
-      message: input.body.message,
-      include_scheduled_notifications: input.body.include_scheduled_notifications === true,
-    },
-  });
-
-  const body = getObject(result.body);
-  if (!result.ok || body.ok === false) {
-    const error = getObject(body.error);
-    writeSseEvent(input.res, "message.error", {
-      code: String(error.code ?? "CHAT_STREAM_FAILED"),
-      message: String(error.message ?? "chat stream failed"),
-    });
-    input.res.end();
-    return;
+  try {
+    const upstream = await input.fetchImpl(
+      upstreamUrl(input.agentBaseUrl, "/chat/stream"),
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+        },
+        body: JSON.stringify({
+          session_id: input.sessionId,
+          message: input.body.message,
+          include_scheduled_notifications:
+            input.body.include_scheduled_notifications === true,
+        }),
+      },
+    );
+    applyCommonHeaders(input.res);
+    input.res.statusCode = upstream.status;
+    input.res.setHeader(
+      "Content-Type",
+      upstream.headers.get("content-type") ??
+        "text/event-stream; charset=utf-8",
+    );
+    input.res.setHeader("Connection", "keep-alive");
+    input.res.flushHeaders?.();
+    if (!upstream.body) {
+      input.res.end();
+      return;
+    }
+    const reader = upstream.body.getReader();
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+        input.res.write(Buffer.from(value));
+      }
+    } finally {
+      reader.releaseLock();
+      input.res.end();
+    }
+  } catch (error) {
+    if (input.res.headersSent) {
+      writeSseEvent(input.res, "message.error", {
+        code: "AGENT_UPSTREAM_UNAVAILABLE",
+        message: error instanceof Error ? error.message : String(error),
+      });
+      input.res.end();
+      return;
+    }
+    json(
+      input.res,
+      502,
+      errorPayload(
+        "AGENT_UPSTREAM_UNAVAILABLE",
+        error instanceof Error ? error.message : String(error),
+      ),
+    );
   }
-
-  const assistant = typeof body.assistant === "string" ? body.assistant : "";
-  for (const chunk of assistantChunks(assistant)) {
-    writeSseEvent(input.res, "message.delta", { delta: chunk });
-  }
-  writeSseEvent(input.res, "message.done", {
-    ok: true,
-    assistant,
-    session: body.session,
-  });
-  input.res.end();
 }
 
 /** Create the Web BFF HTTP server that forwards Web-facing APIs to agent service. */

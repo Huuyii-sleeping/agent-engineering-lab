@@ -22,6 +22,10 @@ type ChatRequest = {
   include_scheduled_notifications?: boolean;
 };
 
+type ChatCallbacks = {
+  onAssistantDelta?: (delta: string) => void | Promise<void>;
+};
+
 export type AgentServiceEvent = AgentHostEvent;
 
 export type AgentServiceEventSubscriber = AgentHostEventSubscriber;
@@ -209,7 +213,7 @@ export class AgentService {
     return this.host.subscribeEvents(subscriber);
   }
 
-  async chat(input: ChatRequest): Promise<Record<string, unknown>> {
+  async chat(input: ChatRequest, callbacks: ChatCallbacks = {}): Promise<Record<string, unknown>> {
     const prompt = String(input.message ?? "").trim();
     if (!prompt) {
       return {
@@ -282,6 +286,7 @@ export class AgentService {
         runtimeState: session.runtimeState,
         prompt,
         includeScheduledNotifications: input.include_scheduled_notifications === true,
+        onAssistantDelta: callbacks.onAssistantDelta,
       });
       if (!result.ok) {
         await recordAuditEvent({
@@ -469,6 +474,48 @@ export function createAgentHttpServer(service: AgentService): Server {
         const body = await parseBody<ChatRequest>(req);
         const result = await service.chat(body);
         json(res, result.ok === false ? 400 : 200, result);
+        return;
+      }
+      if (method === "POST" && pathname === "/chat/stream") {
+        const body = await parseBody<ChatRequest>(req);
+        res.statusCode = 200;
+        res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+        res.setHeader("Cache-Control", "no-store");
+        res.setHeader("Connection", "keep-alive");
+        res.flushHeaders?.();
+        writeSseEvent(res, {
+          event: "message.start",
+          data: { session_id: body.session_id },
+        });
+        const result = await service.chat(body, {
+          onAssistantDelta: async (delta) => {
+            if (!res.write(`event: message.delta\ndata: ${JSON.stringify({ delta })}\n\n`)) {
+              await new Promise<void>((resolve) => res.once("drain", resolve));
+            }
+          },
+        });
+        if (result.ok === false) {
+          const error = result.error as { code?: unknown; message?: unknown } | undefined;
+          writeSseEvent(res, {
+            event: "message.error",
+            data: {
+              code: String(error?.code ?? "CHAT_STREAM_FAILED"),
+              message: String(error?.message ?? "chat stream failed"),
+              session: result.session,
+            },
+          });
+          res.end();
+          return;
+        }
+        writeSseEvent(res, {
+          event: "message.done",
+          data: {
+            ok: true,
+            assistant: result.assistant,
+            session: result.session,
+          },
+        });
+        res.end();
         return;
       }
 

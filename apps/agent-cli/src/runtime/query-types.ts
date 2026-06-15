@@ -39,6 +39,7 @@ export type QueryEngineRunInput = {
   messages: ChatCompletionMessageParam[];
   runtimeState: AgentRuntimeState;
   includeScheduledNotifications?: boolean;
+  onAssistantDelta?: (delta: string) => void | Promise<void>;
 };
 
 export type QueryEngineLike = {
