@@ -1,5 +1,37 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
+import {
+  AppWindow,
+  Bot,
+  BrainCircuit,
+  CircleDot,
+  Code2,
+  Folder,
+  Grid2X2,
+  Image,
+  Moon,
+  MoreHorizontal,
+  MoreVertical,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Pencil,
+  PenTool,
+  Pin,
+  Plus,
+  Radio,
+  RefreshCw,
+  SearchCheck,
+  SendHorizontal,
+  Settings,
+  SlidersHorizontal,
+  Sparkles,
+  Sun,
+  Trash2,
+  UserRound,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
+import rehypeHighlight from "rehype-highlight";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -14,6 +46,16 @@ import {
   type SessionDetail,
   type SessionSummary,
 } from "./api";
+import {
+  hideSession,
+  isSessionHidden,
+  readSessionMetadata,
+  renameSession,
+  sessionDisplayTitle,
+  toggleSessionPinned,
+  writeSessionMetadata,
+  type SessionMetadataMap,
+} from "./session-metadata";
 import { getNextTheme, readStoredTheme, writeStoredTheme, type ThemeMode } from "./theme";
 import "./styles.css";
 
@@ -22,28 +64,39 @@ type StreamState = "connecting" | "connected" | "disconnected";
 
 type NavItem = {
   label: string;
-  icon: string;
+  icon: LucideIcon;
 };
 
 type QuickAction = {
   label: string;
-  icon: string;
+  icon: LucideIcon;
+};
+
+type SidebarSetting = {
+  label: string;
+  icon: LucideIcon;
 };
 
 const navItems: NavItem[] = [
-  { label: "AI 浏览器", icon: "browser" },
-  { label: "应用生成", icon: "code" },
-  { label: "AI 创作", icon: "pen" },
-  { label: "云盘", icon: "folder" },
-  { label: "更多", icon: "grid" },
+  { label: "AI 浏览器", icon: SearchCheck },
+  { label: "应用生成", icon: AppWindow },
+  { label: "AI 创作", icon: PenTool },
+  { label: "云盘", icon: Folder },
+  { label: "更多", icon: Grid2X2 },
 ];
 
 const quickActions: QuickAction[] = [
-  { label: "快速", icon: "spark" },
-  { label: "帮我写作", icon: "write" },
-  { label: "图像生成", icon: "image" },
-  { label: "编程", icon: "code" },
-  { label: "更多", icon: "more" },
+  { label: "快速", icon: Sparkles },
+  { label: "帮我写作", icon: PenTool },
+  { label: "图像生成", icon: Image },
+  { label: "编程", icon: Code2 },
+  { label: "更多", icon: MoreHorizontal },
+];
+
+const sidebarSettings: SidebarSetting[] = [
+  { label: "个人设置", icon: UserRound },
+  { label: "偏好设置", icon: SlidersHorizontal },
+  { label: "系统设置", icon: Settings },
 ];
 
 const markdownComponents: Components = {
@@ -77,7 +130,7 @@ function messageText(message: ChatMessage): string {
 
 function roleLabel(role: ChatMessage["role"]): string {
   if (role === "assistant") {
-    return "Agent";
+    return "AI Studio";
   }
   if (role === "user") {
     return "我";
@@ -88,16 +141,23 @@ function roleLabel(role: ChatMessage["role"]): string {
   return "系统";
 }
 
-function sessionTitle(session: SessionSummary | SessionDetail): string {
-  return session.id.slice(0, 8);
-}
-
 function sessionTimestamp(session: SessionSummary): number {
   return session.updatedAt ?? session.createdAt ?? 0;
 }
 
 function sortSessionsByRecent(sessions: SessionSummary[]): SessionSummary[] {
   return [...sessions].sort((left, right) => sessionTimestamp(right) - sessionTimestamp(left));
+}
+
+function sortSessionsForSidebar(sessions: SessionSummary[], metadata: SessionMetadataMap): SessionSummary[] {
+  return [...sessions].sort((left, right) => {
+    const leftPinned = metadata[left.id]?.pinned === true;
+    const rightPinned = metadata[right.id]?.pinned === true;
+    if (leftPinned !== rightPinned) {
+      return leftPinned ? -1 : 1;
+    }
+    return sessionTimestamp(right) - sessionTimestamp(left);
+  });
 }
 
 function streamLabel(state: StreamState): string {
@@ -110,16 +170,6 @@ function streamLabel(state: StreamState): string {
   return "SSE 未连接";
 }
 
-function StatusPill({ health, loading }: { health: HealthStatus | null; loading: boolean }) {
-  const connected = health?.connected === true;
-  return (
-    <span className={`status-pill ${connected ? "status-pill--ok" : "status-pill--down"}`}>
-      <span className="status-dot" />
-      {loading ? "连接中" : connected ? "已连接" : "未连接"}
-    </span>
-  );
-}
-
 function MessageBody({ message }: { message: ChatMessage }) {
   const content = messageText(message);
   if (message.role === "user") {
@@ -127,9 +177,18 @@ function MessageBody({ message }: { message: ChatMessage }) {
   }
   return (
     <div className="markdown-body">
-      <ReactMarkdown components={markdownComponents} remarkPlugins={[remarkGfm]}>
+      <ReactMarkdown components={markdownComponents} rehypePlugins={[rehypeHighlight]} remarkPlugins={[remarkGfm]}>
         {content}
       </ReactMarkdown>
+    </div>
+  );
+}
+
+function MessageAvatar({ role }: { role: ChatMessage["role"] }) {
+  const Icon = role === "user" ? UserRound : role === "tool" ? Wrench : role === "system" ? CircleDot : Bot;
+  return (
+    <div className={`message-avatar message-avatar--${role}`} aria-hidden="true">
+      <Icon size={16} strokeWidth={2.2} />
     </div>
   );
 }
@@ -147,12 +206,20 @@ function App() {
   const [streamState, setStreamState] = useState<StreamState>("connecting");
   const [lastStreamEvent, setLastStreamEvent] = useState<string | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [openSessionMenuId, setOpenSessionMenuId] = useState<string | null>(null);
+  const [sessionMetadata, setSessionMetadata] = useState<SessionMetadataMap>(() =>
+    typeof window === "undefined" ? {} : readSessionMetadata(window.localStorage),
+  );
   const [error, setError] = useState<string | null>(null);
   const activeSessionIdRef = useRef<string | null>(null);
 
   const activeSummary = useMemo(
     () => sessions.find((session) => session.id === activeSessionId) ?? null,
     [activeSessionId, sessions],
+  );
+  const visibleSessions = useMemo(
+    () => sortSessionsForSidebar(sessions, sessionMetadata).filter((session) => !isSessionHidden(session.id, sessionMetadata)),
+    [sessionMetadata, sessions],
   );
   const isBusy = loadState === "sending" || activeSummary?.busy === true;
   const canSend = Boolean(activeSessionId && draft.trim() && !isBusy);
@@ -257,6 +324,39 @@ function App() {
     });
   }
 
+  function updateMetadata(updater: (current: SessionMetadataMap) => SessionMetadataMap): void {
+    setSessionMetadata((current) => {
+      const next = updater(current);
+      writeSessionMetadata(window.localStorage, next);
+      return next;
+    });
+  }
+
+  function handleRenameSession(session: SessionSummary): void {
+    setOpenSessionMenuId(null);
+    const currentTitle = sessionDisplayTitle(session, sessionMetadata);
+    const nextTitle = window.prompt("重命名会话", currentTitle);
+    if (nextTitle === null) {
+      return;
+    }
+    updateMetadata((current) => renameSession(current, session.id, nextTitle));
+  }
+
+  function handleTogglePinned(session: SessionSummary): void {
+    setOpenSessionMenuId(null);
+    updateMetadata((current) => toggleSessionPinned(current, session.id));
+  }
+
+  function handleHideSession(session: SessionSummary): void {
+    setOpenSessionMenuId(null);
+    updateMetadata((current) => hideSession(current, session.id));
+    if (activeSessionId === session.id) {
+      const nextSession = visibleSessions.find((item) => item.id !== session.id) ?? null;
+      setActiveSessionId(nextSession?.id ?? null);
+      setActiveSession(null);
+    }
+  }
+
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
@@ -301,56 +401,102 @@ function App() {
     <div className={`app-shell ${isSidebarCollapsed ? "app-shell--sidebar-collapsed" : ""}`}>
       <aside className="sidebar" aria-hidden={isSidebarCollapsed} aria-label="本地控制台导航">
         <div className="profile-row">
-          <div className="avatar" aria-hidden="true">
-            A
+          <div className="brand-mark" aria-hidden="true">
+            <BrainCircuit size={21} strokeWidth={2.4} />
           </div>
-          <strong>Agent</strong>
+          <strong>AI Studio</strong>
         </div>
 
         <nav className="primary-nav" aria-label="功能导航">
-          {navItems.map((item) => (
-            <button className="nav-item" key={item.label} type="button">
-              <span className={`nav-icon nav-icon--${item.icon}`} aria-hidden="true" />
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            return (
+            <button className="nav-item nav-item--pending" key={item.label} type="button" aria-label={`${item.label}，待开发`}>
+              <Icon className="nav-icon" size={18} strokeWidth={2} aria-hidden="true" />
               <span>{item.label}</span>
+              <span className="pending-badge">待开发</span>
             </button>
-          ))}
+            );
+          })}
         </nav>
 
         <div className="history-section">
           <div className="history-header">
             <span>历史对话</span>
             <button className="icon-button" type="button" onClick={() => void handleCreateSession()} aria-label="新建会话">
-              <span className="plus-icon" aria-hidden="true" />
+              <Plus size={20} strokeWidth={2.2} aria-hidden="true" />
             </button>
           </div>
 
           <div className="session-list">
-            {sessions.length === 0 ? (
+            {visibleSessions.length === 0 ? (
               <div className="history-empty">暂无会话</div>
             ) : (
-              sessions.map((session) => (
-                <button
+              visibleSessions.map((session) => (
+                <div
                   className={`session-item ${session.id === activeSessionId ? "session-item--active" : ""}`}
                   key={session.id}
-                  type="button"
-                  onClick={() => setActiveSessionId(session.id)}
                 >
-                  <span className="session-dot" aria-hidden="true" />
-                  <span className="session-copy">
-                    <strong>Agent 会话 {sessionTitle(session)}</strong>
-                    <small>
-                      {session.messageCount} 条消息 · {session.busy ? "运行中" : formatTime(session.updatedAt)}
-                    </small>
+                  <button className="session-select" type="button" onClick={() => setActiveSessionId(session.id)}>
+                    <span className="session-dot" aria-hidden="true" />
+                    <span className="session-copy">
+                      <strong>
+                        {sessionMetadata[session.id]?.pinned ? "置顶 " : ""}
+                        {sessionDisplayTitle(session, sessionMetadata)}
+                      </strong>
+                      <small>
+                        {session.messageCount} 条消息 · {session.busy ? "运行中" : formatTime(session.updatedAt)}
+                      </small>
+                    </span>
+                  </button>
+                  <span className="session-actions">
+                    <button
+                      aria-expanded={openSessionMenuId === session.id}
+                      aria-label="打开会话菜单"
+                      className="session-menu-trigger"
+                      type="button"
+                      title="会话菜单"
+                      onClick={() => setOpenSessionMenuId((current) => (current === session.id ? null : session.id))}
+                    >
+                      <MoreVertical size={17} strokeWidth={2.2} aria-hidden="true" />
+                    </button>
+                    {openSessionMenuId === session.id ? (
+                      <span className="session-menu" role="menu">
+                        <button className="session-menu-item" role="menuitem" type="button" onClick={() => handleTogglePinned(session)}>
+                          <Pin
+                            className={sessionMetadata[session.id]?.pinned ? "session-menu-item-icon--active" : ""}
+                            size={15}
+                            strokeWidth={2.2}
+                            aria-hidden="true"
+                          />
+                          <span>{sessionMetadata[session.id]?.pinned ? "取消置顶" : "置顶"}</span>
+                        </button>
+                        <button className="session-menu-item" role="menuitem" type="button" onClick={() => handleRenameSession(session)}>
+                          <Pencil size={15} strokeWidth={2.2} aria-hidden="true" />
+                          <span>重命名</span>
+                        </button>
+                        <button className="session-menu-item session-menu-item--danger" role="menuitem" type="button" onClick={() => handleHideSession(session)}>
+                          <Trash2 size={15} strokeWidth={2.2} aria-hidden="true" />
+                          <span>删除</span>
+                        </button>
+                      </span>
+                    ) : null}
                   </span>
-                </button>
+                </div>
               ))
             )}
           </div>
         </div>
 
-        <div className="sidebar-footer">
-          <span>BFF: {health?.bffStatus ?? "unknown"}</span>
-          <StatusPill health={health} loading={loadState === "loading" && !health} />
+        <div className="sidebar-settings" aria-label="个人设置">
+          {sidebarSettings.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button className="sidebar-setting-button" key={item.label} type="button" aria-label={item.label} title={item.label}>
+                <Icon size={18} strokeWidth={2.1} aria-hidden="true" />
+              </button>
+            );
+          })}
         </div>
       </aside>
 
@@ -363,19 +509,23 @@ function App() {
             type="button"
             onClick={() => setIsSidebarCollapsed((current) => !current)}
           >
-            <span className="panel-icon" aria-hidden="true" />
+            {isSidebarCollapsed ? (
+              <PanelLeftOpen size={20} strokeWidth={2.1} aria-hidden="true" />
+            ) : (
+              <PanelLeftClose size={20} strokeWidth={2.1} aria-hidden="true" />
+            )}
           </button>
           <div className="conversation-title">
-            <h1>{activeSession ? `Agent 会话 ${sessionTitle(activeSession)}` : "Agent Chat Console"}</h1>
+            <h1>{activeSession ? sessionDisplayTitle(activeSession, sessionMetadata) : "AI Studio"}</h1>
             <span>{lastStreamEvent ?? (activeSession ? `${activeSession.messageCount} 条消息` : "本地开发控制台")}</span>
           </div>
           <div className="header-actions">
             <span className="stream-indicator" title={streamLabel(streamState)}>
-              <span className={`stream-icon stream-icon--${streamState}`} aria-hidden="true" />
+              <Radio className={`stream-icon stream-icon--${streamState}`} size={18} strokeWidth={2.2} aria-hidden="true" />
               <span className="sr-only">{streamLabel(streamState)}</span>
             </span>
             <button className="icon-button" type="button" onClick={() => void bootstrap()} aria-label="刷新连接与会话">
-              <span className="refresh-icon" aria-hidden="true" />
+              <RefreshCw size={19} strokeWidth={2.2} aria-hidden="true" />
             </button>
             <button
               className="theme-toggle"
@@ -383,7 +533,11 @@ function App() {
               onClick={handleThemeToggle}
               aria-label={theme === "dark" ? "切换到浅色主题" : "切换到深色主题"}
             >
-              <span className={`theme-icon theme-icon--${theme === "dark" ? "sun" : "moon"}`} aria-hidden="true" />
+              {theme === "dark" ? (
+                <Sun size={18} strokeWidth={2.1} aria-hidden="true" />
+              ) : (
+                <Moon size={18} strokeWidth={2.1} aria-hidden="true" />
+              )}
             </button>
           </div>
         </header>
@@ -401,8 +555,8 @@ function App() {
         <section className="transcript" aria-label="聊天内容">
           {!activeSessionId ? (
             <div className="starter-panel">
-              <h2>开始一个本地 Agent 会话</h2>
-              <p>创建会话后，可以在这里继续 agent 的核心工作流。</p>
+              <h2>开始一个本地会话</h2>
+              <p>创建会话后，可以在这里继续本地工作流。</p>
               <button className="primary-action" type="button" onClick={() => void handleCreateSession()}>
                 新建会话
               </button>
@@ -413,35 +567,37 @@ function App() {
               <p>输入下一条消息，BFF 会把请求转发到本地 agent service。</p>
             </div>
           ) : (
-            messages.map((message, index) => (
-              <article className={`message-row message-row--${message.role}`} key={`${message.role}-${index}`}>
-                {message.role !== "user" ? (
-                  <div className="message-avatar" aria-hidden="true">
-                    A
+            messages.map((message, index) => {
+              const isUserMessage = message.role === "user";
+              return (
+                <article className={`message-row message-row--${message.role}`} key={`${message.role}-${index}`}>
+                  {isUserMessage ? null : <MessageAvatar role={message.role} />}
+                  <div className="message-stack">
+                    <div className="message-meta">
+                      <strong>{roleLabel(message.role)}</strong>
+                      {message.name ? <span>{message.name}</span> : null}
+                    </div>
+                    <div className="message-content">
+                      <MessageBody message={message} />
+                    </div>
                   </div>
-                ) : null}
-                <div className="message-content">
-                  <div className="message-meta">
-                    <strong>{roleLabel(message.role)}</strong>
-                    {message.name ? <span>{message.name}</span> : null}
-                  </div>
-                  <MessageBody message={message} />
-                </div>
-              </article>
-            ))
+                  {isUserMessage ? <MessageAvatar role={message.role} /> : null}
+                </article>
+              );
+            })
           )}
 
           {loadState === "sending" ? (
             <article className="message-row message-row--assistant">
-              <div className="message-avatar" aria-hidden="true">
-                A
-              </div>
-              <div className="message-content message-content--pending">
+              <MessageAvatar role="assistant" />
+              <div className="message-stack">
                 <div className="message-meta">
-                  <strong>Agent</strong>
+                  <strong>AI Studio</strong>
                   <span>运行中</span>
                 </div>
-                <p>正在等待本地 agent 返回结果...</p>
+                <div className="message-content message-content--pending">
+                  <p>正在等待本地 agent 返回结果...</p>
+                </div>
               </div>
             </article>
           ) : null}
@@ -461,14 +617,17 @@ function App() {
           />
           <div className="composer-toolbar">
             <div className="quick-actions" aria-label="快捷操作">
-              {quickActions.map((action) => (
+              {quickActions.map((action) => {
+                const Icon = action.icon;
+                return (
                 <button className="quick-action" key={action.label} type="button" aria-label={action.label} title={action.label}>
-                  <span className={`quick-icon quick-icon--${action.icon}`} aria-hidden="true" />
+                  <Icon size={18} strokeWidth={2.1} aria-hidden="true" />
                 </button>
-              ))}
+                );
+              })}
             </div>
             <button className="send-button" type="submit" disabled={!canSend} aria-label="发送消息">
-              <span className="send-icon" aria-hidden="true" />
+              <SendHorizontal size={20} strokeWidth={2.3} aria-hidden="true" />
             </button>
           </div>
         </form>
