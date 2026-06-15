@@ -77,6 +77,8 @@ type SidebarSetting = {
   icon: LucideIcon;
 };
 
+const shortcutHints = ["Ctrl K", "Ctrl Enter", "Shift Enter", "Ctrl C"];
+
 const navItems: NavItem[] = [
   { label: "AI 浏览器", icon: SearchCheck },
   { label: "应用生成", icon: AppWindow },
@@ -193,6 +195,20 @@ function MessageAvatar({ role }: { role: ChatMessage["role"] }) {
   );
 }
 
+function NewConversationPanel({ onCreate }: { onCreate?: () => void }) {
+  return (
+    <div className="starter-panel starter-panel--new">
+      <h2>有什么我能帮你的？</h2>
+      {onCreate ? (
+        <button className="primary-action" type="button" onClick={onCreate}>
+          <Plus size={18} strokeWidth={2.2} aria-hidden="true" />
+          <span>新建对话</span>
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function App() {
   const [theme, setTheme] = useState<ThemeMode>(() =>
     typeof window === "undefined" ? "dark" : readStoredTheme(window.localStorage),
@@ -204,7 +220,6 @@ function App() {
   const [draft, setDraft] = useState("");
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [streamState, setStreamState] = useState<StreamState>("connecting");
-  const [lastStreamEvent, setLastStreamEvent] = useState<string | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [openSessionMenuId, setOpenSessionMenuId] = useState<string | null>(null);
   const [sessionMetadata, setSessionMetadata] = useState<SessionMetadataMap>(() =>
@@ -212,6 +227,7 @@ function App() {
   );
   const [error, setError] = useState<string | null>(null);
   const activeSessionIdRef = useRef<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const activeSummary = useMemo(
     () => sessions.find((session) => session.id === activeSessionId) ?? null,
@@ -224,6 +240,7 @@ function App() {
   const isBusy = loadState === "sending" || activeSummary?.busy === true;
   const canSend = Boolean(activeSessionId && draft.trim() && !isBusy);
   const messages = activeSession?.messages ?? [];
+  const conversationRuntimeState = loadState === "loading" ? "loading" : isBusy ? "running" : activeSessionId ? "completed" : "idle";
 
   async function refreshHealth(): Promise<void> {
     try {
@@ -286,8 +303,7 @@ function App() {
     }
   }
 
-  async function handleSend(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault();
+  async function sendDraft(): Promise<void> {
     if (!activeSessionId || !draft.trim() || isBusy) {
       return;
     }
@@ -313,6 +329,22 @@ function App() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoadState("idle");
+    }
+  }
+
+  async function handleSend(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    await sendDraft();
+  }
+
+  function handleComposerKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>): void {
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      void sendDraft();
+      return;
+    }
+    if (event.key === "Escape") {
+      event.currentTarget.blur();
     }
   }
 
@@ -375,8 +407,7 @@ function App() {
       const stream = createAgentEventStream({
         onOpen: () => setStreamState("connected"),
         onError: () => setStreamState("disconnected"),
-        onEvent: (event) => {
-          setLastStreamEvent(event.type);
+        onEvent: () => {
           void refreshSessions();
           const currentSessionId = activeSessionIdRef.current;
           if (currentSessionId) {
@@ -396,6 +427,17 @@ function App() {
       void loadSession(activeSessionId);
     }
   }, [activeSessionId]);
+
+  useEffect(() => {
+    function handleGlobalKeyDown(event: KeyboardEvent): void {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        textareaRef.current?.focus();
+      }
+    }
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, []);
 
   return (
     <div className={`app-shell ${isSidebarCollapsed ? "app-shell--sidebar-collapsed" : ""}`}>
@@ -517,7 +559,9 @@ function App() {
           </button>
           <div className="conversation-title">
             <h1>{activeSession ? sessionDisplayTitle(activeSession, sessionMetadata) : "AI Studio"}</h1>
-            <span>{lastStreamEvent ?? (activeSession ? `${activeSession.messageCount} 条消息` : "本地开发控制台")}</span>
+            <span className={`conversation-state conversation-state--${conversationRuntimeState}`}>
+              {conversationRuntimeState}
+            </span>
           </div>
           <div className="header-actions">
             <span className="stream-indicator" title={streamLabel(streamState)}>
@@ -554,18 +598,9 @@ function App() {
 
         <section className="transcript" aria-label="聊天内容">
           {!activeSessionId ? (
-            <div className="starter-panel">
-              <h2>开始一个本地会话</h2>
-              <p>创建会话后，可以在这里继续本地工作流。</p>
-              <button className="primary-action" type="button" onClick={() => void handleCreateSession()}>
-                新建会话
-              </button>
-            </div>
+            <NewConversationPanel onCreate={() => void handleCreateSession()} />
           ) : messages.length === 0 ? (
-            <div className="starter-panel">
-              <h2>会话已就绪</h2>
-              <p>输入下一条消息，BFF 会把请求转发到本地 agent service。</p>
-            </div>
+            <NewConversationPanel />
           ) : (
             messages.map((message, index) => {
               const isUserMessage = message.role === "user";
@@ -608,10 +643,12 @@ function App() {
             消息
           </label>
           <textarea
+            ref={textareaRef}
             id="message-input"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            placeholder={activeSessionId ? "发送消息或输入 / 选择技能" : "先新建一个会话..."}
+            onKeyDown={handleComposerKeyDown}
+            placeholder={activeSessionId ? "发送消息..." : "先新建一个会话..."}
             disabled={!activeSessionId || isBusy}
             rows={3}
           />
@@ -625,6 +662,11 @@ function App() {
                 </button>
                 );
               })}
+            </div>
+            <div className="composer-shortcuts" aria-label="快捷键">
+              {shortcutHints.map((shortcut) => (
+                <kbd key={shortcut}>{shortcut}</kbd>
+              ))}
             </div>
             <button className="send-button" type="submit" disabled={!canSend} aria-label="发送消息">
               <SendHorizontal size={20} strokeWidth={2.3} aria-hidden="true" />
