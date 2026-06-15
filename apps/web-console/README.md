@@ -1,34 +1,45 @@
 # agent-web-console
 
-独立的 web 展示层骨架，技术栈使用 React + TypeScript + Tailwind。
+本应用是本地 Agent 的 Web Chat Console，技术栈使用 React + TypeScript + Vite + Tailwind。Web 端只访问 BFF 暴露的 `/api/*`，不直接读取 agent runtime 文件，也不直接调用 agent service。
 
-## 启动
+## 本地启动
+
+在仓库根目录分别启动三段本地链路：
 
 ```bash
-cd apps/web-console
-pnpm install
-pnpm dev
+pnpm --filter agent-cli dev server
+pnpm --filter agent-bff dev
+pnpm --filter agent-web-console dev
 ```
 
-## 现在包含
+默认端口：
 
-- 运行状态展示
-- 任务面板与 todo 快照
-- 可观测性指标与最近事件
-- Vite 中间件提供的只读 API
+- Agent HTTP service: `http://127.0.0.1:3181`
+- BFF: `http://127.0.0.1:3182`
+- Web Console: `http://localhost:5173`
 
-## 当前 API
+如需修改 BFF 地址，可设置：
 
-- `GET /api/runtime/snapshot`
-- `GET /api/tasks`
-- `GET /api/todos`
-- `GET /api/observability/metrics`
-- `GET /api/observability/events`
+```bash
+VITE_BFF_URL=http://127.0.0.1:3182 pnpm --filter agent-web-console dev
+```
 
-## 数据来源
+## 当前能力
 
-- `../agent-cli/.tasks`
-- `../agent-cli/.runtime/todos.json`
-- `../agent-cli/.observability`
+- 查看 BFF 与 agent service 连接状态。
+- 创建、选择和刷新本地 Agent session。
+- 读取当前 session transcript。
+- 通过 BFF 向当前 session 发送消息。
+- 支持 light/dark 主题切换，并保存在浏览器本地存储。
 
-当前实现是只读视图，不会从 web 端直接修改 agent 状态。
+## API 边界
+
+Web dev server 将 `/api/*` 代理到 BFF。当前页面使用的主要接口：
+
+- `GET /api/health`
+- `GET /api/sessions`
+- `POST /api/sessions`
+- `GET /api/sessions/:id`
+- `POST /api/sessions/:id/messages`
+
+BFF 继续负责把请求转发给 agent HTTP service，并统一处理上游错误。

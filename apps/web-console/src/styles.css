@@ -443,18 +443,19 @@ p {
 }
 
 .panel-icon::before {
-  inset: 2px 4px;
-  border: 1.6px solid currentColor;
-  border-radius: 5px;
+  left: 3px;
+  right: 3px;
+  top: 4px;
+  height: 1.7px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow:
+    0 5px 0 currentColor,
+    0 10px 0 currentColor;
 }
 
 .panel-icon::after {
-  top: 4px;
-  bottom: 4px;
-  left: 8px;
-  width: 1.5px;
-  border-radius: 999px;
-  background: currentColor;
+  display: none;
 }
 
 .conversation-title {
@@ -484,10 +485,17 @@ p {
 }
 
 .refresh-icon::before {
-  inset: 4px;
-  border: 1.7px solid currentColor;
-  border-right-color: transparent;
-  border-radius: 999px;
+  inset: -2px 0 auto;
+  content: "\21bb";
+  border: 0;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 18px;
+  text-align: center;
+}
+
+.refresh-icon::after {
+  display: none;
 }
 
 .theme-toggle {
