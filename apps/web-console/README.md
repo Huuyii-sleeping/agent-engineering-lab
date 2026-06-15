@@ -29,7 +29,7 @@ VITE_BFF_URL=http://127.0.0.1:3182 pnpm --filter agent-web-console dev
 - 查看 BFF 与 agent service 连接状态。
 - 通过 BFF SSE `/api/events/stream` 同步 agent 事件，并刷新 session / transcript。
 - 创建、选择和刷新本地 Agent session。
-- 历史对话默认只显示最近 3 条 session，避免本地测试数据过多干扰首屏。
+- 历史对话展示当前 agent service 返回的 session；如本地测试数据过多，应清理旧 session 文件，而不是在前端隐藏。
 - 读取当前 session transcript。
 - assistant、system、tool 消息支持 Markdown 渲染。
 - 通过 BFF 向当前 session 发送消息。

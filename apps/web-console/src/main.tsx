@@ -154,7 +154,6 @@ function App() {
     () => sessions.find((session) => session.id === activeSessionId) ?? null,
     [activeSessionId, sessions],
   );
-  const visibleSessions = useMemo(() => sessions.slice(0, 3), [sessions]);
   const isBusy = loadState === "sending" || activeSummary?.busy === true;
   const canSend = Boolean(activeSessionId && draft.trim() && !isBusy);
   const messages = activeSession?.messages ?? [];
@@ -326,10 +325,10 @@ function App() {
           </div>
 
           <div className="session-list">
-            {visibleSessions.length === 0 ? (
+            {sessions.length === 0 ? (
               <div className="history-empty">暂无会话</div>
             ) : (
-              visibleSessions.map((session) => (
+              sessions.map((session) => (
                 <button
                   className={`session-item ${session.id === activeSessionId ? "session-item--active" : ""}`}
                   key={session.id}

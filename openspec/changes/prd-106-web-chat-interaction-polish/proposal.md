@@ -8,9 +8,9 @@ In Scope:
 - Web 端接入 BFF `/api/events/stream` SSE，用于感知 agent 事件并刷新 session / transcript。
 - assistant/system/tool 消息支持 Markdown 渲染，保留 user 消息的纯文本气泡。
 - 实现左上角侧栏折叠/展开交互，并保持桌面与窄屏布局可用。
-- 历史对话只展示最近 3 条 session，避免本地历史数据过多压垮首屏。
+- 历史对话展示 agent service 返回的真实 session 列表；本地历史数据过多时清理旧 session 文件。
 - 将刷新、主题切换、发送和快捷入口等可替换文案尽量图标化，并保留可访问名称。
-- 更新 Web README 说明 SSE、Markdown、历史列表限制和侧栏折叠能力。
+- 更新 Web README 说明 SSE、Markdown、历史列表数据来源和侧栏折叠能力。
 
 Out of Scope:
 - 不新增 BFF endpoint。

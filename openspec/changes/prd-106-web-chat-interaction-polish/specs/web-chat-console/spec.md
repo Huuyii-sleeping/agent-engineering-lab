@@ -49,7 +49,7 @@ Web Chat Console MUST present a modern Chat-first interface with left navigation
 
 #### Scenario: User scans history
 - **WHEN** Web 显示历史对话
-- **THEN** 历史列表只展示最近 3 条 session
+- **THEN** 历史列表展示 agent service 返回的真实 session
 - **AND** session 按更新时间从新到旧排序
 
 ### Requirement: Web Chat Console MUST render readable chat content

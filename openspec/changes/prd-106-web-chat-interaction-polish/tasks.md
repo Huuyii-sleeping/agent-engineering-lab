@@ -13,17 +13,17 @@
 ## 3. 侧栏与历史列表
 
 - [x] 3.1 实现左上角侧栏折叠/展开状态与布局样式。
-- [x] 3.2 历史对话按更新时间倒序，只显示最近 3 条。
-- [x] 3.3 保证新建 session 后新 session 出现在可见历史列表。
+- [x] 3.2 历史对话按更新时间倒序展示真实 session 列表。
+- [x] 3.3 清理旧本地 session 数据后，保证历史列表自然变少。
 
 ## 4. 图标化与文档
 
 - [x] 4.1 将刷新、主题、快捷入口和发送按钮尽量图标化，保留 `aria-label`。
-- [x] 4.2 更新 `apps/web-console/README.md`，说明 SSE、Markdown、历史限制与侧栏折叠。
+- [x] 4.2 更新 `apps/web-console/README.md`，说明 SSE、Markdown、历史数据来源与侧栏折叠。
 
 ## 5. 验证与收口
 
-- [x] 5.1 浏览器验证 SSE 状态、Markdown、侧栏折叠、历史 3 条和图标化首屏。
+- [x] 5.1 浏览器验证 SSE 状态、Markdown、侧栏折叠、清理后的历史列表和图标化首屏。
 - [x] 5.2 运行 `pnpm --filter agent-web-console test`。
 - [x] 5.3 运行 `pnpm --filter agent-web-console build`。
 - [x] 5.4 运行 `pnpm build`。

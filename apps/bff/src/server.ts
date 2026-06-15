@@ -203,6 +203,10 @@ async function proxyEventStream(input: {
       input.res.end();
     }
   } catch (error) {
+    if (input.res.headersSent) {
+      input.res.end();
+      return;
+    }
     json(
       input.res,
       502,
