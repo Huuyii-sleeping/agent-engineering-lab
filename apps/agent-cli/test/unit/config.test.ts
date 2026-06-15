@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import * as process from "node:process";
 import { afterEach, describe, expect, it } from "vitest";
-import { getStaticPromptSource } from "../../src/config.js";
+import { getStaticPromptSource, resolveOpenAiBaseUrl } from "../../src/config.js";
 
 let tempDir = "";
 let previousCwd = "";
@@ -59,5 +59,17 @@ describe("config", () => {
     });
     expect(source.agentMemory?.memoryDir).toContain(".agent");
     expect(source.agentMemory?.currentIndex).toContain("prefer strict reviews");
+  });
+
+  it("resolves the OpenAI-compatible base URL with legacy alias support", () => {
+    expect(resolveOpenAiBaseUrl({ OPENAI_BASEURL: " https://proxy.example/v1 " })).toBe(
+      "https://proxy.example/v1",
+    );
+    expect(
+      resolveOpenAiBaseUrl({
+        OPENAI_BASE_URL: "https://standard.example/v1",
+        OPENAI_BASEURL: "https://legacy.example/v1",
+      }),
+    ).toBe("https://standard.example/v1");
   });
 });

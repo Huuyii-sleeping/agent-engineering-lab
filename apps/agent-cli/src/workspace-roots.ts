@@ -62,8 +62,9 @@ export async function addWorkspaceRoot(rootArg: string): Promise<{ ok: true; roo
     return { ok: false, error: `workspace root is not readable: ${raw}` };
   }
 
-  extraWorkspaceRoots.add(resolved);
-  return { ok: true, root: resolved };
+  const canonical = resolveWorkspacePath(resolved);
+  extraWorkspaceRoots.add(canonical);
+  return { ok: true, root: canonical };
 }
 
 export function resetWorkspaceRootsForTest(): void {

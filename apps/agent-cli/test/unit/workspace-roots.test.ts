@@ -37,10 +37,10 @@ describe("workspace roots", () => {
   it("adds readable roots and allows safePath to traverse them", async () => {
     await withWorkspace("workspace-roots", async (root, extra) => {
       const added = await addWorkspaceRoot(extra);
-      expect(added).toEqual({ ok: true, root: extra });
+      expect(added).toEqual({ ok: true, root: safePath(extra) });
       expect(listWorkspaceRoots()[0]).toContain(path.basename(root));
-      expect(listWorkspaceRoots()).toContain(extra);
-      expect(safePath(path.join(extra, "note.txt"))).toBe(path.join(extra, "note.txt"));
+      expect(listWorkspaceRoots()).toContain(added.root);
+      expect(safePath(path.join(extra, "note.txt"))).toBe(path.join(added.root, "note.txt"));
     });
   });
 

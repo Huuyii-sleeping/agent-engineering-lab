@@ -86,9 +86,14 @@ export function getDefaultModel(): string {
   return MODEL;
 }
 
+/** Resolve the OpenAI-compatible base URL, accepting the historical OPENAI_BASEURL alias. */
+export function resolveOpenAiBaseUrl(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return env.OPENAI_BASE_URL?.trim() || env.OPENAI_BASEURL?.trim() || undefined;
+}
+
 export function createClient(): OpenAI {
   return new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
-    baseURL: process.env.OPENAI_BASE_URL,
+    baseURL: resolveOpenAiBaseUrl(),
   });
 }

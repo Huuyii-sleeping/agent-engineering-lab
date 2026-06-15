@@ -19,6 +19,7 @@ import { loadMcpServerConfigs } from "../tools/mcp-config.js";
 import { RUNTIME_CONFIG } from "../runtime-config.js";
 import { getBashSandboxMode } from "../runtime-config.js";
 import { listWorkspaceRoots } from "../workspace-roots.js";
+import { resolveOpenAiBaseUrl } from "../config.js";
 
 async function readPackageJson(): Promise<{ scripts?: Record<string, string> }> {
   try {
@@ -84,10 +85,11 @@ export async function collectCliConfigSnapshot(input: { model?: string } = {}): 
   const hooksConfigPath = path.join(process.cwd(), ".codex", "hooks.json");
   const mcpConfigured = (await loadMcpServerConfigs()).length > 0;
   const hooksConfigured = (await countHooks()) > 0;
+  const openAiBaseUrl = resolveOpenAiBaseUrl();
   return {
     modelConfigured: Boolean((input.model ?? process.env.MODEL_ID)?.trim()),
     model: input.model ?? process.env.MODEL_ID?.trim() ?? "unset-model",
-    openAiBaseUrl: process.env.OPENAI_BASE_URL?.trim() || "",
+    openAiBaseUrl: openAiBaseUrl ?? "",
     mcpConfigPath,
     mcpConfigured,
     hooksConfigPath,
@@ -125,6 +127,7 @@ export async function runCliDoctor(): Promise<CliDoctorReport> {
   const hookCount = await countHooks();
   const approvals = await collectCliApprovalSummary();
   const roots = listWorkspaceRoots();
+  const openAiBaseUrl = resolveOpenAiBaseUrl();
   const memoryDoctor = JSON.parse(await runMemoryDoctor()) as {
     ok?: boolean;
     scopes?: Array<{ scope?: string; status?: string; topicCount?: number }>;
@@ -152,13 +155,13 @@ export async function runCliDoctor(): Promise<CliDoctorReport> {
   checks.push({
     id: "api-config",
     label: "api",
-    severity: process.env.OPENAI_API_KEY?.trim() || process.env.OPENAI_BASE_URL?.trim() ? "pass" : "warn",
+    severity: process.env.OPENAI_API_KEY?.trim() || openAiBaseUrl ? "pass" : "warn",
     reason:
-      process.env.OPENAI_API_KEY?.trim() || process.env.OPENAI_BASE_URL?.trim()
+      process.env.OPENAI_API_KEY?.trim() || openAiBaseUrl
         ? "OpenAI-compatible endpoint configuration detected"
         : "no OPENAI_API_KEY or OPENAI_BASE_URL detected",
     suggestion:
-      process.env.OPENAI_API_KEY?.trim() || process.env.OPENAI_BASE_URL?.trim()
+      process.env.OPENAI_API_KEY?.trim() || openAiBaseUrl
         ? ""
         : "set OPENAI_API_KEY or point OPENAI_BASE_URL at a compatible proxy",
   });

@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import * as process from "node:process";
@@ -62,7 +62,8 @@ export async function withHarnessWorkspace<T>(
 ): Promise<T> {
   const previousCwd = process.cwd();
   const previousEnv = applyEnv(options.env);
-  const root = await mkdtemp(path.join(tmpdir(), `${options.name ?? "agent-cli-harness"}-`));
+  const createdRoot = await mkdtemp(path.join(tmpdir(), `${options.name ?? "agent-cli-harness"}-`));
+  const root = await realpath(createdRoot);
   const workspace: HarnessWorkspace = {
     root,
     path: (relativePath) => resolveInside(root, relativePath),

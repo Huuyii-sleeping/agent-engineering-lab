@@ -1,4 +1,9 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import {
+  createServer,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from "node:http";
 
 type JsonObject = Record<string, unknown>;
 
@@ -25,7 +30,11 @@ function json(res: ServerResponse, statusCode: number, payload: unknown): void {
   res.end(`${JSON.stringify(payload, null, 2)}\n`);
 }
 
-function errorPayload(code: string, message: string, metadata: JsonObject = {}): JsonObject {
+function errorPayload(
+  code: string,
+  message: string,
+  metadata: JsonObject = {},
+): JsonObject {
   return {
     ok: false,
     error: {
@@ -46,7 +55,9 @@ async function parseBody(req: IncomingMessage): Promise<JsonObject> {
     return {};
   }
   const parsed = JSON.parse(raw) as unknown;
-  return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as JsonObject) : {};
+  return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+    ? (parsed as JsonObject)
+    : {};
 }
 
 function upstreamUrl(agentBaseUrl: string, pathname: string, search = ""): URL {
@@ -62,11 +73,17 @@ async function proxyJson(input: {
   body?: unknown;
 }): Promise<ProxyResult> {
   try {
-    const response = await input.fetchImpl(upstreamUrl(input.agentBaseUrl, input.pathname, input.search ?? ""), {
-      method: input.method,
-      headers: input.body === undefined ? undefined : { "Content-Type": "application/json" },
-      body: input.body === undefined ? undefined : JSON.stringify(input.body),
-    });
+    const response = await input.fetchImpl(
+      upstreamUrl(input.agentBaseUrl, input.pathname, input.search ?? ""),
+      {
+        method: input.method,
+        headers:
+          input.body === undefined
+            ? undefined
+            : { "Content-Type": "application/json" },
+        body: input.body === undefined ? undefined : JSON.stringify(input.body),
+      },
+    );
     const raw = await response.text();
     const body = raw.trim() ? (JSON.parse(raw) as unknown) : {};
     return { ok: true, status: response.status, body };
@@ -105,7 +122,9 @@ function sessionIdFromPath(pathname: string, suffix = ""): string | null {
 }
 
 function getObject(value: unknown): JsonObject {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonObject) : {};
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as JsonObject)
+    : {};
 }
 
 async function proxyTranscript(input: {
@@ -152,13 +171,20 @@ async function proxyEventStream(input: {
     if (typeof lastEventId === "string") {
       headers["Last-Event-ID"] = lastEventId;
     }
-    const upstream = await input.fetchImpl(upstreamUrl(input.agentBaseUrl, "/events", input.search), {
-      method: "GET",
-      headers,
-    });
+    const upstream = await input.fetchImpl(
+      upstreamUrl(input.agentBaseUrl, "/events", input.search),
+      {
+        method: "GET",
+        headers,
+      },
+    );
     applyCommonHeaders(input.res);
     input.res.statusCode = upstream.status;
-    input.res.setHeader("Content-Type", upstream.headers.get("content-type") ?? "text/event-stream; charset=utf-8");
+    input.res.setHeader(
+      "Content-Type",
+      upstream.headers.get("content-type") ??
+        "text/event-stream; charset=utf-8",
+    );
     if (!upstream.body) {
       input.res.end();
       return;
@@ -180,7 +206,10 @@ async function proxyEventStream(input: {
     json(
       input.res,
       502,
-      errorPayload("AGENT_UPSTREAM_UNAVAILABLE", error instanceof Error ? error.message : String(error)),
+      errorPayload(
+        "AGENT_UPSTREAM_UNAVAILABLE",
+        error instanceof Error ? error.message : String(error),
+      ),
     );
   }
 }
@@ -205,7 +234,12 @@ export function createBffHttpServer(options: BffServerOptions): Server {
       }
 
       if (method === "GET" && pathname === "/api/health") {
-        const result = await proxyJson({ fetchImpl, agentBaseUrl, method: "GET", pathname: "/health" });
+        const result = await proxyJson({
+          fetchImpl,
+          agentBaseUrl,
+          method: "GET",
+          pathname: "/health",
+        });
         if (!result.ok) {
           writeProxyResult(res, result);
           return;
@@ -219,17 +253,41 @@ export function createBffHttpServer(options: BffServerOptions): Server {
       }
 
       if (method === "GET" && pathname === "/api/sessions") {
-        writeProxyResult(res, await proxyJson({ fetchImpl, agentBaseUrl, method: "GET", pathname: "/sessions" }));
+        writeProxyResult(
+          res,
+          await proxyJson({
+            fetchImpl,
+            agentBaseUrl,
+            method: "GET",
+            pathname: "/sessions",
+          }),
+        );
         return;
       }
       if (method === "POST" && pathname === "/api/sessions") {
-        writeProxyResult(res, await proxyJson({ fetchImpl, agentBaseUrl, method: "POST", pathname: "/sessions", body: {} }));
+        writeProxyResult(
+          res,
+          await proxyJson({
+            fetchImpl,
+            agentBaseUrl,
+            method: "POST",
+            pathname: "/sessions",
+            body: {},
+          }),
+        );
         return;
       }
 
       const transcriptSessionId = sessionIdFromPath(pathname, "/transcript");
       if (method === "GET" && transcriptSessionId) {
-        writeProxyResult(res, await proxyTranscript({ fetchImpl, agentBaseUrl, sessionId: transcriptSessionId }));
+        writeProxyResult(
+          res,
+          await proxyTranscript({
+            fetchImpl,
+            agentBaseUrl,
+            sessionId: transcriptSessionId,
+          }),
+        );
         return;
       }
 
@@ -246,7 +304,8 @@ export function createBffHttpServer(options: BffServerOptions): Server {
             body: {
               session_id: messageSessionId,
               message: body.message,
-              include_scheduled_notifications: body.include_scheduled_notifications === true,
+              include_scheduled_notifications:
+                body.include_scheduled_notifications === true,
             },
           }),
         );
@@ -270,14 +329,26 @@ export function createBffHttpServer(options: BffServerOptions): Server {
       if (method === "GET" && pathname === "/api/audit/events") {
         writeProxyResult(
           res,
-          await proxyJson({ fetchImpl, agentBaseUrl, method: "GET", pathname: "/audit/events", search }),
+          await proxyJson({
+            fetchImpl,
+            agentBaseUrl,
+            method: "GET",
+            pathname: "/audit/events",
+            search,
+          }),
         );
         return;
       }
       if (method === "GET" && pathname === "/api/security/findings") {
         writeProxyResult(
           res,
-          await proxyJson({ fetchImpl, agentBaseUrl, method: "GET", pathname: "/security/findings", search }),
+          await proxyJson({
+            fetchImpl,
+            agentBaseUrl,
+            method: "GET",
+            pathname: "/security/findings",
+            search,
+          }),
         );
         return;
       }
@@ -286,9 +357,20 @@ export function createBffHttpServer(options: BffServerOptions): Server {
         return;
       }
 
-      json(res, 404, errorPayload("NOT_FOUND", `${method} ${pathname} is not implemented`));
+      json(
+        res,
+        404,
+        errorPayload("NOT_FOUND", `${method} ${pathname} is not implemented`),
+      );
     } catch (error) {
-      json(res, 500, errorPayload("INTERNAL_ERROR", error instanceof Error ? error.message : String(error)));
+      json(
+        res,
+        500,
+        errorPayload(
+          "INTERNAL_ERROR",
+          error instanceof Error ? error.message : String(error),
+        ),
+      );
     }
   });
 }
