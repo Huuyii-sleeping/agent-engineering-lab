@@ -43,7 +43,26 @@ export type SendMessageResult = {
   };
 };
 
+/** Agent bridge events delivered by the BFF SSE endpoint. */
+export type AgentStreamEvent = {
+  type: string;
+  id: string | null;
+  data: unknown;
+};
+
+export type AgentEventStream = {
+  close(): void;
+};
+
 type JsonObject = Record<string, unknown>;
+type EventSourceLike = Pick<EventSource, "addEventListener" | "close"> & {
+  onopen: ((event: Event) => void) | null;
+  onerror: ((event: Event) => void) | null;
+};
+
+type EventSourceConstructor = new (url: string) => EventSourceLike;
+
+const agentStreamEventTypes = ["bridge.ready", "session.created", "chat.started", "chat.completed", "chat.failed"];
 
 function asObject(value: unknown): JsonObject {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonObject) : {};
@@ -106,6 +125,40 @@ async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
     throw new Error(asString(error.message) || `${response.status} ${response.statusText}`);
   }
   return parsed as T;
+}
+
+function parseEventData(raw: string): unknown {
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return raw;
+  }
+}
+
+/** Opens the BFF SSE stream and forwards known agent events to the caller. */
+export function createAgentEventStream(input: {
+  onOpen?: () => void;
+  onError?: () => void;
+  onEvent: (event: AgentStreamEvent) => void;
+  eventSourceCtor?: EventSourceConstructor;
+}): AgentEventStream {
+  const EventSourceImpl = input.eventSourceCtor ?? globalThis.EventSource;
+  if (!EventSourceImpl) {
+    throw new Error("EventSource is not available in this browser");
+  }
+  const source = new EventSourceImpl("/api/events/stream?since_id=-1");
+  source.onopen = () => input.onOpen?.();
+  source.onerror = () => input.onError?.();
+  for (const type of agentStreamEventTypes) {
+    source.addEventListener(type, (event) => {
+      input.onEvent({
+        type,
+        id: event.lastEventId || null,
+        data: parseEventData(event.data),
+      });
+    });
+  }
+  return source;
 }
 
 /** Fetches BFF health and normalizes upstream connectivity for the UI. */

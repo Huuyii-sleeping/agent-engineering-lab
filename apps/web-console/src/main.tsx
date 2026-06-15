@@ -1,6 +1,9 @@
-import React, { FormEvent, useEffect, useMemo, useState } from "react";
+import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
+  createAgentEventStream,
   createSession,
   fetchHealth,
   fetchSession,
@@ -15,8 +18,14 @@ import { getNextTheme, readStoredTheme, writeStoredTheme, type ThemeMode } from 
 import "./styles.css";
 
 type LoadState = "idle" | "loading" | "sending";
+type StreamState = "connecting" | "connected" | "disconnected";
 
 type NavItem = {
+  label: string;
+  icon: string;
+};
+
+type QuickAction = {
   label: string;
   icon: string;
 };
@@ -28,6 +37,24 @@ const navItems: NavItem[] = [
   { label: "云盘", icon: "folder" },
   { label: "更多", icon: "grid" },
 ];
+
+const quickActions: QuickAction[] = [
+  { label: "快速", icon: "spark" },
+  { label: "帮我写作", icon: "write" },
+  { label: "图像生成", icon: "image" },
+  { label: "编程", icon: "code" },
+  { label: "更多", icon: "more" },
+];
+
+const markdownComponents: Components = {
+  a({ children, href }) {
+    return (
+      <a href={href} rel="noreferrer" target="_blank">
+        {children}
+      </a>
+    );
+  },
+};
 
 function formatTime(value: number | null): string {
   if (!value) {
@@ -65,6 +92,24 @@ function sessionTitle(session: SessionSummary | SessionDetail): string {
   return session.id.slice(0, 8);
 }
 
+function sessionTimestamp(session: SessionSummary): number {
+  return session.updatedAt ?? session.createdAt ?? 0;
+}
+
+function sortSessionsByRecent(sessions: SessionSummary[]): SessionSummary[] {
+  return [...sessions].sort((left, right) => sessionTimestamp(right) - sessionTimestamp(left));
+}
+
+function streamLabel(state: StreamState): string {
+  if (state === "connected") {
+    return "SSE 已连接";
+  }
+  if (state === "connecting") {
+    return "SSE 连接中";
+  }
+  return "SSE 未连接";
+}
+
 function StatusPill({ health, loading }: { health: HealthStatus | null; loading: boolean }) {
   const connected = health?.connected === true;
   return (
@@ -72,6 +117,20 @@ function StatusPill({ health, loading }: { health: HealthStatus | null; loading:
       <span className="status-dot" />
       {loading ? "连接中" : connected ? "已连接" : "未连接"}
     </span>
+  );
+}
+
+function MessageBody({ message }: { message: ChatMessage }) {
+  const content = messageText(message);
+  if (message.role === "user") {
+    return <p>{content}</p>;
+  }
+  return (
+    <div className="markdown-body">
+      <ReactMarkdown components={markdownComponents} remarkPlugins={[remarkGfm]}>
+        {content}
+      </ReactMarkdown>
+    </div>
   );
 }
 
@@ -85,12 +144,17 @@ function App() {
   const [activeSession, setActiveSession] = useState<SessionDetail | null>(null);
   const [draft, setDraft] = useState("");
   const [loadState, setLoadState] = useState<LoadState>("idle");
+  const [streamState, setStreamState] = useState<StreamState>("connecting");
+  const [lastStreamEvent, setLastStreamEvent] = useState<string | null>(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const activeSessionIdRef = useRef<string | null>(null);
 
   const activeSummary = useMemo(
     () => sessions.find((session) => session.id === activeSessionId) ?? null,
     [activeSessionId, sessions],
   );
+  const visibleSessions = useMemo(() => sessions.slice(0, 3), [sessions]);
   const isBusy = loadState === "sending" || activeSummary?.busy === true;
   const canSend = Boolean(activeSessionId && draft.trim() && !isBusy);
   const messages = activeSession?.messages ?? [];
@@ -105,22 +169,26 @@ function App() {
   }
 
   async function refreshSessions(selectFirst = false): Promise<void> {
-    const next = await fetchSessions();
+    const next = sortSessionsByRecent(await fetchSessions());
     setSessions(next);
     if (selectFirst && !activeSessionId && next[0]) {
       setActiveSessionId(next[0].id);
     }
   }
 
-  async function loadSession(sessionId: string): Promise<void> {
-    setLoadState("loading");
+  async function loadSession(sessionId: string, options: { silent?: boolean } = {}): Promise<void> {
+    if (!options.silent) {
+      setLoadState("loading");
+    }
     try {
       setActiveSession(await fetchSession(sessionId));
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setLoadState("idle");
+      if (!options.silent) {
+        setLoadState("idle");
+      }
     }
   }
 
@@ -195,7 +263,33 @@ function App() {
   }, [theme]);
 
   useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
+
+  useEffect(() => {
     void bootstrap();
+  }, []);
+
+  useEffect(() => {
+    setStreamState("connecting");
+    try {
+      const stream = createAgentEventStream({
+        onOpen: () => setStreamState("connected"),
+        onError: () => setStreamState("disconnected"),
+        onEvent: (event) => {
+          setLastStreamEvent(event.type);
+          void refreshSessions();
+          const currentSessionId = activeSessionIdRef.current;
+          if (currentSessionId) {
+            void loadSession(currentSessionId, { silent: true });
+          }
+        },
+      });
+      return () => stream.close();
+    } catch {
+      setStreamState("disconnected");
+      return undefined;
+    }
   }, []);
 
   useEffect(() => {
@@ -205,8 +299,8 @@ function App() {
   }, [activeSessionId]);
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar" aria-label="本地控制台导航">
+    <div className={`app-shell ${isSidebarCollapsed ? "app-shell--sidebar-collapsed" : ""}`}>
+      <aside className="sidebar" aria-hidden={isSidebarCollapsed} aria-label="本地控制台导航">
         <div className="profile-row">
           <div className="avatar" aria-hidden="true">
             A
@@ -232,10 +326,10 @@ function App() {
           </div>
 
           <div className="session-list">
-            {sessions.length === 0 ? (
+            {visibleSessions.length === 0 ? (
               <div className="history-empty">暂无会话</div>
             ) : (
-              sessions.map((session) => (
+              visibleSessions.map((session) => (
                 <button
                   className={`session-item ${session.id === activeSessionId ? "session-item--active" : ""}`}
                   key={session.id}
@@ -263,14 +357,24 @@ function App() {
 
       <main className={`chat-shell ${error ? "chat-shell--has-error" : ""}`}>
         <header className="conversation-header">
-          <button className="icon-button header-icon" type="button" aria-label="切换侧栏显示">
+          <button
+            aria-expanded={!isSidebarCollapsed}
+            aria-label={isSidebarCollapsed ? "展开侧栏" : "折叠侧栏"}
+            className="icon-button header-icon"
+            type="button"
+            onClick={() => setIsSidebarCollapsed((current) => !current)}
+          >
             <span className="panel-icon" aria-hidden="true" />
           </button>
           <div className="conversation-title">
             <h1>{activeSession ? `Agent 会话 ${sessionTitle(activeSession)}` : "Agent Chat Console"}</h1>
-            <span>{activeSession ? `${activeSession.messageCount} 条消息` : "本地开发控制台"}</span>
+            <span>{lastStreamEvent ?? (activeSession ? `${activeSession.messageCount} 条消息` : "本地开发控制台")}</span>
           </div>
           <div className="header-actions">
+            <span className="stream-indicator" title={streamLabel(streamState)}>
+              <span className={`stream-icon stream-icon--${streamState}`} aria-hidden="true" />
+              <span className="sr-only">{streamLabel(streamState)}</span>
+            </span>
             <button className="icon-button" type="button" onClick={() => void bootstrap()} aria-label="刷新连接与会话">
               <span className="refresh-icon" aria-hidden="true" />
             </button>
@@ -280,7 +384,7 @@ function App() {
               onClick={handleThemeToggle}
               aria-label={theme === "dark" ? "切换到浅色主题" : "切换到深色主题"}
             >
-              <span aria-hidden="true">{theme === "dark" ? "Light" : "Dark"}</span>
+              <span className={`theme-icon theme-icon--${theme === "dark" ? "sun" : "moon"}`} aria-hidden="true" />
             </button>
           </div>
         </header>
@@ -322,7 +426,7 @@ function App() {
                     <strong>{roleLabel(message.role)}</strong>
                     {message.name ? <span>{message.name}</span> : null}
                   </div>
-                  <p>{messageText(message)}</p>
+                  <MessageBody message={message} />
                 </div>
               </article>
             ))
@@ -358,15 +462,14 @@ function App() {
           />
           <div className="composer-toolbar">
             <div className="quick-actions" aria-label="快捷操作">
-              <span>快速</span>
-              <span>帮我写作</span>
-              <span>图像生成</span>
-              <span>编程</span>
-              <span>更多</span>
+              {quickActions.map((action) => (
+                <button className="quick-action" key={action.label} type="button" aria-label={action.label} title={action.label}>
+                  <span className={`quick-icon quick-icon--${action.icon}`} aria-hidden="true" />
+                </button>
+              ))}
             </div>
             <button className="send-button" type="submit" disabled={!canSend} aria-label="发送消息">
               <span className="send-icon" aria-hidden="true" />
-              <span>{loadState === "sending" ? "发送中" : "发送"}</span>
             </button>
           </div>
         </form>

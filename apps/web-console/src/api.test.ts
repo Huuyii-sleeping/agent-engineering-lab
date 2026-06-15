@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createSession,
+  createAgentEventStream,
   fetchHealth,
   fetchSession,
   fetchSessions,
@@ -19,6 +20,53 @@ afterEach(() => {
 });
 
 describe("web-console api client", () => {
+  it("opens the BFF SSE endpoint and parses known agent events", () => {
+    const listeners = new Map<string, (event: MessageEvent<string>) => void>();
+    class FakeEventSource {
+      onopen: ((event: Event) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+
+      constructor(readonly url: string) {}
+
+      addEventListener(type: string, listener: (event: MessageEvent<string>) => void): void {
+        listeners.set(type, listener);
+      }
+
+      close = vi.fn();
+    }
+
+    const onOpen = vi.fn();
+    const onError = vi.fn();
+    const onEvent = vi.fn();
+    const stream = createAgentEventStream({
+      eventSourceCtor: FakeEventSource,
+      onOpen,
+      onError,
+      onEvent,
+    });
+    const source = stream as FakeEventSource;
+
+    expect(source.url).toBe("/api/events/stream?since_id=-1");
+    source.onopen?.(new Event("open"));
+    source.onerror?.(new Event("error"));
+    listeners.get("chat.completed")?.(
+      new MessageEvent("chat.completed", {
+        data: JSON.stringify({ id: 3, payload: { session_id: "s1" } }),
+        lastEventId: "3",
+      }),
+    );
+    stream.close();
+
+    expect(onOpen).toHaveBeenCalledOnce();
+    expect(onError).toHaveBeenCalledOnce();
+    expect(onEvent).toHaveBeenCalledWith({
+      type: "chat.completed",
+      id: "3",
+      data: { id: 3, payload: { session_id: "s1" } },
+    });
+    expect(source.close).toHaveBeenCalledOnce();
+  });
+
   it("calls BFF health, session, and message endpoints", async () => {
     const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
       const url = new URL(String(input), "http://localhost");
