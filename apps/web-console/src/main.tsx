@@ -61,13 +61,13 @@ import {
   writeSessionMetadata,
   type SessionMetadataMap,
 } from "./session-metadata";
+import { settingsSectionFromHash, type SettingsSection } from "./settings-route";
 import { getNextTheme, readStoredTheme, writeStoredTheme, type ThemeMode } from "./theme";
 import "./styles.css";
 
 type LoadState = "idle" | "loading" | "sending";
 type StreamState = "connecting" | "connected" | "disconnected";
 type AppView = "chat" | "settings";
-type SettingsSection = "profile" | "preferences" | "system";
 
 type NavItem = {
   label: string;
@@ -361,11 +361,12 @@ function SettingsPage({
 }
 
 function App() {
+  const initialSettingsSection = typeof window === "undefined" ? null : settingsSectionFromHash(window.location.hash);
   const [theme, setTheme] = useState<ThemeMode>(() =>
     typeof window === "undefined" ? "dark" : readStoredTheme(window.localStorage),
   );
-  const [view, setView] = useState<AppView>("chat");
-  const [settingsSection, setSettingsSection] = useState<SettingsSection>("profile");
+  const [view, setView] = useState<AppView>(initialSettingsSection ? "settings" : "chat");
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>(initialSettingsSection ?? "profile");
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -396,6 +397,7 @@ function App() {
   const canSend = Boolean(activeSessionId && draft.trim() && !isBusy);
   const messages = activeSession?.messages ?? [];
   const activeSessionSummaryTitle = activeSession ? summarizeSessionTitle(activeSession.messages) : null;
+  const isSettingsView = view === "settings";
   const conversationRuntimeState = loadState === "loading" ? "loading" : isBusy ? "running" : activeSessionId ? "completed" : "idle";
 
   function sessionTitleFor(session: SessionSummary | SessionDetail): string {
@@ -565,10 +567,14 @@ function App() {
   function openSettings(section: SettingsSection): void {
     setSettingsSection(section);
     setView("settings");
+    window.location.hash = `settings/${section}`;
   }
 
   function backToChat(): void {
     setView("chat");
+    if (window.location.hash.startsWith("#settings")) {
+      window.history.pushState("", document.title, window.location.pathname + window.location.search);
+    }
   }
 
   function updateMetadata(updater: (current: SessionMetadataMap) => SessionMetadataMap): void {
@@ -614,6 +620,20 @@ function App() {
 
   useEffect(() => {
     void bootstrap();
+  }, []);
+
+  useEffect(() => {
+    function handleHashChange(): void {
+      const nextSection = settingsSectionFromHash(window.location.hash);
+      if (nextSection) {
+        setSettingsSection(nextSection);
+        setView("settings");
+        return;
+      }
+      setView("chat");
+    }
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
 
   useEffect(() => {
@@ -697,116 +717,118 @@ function App() {
   }, []);
 
   return (
-    <div className={`app-shell ${isSidebarCollapsed ? "app-shell--sidebar-collapsed" : ""}`}>
-      <aside className="sidebar" aria-hidden={isSidebarCollapsed} aria-label="本地控制台导航">
-        <div className="profile-row">
-          <div className="brand-mark" aria-hidden="true">
-            <BrainCircuit size={21} strokeWidth={2.4} />
+    <div className={`app-shell ${isSidebarCollapsed ? "app-shell--sidebar-collapsed" : ""} ${isSettingsView ? "app-shell--settings" : ""}`}>
+      {!isSettingsView ? (
+        <aside className="sidebar" aria-hidden={isSidebarCollapsed} aria-label="本地控制台导航">
+          <div className="profile-row">
+            <div className="brand-mark" aria-hidden="true">
+              <BrainCircuit size={21} strokeWidth={2.4} />
+            </div>
+            <strong>AI Studio</strong>
           </div>
-          <strong>AI Studio</strong>
-        </div>
 
-        <nav className="primary-nav" aria-label="功能导航">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button className="nav-item nav-item--pending" key={item.label} type="button" aria-label={`${item.label}，待开发`}>
-                <Icon className="nav-icon" size={18} strokeWidth={2} aria-hidden="true" />
-                <span>{item.label}</span>
-                <span className="pending-badge">待开发</span>
+          <nav className="primary-nav" aria-label="功能导航">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button className="nav-item nav-item--pending" key={item.label} type="button" aria-label={`${item.label}，待开发`}>
+                  <Icon className="nav-icon" size={18} strokeWidth={2} aria-hidden="true" />
+                  <span>{item.label}</span>
+                  <span className="pending-badge">待开发</span>
+                </button>
+              );
+            })}
+          </nav>
+
+          <div className="history-section">
+            <div className="history-header">
+              <span>历史对话</span>
+              <button className="icon-button" type="button" onClick={() => void handleCreateSession()} aria-label="新建会话">
+                <Plus size={20} strokeWidth={2.2} aria-hidden="true" />
               </button>
-            );
-          })}
-        </nav>
+            </div>
 
-        <div className="history-section">
-          <div className="history-header">
-            <span>历史对话</span>
-            <button className="icon-button" type="button" onClick={() => void handleCreateSession()} aria-label="新建会话">
-              <Plus size={20} strokeWidth={2.2} aria-hidden="true" />
-            </button>
-          </div>
-
-          <div className="session-list">
-            {visibleSessions.length === 0 ? (
-              <div className="history-empty">暂无会话</div>
-            ) : (
-              visibleSessions.map((session) => (
-                <div
-                  className={`session-item ${session.id === activeSessionId ? "session-item--active" : ""}`}
-                  key={session.id}
-                >
-                  <button className="session-select" type="button" onClick={() => setActiveSessionId(session.id)}>
-                    <span className="session-dot" aria-hidden="true" />
-                    <span className="session-copy">
-                      <strong>
-                        {sessionMetadata[session.id]?.pinned ? "置顶 " : ""}
-                        {sessionTitleFor(session)}
-                      </strong>
-                      <small>
-                        {session.messageCount} 条消息 · {session.busy ? "运行中" : formatTime(session.updatedAt)}
-                      </small>
-                    </span>
-                  </button>
-                  <span className="session-actions">
-                    <button
-                      aria-expanded={openSessionMenuId === session.id}
-                      aria-label="打开会话菜单"
-                      className="session-menu-trigger"
-                      type="button"
-                      title="会话菜单"
-                      onClick={() => setOpenSessionMenuId((current) => (current === session.id ? null : session.id))}
-                    >
-                      <MoreVertical size={17} strokeWidth={2.2} aria-hidden="true" />
-                    </button>
-                    {openSessionMenuId === session.id ? (
-                      <span className="session-menu" role="menu">
-                        <button className="session-menu-item" role="menuitem" type="button" onClick={() => handleTogglePinned(session)}>
-                          <Pin
-                            className={sessionMetadata[session.id]?.pinned ? "session-menu-item-icon--active" : ""}
-                            size={15}
-                            strokeWidth={2.2}
-                            aria-hidden="true"
-                          />
-                          <span>{sessionMetadata[session.id]?.pinned ? "取消置顶" : "置顶"}</span>
-                        </button>
-                        <button className="session-menu-item" role="menuitem" type="button" onClick={() => handleRenameSession(session)}>
-                          <Pencil size={15} strokeWidth={2.2} aria-hidden="true" />
-                          <span>重命名</span>
-                        </button>
-                        <button className="session-menu-item session-menu-item--danger" role="menuitem" type="button" onClick={() => handleHideSession(session)}>
-                          <Trash2 size={15} strokeWidth={2.2} aria-hidden="true" />
-                          <span>删除</span>
-                        </button>
+            <div className="session-list">
+              {visibleSessions.length === 0 ? (
+                <div className="history-empty">暂无会话</div>
+              ) : (
+                visibleSessions.map((session) => (
+                  <div
+                    className={`session-item ${session.id === activeSessionId ? "session-item--active" : ""}`}
+                    key={session.id}
+                  >
+                    <button className="session-select" type="button" onClick={() => setActiveSessionId(session.id)}>
+                      <span className="session-dot" aria-hidden="true" />
+                      <span className="session-copy">
+                        <strong>
+                          {sessionMetadata[session.id]?.pinned ? "置顶 " : ""}
+                          {sessionTitleFor(session)}
+                        </strong>
+                        <small>
+                          {session.messageCount} 条消息 · {session.busy ? "运行中" : formatTime(session.updatedAt)}
+                        </small>
                       </span>
-                    ) : null}
-                  </span>
-                </div>
-              ))
-            )}
+                    </button>
+                    <span className="session-actions">
+                      <button
+                        aria-expanded={openSessionMenuId === session.id}
+                        aria-label="打开会话菜单"
+                        className="session-menu-trigger"
+                        type="button"
+                        title="会话菜单"
+                        onClick={() => setOpenSessionMenuId((current) => (current === session.id ? null : session.id))}
+                      >
+                        <MoreVertical size={17} strokeWidth={2.2} aria-hidden="true" />
+                      </button>
+                      {openSessionMenuId === session.id ? (
+                        <span className="session-menu" role="menu">
+                          <button className="session-menu-item" role="menuitem" type="button" onClick={() => handleTogglePinned(session)}>
+                            <Pin
+                              className={sessionMetadata[session.id]?.pinned ? "session-menu-item-icon--active" : ""}
+                              size={15}
+                              strokeWidth={2.2}
+                              aria-hidden="true"
+                            />
+                            <span>{sessionMetadata[session.id]?.pinned ? "取消置顶" : "置顶"}</span>
+                          </button>
+                          <button className="session-menu-item" role="menuitem" type="button" onClick={() => handleRenameSession(session)}>
+                            <Pencil size={15} strokeWidth={2.2} aria-hidden="true" />
+                            <span>重命名</span>
+                          </button>
+                          <button className="session-menu-item session-menu-item--danger" role="menuitem" type="button" onClick={() => handleHideSession(session)}>
+                            <Trash2 size={15} strokeWidth={2.2} aria-hidden="true" />
+                            <span>删除</span>
+                          </button>
+                        </span>
+                      ) : null}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
-        </div>
 
-        <div className="sidebar-settings" aria-label="个人设置">
-          {sidebarSettings.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                className="sidebar-setting-button"
-                key={item.label}
-                type="button"
-                aria-label={item.label}
-                title={item.label}
-                onClick={() => openSettings(item.section)}
-              >
-                <Icon size={18} strokeWidth={2.1} aria-hidden="true" />
-              </button>
-            );
-          })}
-        </div>
-      </aside>
+          <div className="sidebar-settings" aria-label="个人设置">
+            {sidebarSettings.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  className="sidebar-setting-button"
+                  key={item.label}
+                  type="button"
+                  aria-label={item.label}
+                  title={item.label}
+                  onClick={() => openSettings(item.section)}
+                >
+                  <Icon size={18} strokeWidth={2.1} aria-hidden="true" />
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+      ) : null}
 
-      {view === "settings" ? (
+      {isSettingsView ? (
         <SettingsPage
           activeSection={settingsSection}
           health={health}
