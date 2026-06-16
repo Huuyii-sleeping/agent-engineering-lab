@@ -2,8 +2,10 @@ import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 import {
   AppWindow,
+  ArrowLeft,
   Bot,
   BrainCircuit,
+  CheckCircle2,
   CircleDot,
   Code2,
   Folder,
@@ -23,6 +25,7 @@ import {
   SearchCheck,
   SendHorizontal,
   Settings,
+  ShieldCheck,
   SlidersHorizontal,
   Sparkles,
   Sun,
@@ -63,6 +66,8 @@ import "./styles.css";
 
 type LoadState = "idle" | "loading" | "sending";
 type StreamState = "connecting" | "connected" | "disconnected";
+type AppView = "chat" | "settings";
+type SettingsSection = "profile" | "preferences" | "system";
 
 type NavItem = {
   label: string;
@@ -77,6 +82,7 @@ type QuickAction = {
 type SidebarSetting = {
   label: string;
   icon: LucideIcon;
+  section: SettingsSection;
 };
 
 type SessionSummaryTitleMap = Record<string, string>;
@@ -100,9 +106,9 @@ const quickActions: QuickAction[] = [
 ];
 
 const sidebarSettings: SidebarSetting[] = [
-  { label: "个人设置", icon: UserRound },
-  { label: "偏好设置", icon: SlidersHorizontal },
-  { label: "系统设置", icon: Settings },
+  { label: "个人设置", icon: UserRound, section: "profile" },
+  { label: "偏好设置", icon: SlidersHorizontal, section: "preferences" },
+  { label: "系统设置", icon: Settings, section: "system" },
 ];
 
 const markdownComponents: Components = {
@@ -216,10 +222,150 @@ function NewConversationPanel({ onCreate }: { onCreate?: () => void }) {
   );
 }
 
+function SettingsPage({
+  activeSection,
+  health,
+  sessionCount,
+  streamState,
+  theme,
+  onBack,
+  onSectionChange,
+  onThemeToggle,
+}: {
+  activeSection: SettingsSection;
+  health: HealthStatus | null;
+  sessionCount: number;
+  streamState: StreamState;
+  theme: ThemeMode;
+  onBack: () => void;
+  onSectionChange: (section: SettingsSection) => void;
+  onThemeToggle: () => void;
+}) {
+  return (
+    <main className="settings-shell">
+      <header className="settings-header">
+        <button className="icon-button" type="button" onClick={onBack} aria-label="返回聊天">
+          <ArrowLeft size={20} strokeWidth={2.2} aria-hidden="true" />
+        </button>
+        <div className="settings-title">
+          <h1>个人设置</h1>
+          <span>AI Studio 本地偏好</span>
+        </div>
+      </header>
+
+      <section className="settings-body" aria-label="个人设置内容">
+        <nav className="settings-tabs" aria-label="设置分区">
+          {sidebarSettings.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                className={`settings-tab ${activeSection === item.section ? "settings-tab--active" : ""}`}
+                key={item.section}
+                type="button"
+                onClick={() => onSectionChange(item.section)}
+              >
+                <Icon size={18} strokeWidth={2.1} aria-hidden="true" />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="settings-panels">
+          <section className={`settings-panel ${activeSection === "profile" ? "settings-panel--active" : ""}`}>
+            <div className="settings-panel-heading">
+              <UserRound size={20} strokeWidth={2.2} aria-hidden="true" />
+              <div>
+                <h2>个人资料</h2>
+                <p>本地工作区身份</p>
+              </div>
+            </div>
+            <div className="profile-summary">
+              <div className="profile-avatar" aria-hidden="true">
+                <UserRound size={26} strokeWidth={2.2} />
+              </div>
+              <div>
+                <strong>本地用户</strong>
+                <span>AI Studio Operator</span>
+              </div>
+            </div>
+            <div className="settings-list">
+              <div className="settings-row">
+                <span>当前工作台</span>
+                <strong>AI Studio</strong>
+              </div>
+              <div className="settings-row">
+                <span>历史会话</span>
+                <strong>{sessionCount} 个</strong>
+              </div>
+            </div>
+          </section>
+
+          <section className={`settings-panel ${activeSection === "preferences" ? "settings-panel--active" : ""}`}>
+            <div className="settings-panel-heading">
+              <SlidersHorizontal size={20} strokeWidth={2.2} aria-hidden="true" />
+              <div>
+                <h2>偏好设置</h2>
+                <p>界面与输入体验</p>
+              </div>
+            </div>
+            <div className="settings-list">
+              <div className="settings-row">
+                <span>主题模式</span>
+                <button className="segmented-setting" type="button" onClick={onThemeToggle}>
+                  {theme === "dark" ? <Moon size={16} strokeWidth={2.1} aria-hidden="true" /> : <Sun size={16} strokeWidth={2.1} aria-hidden="true" />}
+                  <strong>{theme === "dark" ? "深色" : "浅色"}</strong>
+                </button>
+              </div>
+              <div className="settings-row">
+                <span>快捷键提示</span>
+                <strong>已开启</strong>
+              </div>
+              <div className="settings-row">
+                <span>Markdown 渲染</span>
+                <strong>已开启</strong>
+              </div>
+            </div>
+          </section>
+
+          <section className={`settings-panel ${activeSection === "system" ? "settings-panel--active" : ""}`}>
+            <div className="settings-panel-heading">
+              <Settings size={20} strokeWidth={2.2} aria-hidden="true" />
+              <div>
+                <h2>系统状态</h2>
+                <p>本地服务连接</p>
+              </div>
+            </div>
+            <div className="system-status-grid">
+              <div className="status-tile">
+                <Radio className={`stream-icon stream-icon--${streamState}`} size={20} strokeWidth={2.2} aria-hidden="true" />
+                <span>SSE</span>
+                <strong>{streamLabel(streamState)}</strong>
+              </div>
+              <div className="status-tile">
+                <CheckCircle2 size={20} strokeWidth={2.2} aria-hidden="true" />
+                <span>BFF</span>
+                <strong>{health?.bffStatus ?? "unknown"}</strong>
+              </div>
+              <div className="status-tile">
+                <ShieldCheck size={20} strokeWidth={2.2} aria-hidden="true" />
+                <span>Agent</span>
+                <strong>{health?.agentStatus ?? "unknown"}</strong>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 function App() {
   const [theme, setTheme] = useState<ThemeMode>(() =>
     typeof window === "undefined" ? "dark" : readStoredTheme(window.localStorage),
   );
+  const [view, setView] = useState<AppView>("chat");
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("profile");
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -416,6 +562,15 @@ function App() {
     });
   }
 
+  function openSettings(section: SettingsSection): void {
+    setSettingsSection(section);
+    setView("settings");
+  }
+
+  function backToChat(): void {
+    setView("chat");
+  }
+
   function updateMetadata(updater: (current: SessionMetadataMap) => SessionMetadataMap): void {
     setSessionMetadata((current) => {
       const next = updater(current);
@@ -555,11 +710,11 @@ function App() {
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
-            <button className="nav-item nav-item--pending" key={item.label} type="button" aria-label={`${item.label}，待开发`}>
-              <Icon className="nav-icon" size={18} strokeWidth={2} aria-hidden="true" />
-              <span>{item.label}</span>
-              <span className="pending-badge">待开发</span>
-            </button>
+              <button className="nav-item nav-item--pending" key={item.label} type="button" aria-label={`${item.label}，待开发`}>
+                <Icon className="nav-icon" size={18} strokeWidth={2} aria-hidden="true" />
+                <span>{item.label}</span>
+                <span className="pending-badge">待开发</span>
+              </button>
             );
           })}
         </nav>
@@ -636,7 +791,14 @@ function App() {
           {sidebarSettings.map((item) => {
             const Icon = item.icon;
             return (
-              <button className="sidebar-setting-button" key={item.label} type="button" aria-label={item.label} title={item.label}>
+              <button
+                className="sidebar-setting-button"
+                key={item.label}
+                type="button"
+                aria-label={item.label}
+                title={item.label}
+                onClick={() => openSettings(item.section)}
+              >
                 <Icon size={18} strokeWidth={2.1} aria-hidden="true" />
               </button>
             );
@@ -644,124 +806,136 @@ function App() {
         </div>
       </aside>
 
-      <main className={`chat-shell ${error ? "chat-shell--has-error" : ""}`}>
-        <header className="conversation-header">
-          <button
-            aria-expanded={!isSidebarCollapsed}
-            aria-label={isSidebarCollapsed ? "展开侧栏" : "折叠侧栏"}
-            className="icon-button header-icon"
-            type="button"
-            onClick={() => setIsSidebarCollapsed((current) => !current)}
-          >
-            {isSidebarCollapsed ? (
-              <PanelLeftOpen size={20} strokeWidth={2.1} aria-hidden="true" />
-            ) : (
-              <PanelLeftClose size={20} strokeWidth={2.1} aria-hidden="true" />
-            )}
-          </button>
-          <div className="conversation-title">
-            <h1>{activeSession ? sessionTitleFor(activeSession) : "AI Studio"}</h1>
-            <span className={`conversation-state conversation-state--${conversationRuntimeState}`}>
-              {conversationRuntimeState}
-            </span>
-          </div>
-          <div className="header-actions">
-            <span className="stream-indicator" title={streamLabel(streamState)}>
-              <Radio className={`stream-icon stream-icon--${streamState}`} size={18} strokeWidth={2.2} aria-hidden="true" />
-              <span className="sr-only">{streamLabel(streamState)}</span>
-            </span>
-            <button className="icon-button" type="button" onClick={() => void bootstrap()} aria-label="刷新连接与会话">
-              <RefreshCw size={19} strokeWidth={2.2} aria-hidden="true" />
-            </button>
+      {view === "settings" ? (
+        <SettingsPage
+          activeSection={settingsSection}
+          health={health}
+          sessionCount={sessions.length}
+          streamState={streamState}
+          theme={theme}
+          onBack={backToChat}
+          onSectionChange={setSettingsSection}
+          onThemeToggle={handleThemeToggle}
+        />
+      ) : (
+        <main className={`chat-shell ${error ? "chat-shell--has-error" : ""}`}>
+          <header className="conversation-header">
             <button
-              className="theme-toggle"
+              aria-expanded={!isSidebarCollapsed}
+              aria-label={isSidebarCollapsed ? "展开侧栏" : "折叠侧栏"}
+              className="icon-button header-icon"
               type="button"
-              onClick={handleThemeToggle}
-              aria-label={theme === "dark" ? "切换到浅色主题" : "切换到深色主题"}
+              onClick={() => setIsSidebarCollapsed((current) => !current)}
             >
-              {theme === "dark" ? (
-                <Sun size={18} strokeWidth={2.1} aria-hidden="true" />
+              {isSidebarCollapsed ? (
+                <PanelLeftOpen size={20} strokeWidth={2.1} aria-hidden="true" />
               ) : (
-                <Moon size={18} strokeWidth={2.1} aria-hidden="true" />
+                <PanelLeftClose size={20} strokeWidth={2.1} aria-hidden="true" />
               )}
             </button>
-          </div>
-        </header>
+            <div className="conversation-title">
+              <h1>{activeSession ? sessionTitleFor(activeSession) : "AI Studio"}</h1>
+              <span className={`conversation-state conversation-state--${conversationRuntimeState}`}>
+                {conversationRuntimeState}
+              </span>
+            </div>
+            <div className="header-actions">
+              <span className="stream-indicator" title={streamLabel(streamState)}>
+                <Radio className={`stream-icon stream-icon--${streamState}`} size={18} strokeWidth={2.2} aria-hidden="true" />
+                <span className="sr-only">{streamLabel(streamState)}</span>
+              </span>
+              <button className="icon-button" type="button" onClick={() => void bootstrap()} aria-label="刷新连接与会话">
+                <RefreshCw size={19} strokeWidth={2.2} aria-hidden="true" />
+              </button>
+              <button
+                className="theme-toggle"
+                type="button"
+                onClick={handleThemeToggle}
+                aria-label={theme === "dark" ? "切换到浅色主题" : "切换到深色主题"}
+              >
+                {theme === "dark" ? (
+                  <Sun size={18} strokeWidth={2.1} aria-hidden="true" />
+                ) : (
+                  <Moon size={18} strokeWidth={2.1} aria-hidden="true" />
+                )}
+              </button>
+            </div>
+          </header>
 
-        {error ? (
-          <div className="error-toast" role="alert">
-            <strong>请求失败</strong>
-            <span>{error}</span>
-            <button type="button" onClick={() => void bootstrap()}>
-              重试
-            </button>
-          </div>
-        ) : null}
+          {error ? (
+            <div className="error-toast" role="alert">
+              <strong>请求失败</strong>
+              <span>{error}</span>
+              <button type="button" onClick={() => void bootstrap()}>
+                重试
+              </button>
+            </div>
+          ) : null}
 
-        <section className="transcript" aria-label="聊天内容">
-          {!activeSessionId ? (
-            <NewConversationPanel onCreate={() => void handleCreateSession()} />
-          ) : messages.length === 0 ? (
-            <NewConversationPanel />
-          ) : (
-            messages.map((message, index) => {
-              const isUserMessage = message.role === "user";
-              return (
-                <article className={`message-row message-row--${message.role}`} key={`${message.role}-${index}`}>
-                  {isUserMessage ? null : <MessageAvatar role={message.role} />}
-                  <div className="message-stack">
-                    <div className="message-meta">
-                      <strong>{roleLabel(message.role)}</strong>
-                      {message.name && message.name !== "streaming" ? <span>{message.name}</span> : null}
-                    </div>
-                    <div className="message-content">
-                      <MessageBody message={message} />
-                    </div>
-                  </div>
-                  {isUserMessage ? <MessageAvatar role={message.role} /> : null}
-                </article>
-              );
-            })
-          )}
-
-        </section>
-
-        <form className="composer" onSubmit={(event) => void handleSend(event)}>
-          <label className="sr-only" htmlFor="message-input">
-            消息
-          </label>
-          <textarea
-            ref={textareaRef}
-            id="message-input"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={handleComposerKeyDown}
-            placeholder={activeSessionId ? "发送消息..." : "先新建一个会话..."}
-            disabled={!activeSessionId || isBusy}
-            rows={3}
-          />
-          <div className="composer-toolbar">
-            <div className="quick-actions" aria-label="快捷操作">
-              {quickActions.map((action) => {
-                const Icon = action.icon;
+          <section className="transcript" aria-label="聊天内容">
+            {!activeSessionId ? (
+              <NewConversationPanel onCreate={() => void handleCreateSession()} />
+            ) : messages.length === 0 ? (
+              <NewConversationPanel />
+            ) : (
+              messages.map((message, index) => {
+                const isUserMessage = message.role === "user";
                 return (
-                <button className="quick-action" key={action.label} type="button" aria-label={action.label} title={action.label}>
-                  <Icon size={18} strokeWidth={2.1} aria-hidden="true" />
-                </button>
+                  <article className={`message-row message-row--${message.role}`} key={`${message.role}-${index}`}>
+                    {isUserMessage ? null : <MessageAvatar role={message.role} />}
+                    <div className="message-stack">
+                      <div className="message-meta">
+                        <strong>{roleLabel(message.role)}</strong>
+                        {message.name && message.name !== "streaming" ? <span>{message.name}</span> : null}
+                      </div>
+                      <div className="message-content">
+                        <MessageBody message={message} />
+                      </div>
+                    </div>
+                    {isUserMessage ? <MessageAvatar role={message.role} /> : null}
+                  </article>
                 );
-              })}
+              })
+            )}
+          </section>
+
+          <form className="composer" onSubmit={(event) => void handleSend(event)}>
+            <label className="sr-only" htmlFor="message-input">
+              消息
+            </label>
+            <textarea
+              ref={textareaRef}
+              id="message-input"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={handleComposerKeyDown}
+              placeholder={activeSessionId ? "发送消息..." : "先新建一个会话..."}
+              disabled={!activeSessionId || isBusy}
+              rows={3}
+            />
+            <div className="composer-toolbar">
+              <div className="quick-actions" aria-label="快捷操作">
+                {quickActions.map((action) => {
+                  const Icon = action.icon;
+                  return (
+                    <button className="quick-action" key={action.label} type="button" aria-label={action.label} title={action.label}>
+                      <Icon size={18} strokeWidth={2.1} aria-hidden="true" />
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="composer-shortcuts" aria-label="快捷键">
+                {shortcutHints.map((shortcut) => (
+                  <kbd key={shortcut}>{shortcut}</kbd>
+                ))}
+              </div>
+              <button className="send-button" type="submit" disabled={!canSend} aria-label="发送消息">
+                <SendHorizontal size={20} strokeWidth={2.3} aria-hidden="true" />
+              </button>
             </div>
-            <div className="composer-shortcuts" aria-label="快捷键">
-              {shortcutHints.map((shortcut) => (
-                <kbd key={shortcut}>{shortcut}</kbd>
-              ))}
-            </div>
-            <button className="send-button" type="submit" disabled={!canSend} aria-label="发送消息">
-              <SendHorizontal size={20} strokeWidth={2.3} aria-hidden="true" />
-            </button>
-          </div>
-        </form>
-      </main>
+          </form>
+        </main>
+      )}
     </div>
   );
 }
