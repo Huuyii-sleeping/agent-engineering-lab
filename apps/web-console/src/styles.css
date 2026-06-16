@@ -693,11 +693,13 @@ p {
 
 .settings-panel--active {
   display: grid;
+  align-content: start;
   gap: 18px;
 }
 
 .settings-group {
   display: grid;
+  align-content: start;
   gap: 8px;
 }
 
@@ -719,7 +721,7 @@ p {
 
 .settings-row {
   display: grid;
-  min-height: 66px;
+  height: 66px;
   grid-template-columns: 38px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 12px;
@@ -1607,7 +1609,7 @@ button.settings-row:hover {
 
   .settings-row {
     grid-template-columns: 34px minmax(0, 1fr) auto;
-    min-height: 62px;
+    height: 62px;
     padding-block: 12px;
   }
 
