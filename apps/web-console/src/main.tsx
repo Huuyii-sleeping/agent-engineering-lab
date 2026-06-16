@@ -249,35 +249,69 @@ function SettingsPage({
         </button>
         <div className="settings-title">
           <h1>个人设置</h1>
-          <span>AI Studio 本地偏好</span>
+          <span>AI Studio 本地控制台</span>
+        </div>
+        <div className="settings-header-metrics" aria-label="设置概览">
+          <span>{sessionCount} 个会话</span>
+          <span>{streamLabel(streamState)}</span>
         </div>
       </header>
 
       <section className="settings-body" aria-label="个人设置内容">
-        <nav className="settings-tabs" aria-label="设置分区">
-          {sidebarSettings.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                className={`settings-tab ${activeSection === item.section ? "settings-tab--active" : ""}`}
-                key={item.section}
-                type="button"
-                onClick={() => onSectionChange(item.section)}
-              >
-                <Icon size={18} strokeWidth={2.1} aria-hidden="true" />
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
-        </nav>
+        <aside className="settings-rail">
+          <div className="settings-rail-brand">
+            <span aria-hidden="true">
+              <BrainCircuit size={20} strokeWidth={2.3} />
+            </span>
+            <div>
+              <strong>AI Studio</strong>
+              <small>Local workspace</small>
+            </div>
+          </div>
+          <nav className="settings-tabs" aria-label="设置分区">
+            {sidebarSettings.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  className={`settings-tab ${activeSection === item.section ? "settings-tab--active" : ""}`}
+                  key={item.section}
+                  type="button"
+                  onClick={() => onSectionChange(item.section)}
+                >
+                  <Icon size={18} strokeWidth={2.1} aria-hidden="true" />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+        </aside>
 
-        <div className="settings-panels">
+        <div className="settings-workbench">
+          <section className="settings-overview" aria-label="运行概览">
+            <div className="settings-overview-item">
+              <UserRound size={18} strokeWidth={2.2} aria-hidden="true" />
+              <span>身份</span>
+              <strong>本地用户</strong>
+            </div>
+            <div className="settings-overview-item">
+              <Moon size={18} strokeWidth={2.2} aria-hidden="true" />
+              <span>主题</span>
+              <strong>{theme === "dark" ? "深色" : "浅色"}</strong>
+            </div>
+            <div className="settings-overview-item">
+              <Radio className={`stream-icon stream-icon--${streamState}`} size={18} strokeWidth={2.2} aria-hidden="true" />
+              <span>通道</span>
+              <strong>{streamLabel(streamState)}</strong>
+            </div>
+          </section>
+
+          <div className="settings-panels">
           <section className={`settings-panel ${activeSection === "profile" ? "settings-panel--active" : ""}`}>
             <div className="settings-panel-heading">
               <UserRound size={20} strokeWidth={2.2} aria-hidden="true" />
               <div>
-                <h2>个人资料</h2>
-                <p>本地工作区身份</p>
+                <h2>本地身份</h2>
+                <p>用于标识当前 AI Studio 工作空间</p>
               </div>
             </div>
             <div className="profile-summary">
@@ -286,12 +320,12 @@ function SettingsPage({
               </div>
               <div>
                 <strong>本地用户</strong>
-                <span>AI Studio Operator</span>
+                <span>AI Studio operator</span>
               </div>
             </div>
             <div className="settings-list">
               <div className="settings-row">
-                <span>当前工作台</span>
+                <span>工作台</span>
                 <strong>AI Studio</strong>
               </div>
               <div className="settings-row">
@@ -305,8 +339,8 @@ function SettingsPage({
             <div className="settings-panel-heading">
               <SlidersHorizontal size={20} strokeWidth={2.2} aria-hidden="true" />
               <div>
-                <h2>偏好设置</h2>
-                <p>界面与输入体验</p>
+                <h2>输入偏好</h2>
+                <p>控制对话编辑和阅读体验</p>
               </div>
             </div>
             <div className="settings-list">
@@ -332,8 +366,8 @@ function SettingsPage({
             <div className="settings-panel-heading">
               <Settings size={20} strokeWidth={2.2} aria-hidden="true" />
               <div>
-                <h2>系统状态</h2>
-                <p>本地服务连接</p>
+                <h2>本地服务</h2>
+                <p>BFF、Agent 与流式通道状态</p>
               </div>
             </div>
             <div className="system-status-grid">
@@ -354,6 +388,7 @@ function SettingsPage({
               </div>
             </div>
           </section>
+          </div>
         </div>
       </section>
     </main>
