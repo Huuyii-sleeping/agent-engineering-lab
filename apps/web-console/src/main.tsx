@@ -3,25 +3,40 @@ import ReactDOM from "react-dom/client";
 import {
   AppWindow,
   ArrowLeft,
+  Bell,
   Bot,
   BrainCircuit,
+  BookOpen,
   CheckCircle2,
+  ChevronRight,
   CircleDot,
   Code2,
+  Database,
+  Download,
   Folder,
   Grid2X2,
+  Globe2,
+  HelpCircle,
   Image,
+  Info,
+  Keyboard,
+  Lock,
+  LogOut,
+  MessageSquare,
+  Monitor,
   Moon,
   MoreHorizontal,
   MoreVertical,
   PanelLeftClose,
   PanelLeftOpen,
+  Palette,
   Pencil,
   PenTool,
   Pin,
   Plus,
   Radio,
   RefreshCw,
+  RotateCcw,
   SearchCheck,
   SendHorizontal,
   Settings,
@@ -284,88 +299,278 @@ function SettingsPage({
 
         <div className="settings-workbench">
           <div className="settings-panels">
-          <section className={`settings-panel ${activeSection === "profile" ? "settings-panel--active" : ""}`}>
-            <div className="settings-panel-heading">
-              <UserRound size={20} strokeWidth={2.2} aria-hidden="true" />
-              <div>
-                <h2>本地身份</h2>
-                <p>用于标识当前 AI Studio 工作空间</p>
+            <section className={`settings-panel ${activeSection === "profile" ? "settings-panel--active" : ""}`}>
+              <div className="settings-group">
+                <p className="settings-group-title">隐私与权限</p>
+                <div className="settings-list">
+                  <button className="settings-row" type="button">
+                    <span className="settings-row-icon settings-row-icon--green">
+                      <Lock size={18} strokeWidth={2.2} aria-hidden="true" />
+                    </span>
+                    <span className="settings-row-copy">
+                      <strong>隐私与权限</strong>
+                    </span>
+                    <span className="settings-row-action">待开发</span>
+                    <ChevronRight size={17} strokeWidth={2.2} aria-hidden="true" />
+                  </button>
+                </div>
               </div>
-            </div>
-            <div className="profile-summary">
-              <div className="profile-avatar" aria-hidden="true">
-                <UserRound size={26} strokeWidth={2.2} />
-              </div>
-              <div>
-                <strong>本地用户</strong>
-                <span>AI Studio operator</span>
-              </div>
-            </div>
-            <div className="settings-list">
-              <div className="settings-row">
-                <span>工作台</span>
-                <strong>AI Studio</strong>
-              </div>
-              <div className="settings-row">
-                <span>历史会话</span>
-                <strong>{sessionCount} 个</strong>
-              </div>
-            </div>
-          </section>
 
-          <section className={`settings-panel ${activeSection === "preferences" ? "settings-panel--active" : ""}`}>
-            <div className="settings-panel-heading">
-              <SlidersHorizontal size={20} strokeWidth={2.2} aria-hidden="true" />
-              <div>
-                <h2>输入偏好</h2>
-                <p>控制对话编辑和阅读体验</p>
+              <div className="settings-group">
+                <p className="settings-group-title">通用设置</p>
+                <div className="settings-list">
+                  <button className="settings-row" type="button">
+                    <span className="settings-row-icon settings-row-icon--blue">
+                      <UserRound size={18} strokeWidth={2.2} aria-hidden="true" />
+                    </span>
+                    <span className="settings-row-copy">
+                      <strong>编辑个人资料</strong>
+                      <small>本地用户 · AI Studio operator</small>
+                    </span>
+                    <span className="settings-row-action">待开发</span>
+                    <ChevronRight size={17} strokeWidth={2.2} aria-hidden="true" />
+                  </button>
+                  <div className="settings-row">
+                    <span className="settings-row-icon settings-row-icon--blue">
+                      <Globe2 size={18} strokeWidth={2.2} aria-hidden="true" />
+                    </span>
+                    <span className="settings-row-copy">
+                      <strong>语言设置</strong>
+                    </span>
+                    <span className="settings-value-pill">中文（简体）</span>
+                  </div>
+                  <button className="settings-row" type="button">
+                    <span className="settings-row-icon settings-row-icon--gray">
+                      <Keyboard size={18} strokeWidth={2.2} aria-hidden="true" />
+                    </span>
+                    <span className="settings-row-copy">
+                      <strong>快捷键设置</strong>
+                      <small>Ctrl K · Ctrl Enter · Shift Enter</small>
+                    </span>
+                    <span className="settings-row-action">已支持</span>
+                    <ChevronRight size={17} strokeWidth={2.2} aria-hidden="true" />
+                  </button>
+                  <button className="settings-row" type="button" onClick={onThemeToggle}>
+                    <span className="settings-row-icon settings-row-icon--green">
+                      <Palette size={18} strokeWidth={2.2} aria-hidden="true" />
+                    </span>
+                    <span className="settings-row-copy">
+                      <strong>外观设置</strong>
+                    </span>
+                    <span className="settings-value-pill">{theme === "dark" ? "深色" : "浅色"}</span>
+                    <ChevronRight size={17} strokeWidth={2.2} aria-hidden="true" />
+                  </button>
+                  <button className="settings-row" type="button">
+                    <span className="settings-row-icon settings-row-icon--purple">
+                      <Bell size={18} strokeWidth={2.2} aria-hidden="true" />
+                    </span>
+                    <span className="settings-row-copy">
+                      <strong>通知设置</strong>
+                    </span>
+                    <span className="settings-row-action">待开发</span>
+                    <ChevronRight size={17} strokeWidth={2.2} aria-hidden="true" />
+                  </button>
+                  <button className="settings-row" type="button">
+                    <span className="settings-row-icon settings-row-icon--orange">
+                      <Download size={18} strokeWidth={2.2} aria-hidden="true" />
+                    </span>
+                    <span className="settings-row-copy">
+                      <strong>下载设置</strong>
+                    </span>
+                    <span className="settings-row-action">待开发</span>
+                    <ChevronRight size={17} strokeWidth={2.2} aria-hidden="true" />
+                  </button>
+                </div>
               </div>
-            </div>
-            <div className="settings-list">
-              <div className="settings-row">
-                <span>主题模式</span>
-                <button className="segmented-setting" type="button" onClick={onThemeToggle}>
-                  {theme === "dark" ? <Moon size={16} strokeWidth={2.1} aria-hidden="true" /> : <Sun size={16} strokeWidth={2.1} aria-hidden="true" />}
-                  <strong>{theme === "dark" ? "深色" : "浅色"}</strong>
-                </button>
-              </div>
-              <div className="settings-row">
-                <span>快捷键提示</span>
-                <strong>已开启</strong>
-              </div>
-              <div className="settings-row">
-                <span>Markdown 渲染</span>
-                <strong>已开启</strong>
-              </div>
-            </div>
-          </section>
 
-          <section className={`settings-panel ${activeSection === "system" ? "settings-panel--active" : ""}`}>
-            <div className="settings-panel-heading">
-              <Settings size={20} strokeWidth={2.2} aria-hidden="true" />
-              <div>
-                <h2>本地服务</h2>
-                <p>BFF、Agent 与流式通道状态</p>
+              <div className="settings-group">
+                <p className="settings-group-title">关于</p>
+                <div className="settings-list">
+                  <div className="settings-row">
+                    <span className="settings-row-icon settings-row-icon--blue">
+                      <BrainCircuit size={18} strokeWidth={2.2} aria-hidden="true" />
+                    </span>
+                    <span className="settings-row-copy">
+                      <strong>AI Studio</strong>
+                    </span>
+                    <span className="settings-row-action">本地控制台</span>
+                  </div>
+                  <button className="settings-row" type="button">
+                    <span className="settings-row-icon settings-row-icon--blue">
+                      <Info size={18} strokeWidth={2.2} aria-hidden="true" />
+                    </span>
+                    <span className="settings-row-copy">
+                      <strong>关于 AI Studio</strong>
+                    </span>
+                    <span className="settings-row-action">待开发</span>
+                    <ChevronRight size={17} strokeWidth={2.2} aria-hidden="true" />
+                  </button>
+                </div>
               </div>
-            </div>
-            <div className="system-status-grid">
-              <div className="status-tile">
-                <Radio className={`stream-icon stream-icon--${streamState}`} size={20} strokeWidth={2.2} aria-hidden="true" />
-                <span>SSE</span>
-                <strong>{streamLabel(streamState)}</strong>
+            </section>
+
+            <section className={`settings-panel ${activeSection === "preferences" ? "settings-panel--active" : ""}`}>
+              <div className="settings-group">
+                <p className="settings-group-title">AI 工具</p>
+                <div className="settings-list">
+                  <div className="settings-row">
+                    <span className="settings-row-icon settings-row-icon--blue">
+                      <Sparkles size={18} strokeWidth={2.2} aria-hidden="true" />
+                    </span>
+                    <span className="settings-row-copy">
+                      <strong>Markdown 渲染</strong>
+                    </span>
+                    <span className="settings-row-action">已启用</span>
+                  </div>
+                  <button className="settings-row" type="button">
+                    <span className="settings-row-icon settings-row-icon--purple">
+                      <MessageSquare size={18} strokeWidth={2.2} aria-hidden="true" />
+                    </span>
+                    <span className="settings-row-copy">
+                      <strong>对话浮窗</strong>
+                    </span>
+                    <span className="settings-row-action">待开发</span>
+                    <ChevronRight size={17} strokeWidth={2.2} aria-hidden="true" />
+                  </button>
+                  <button className="settings-row" type="button">
+                    <span className="settings-row-icon settings-row-icon--orange">
+                      <Monitor size={18} strokeWidth={2.2} aria-hidden="true" />
+                    </span>
+                    <span className="settings-row-copy">
+                      <strong>桌面悬浮球</strong>
+                    </span>
+                    <span className="settings-row-action">待开发</span>
+                    <ChevronRight size={17} strokeWidth={2.2} aria-hidden="true" />
+                  </button>
+                  <button className="settings-row" type="button">
+                    <span className="settings-row-icon settings-row-icon--red">
+                      <BookOpen size={18} strokeWidth={2.2} aria-hidden="true" />
+                    </span>
+                    <span className="settings-row-copy">
+                      <strong>拖拽文档时显示阅读浮窗</strong>
+                    </span>
+                    <span className="settings-row-action">待开发</span>
+                    <ChevronRight size={17} strokeWidth={2.2} aria-hidden="true" />
+                  </button>
+                  <button className="settings-row" type="button">
+                    <span className="settings-row-icon settings-row-icon--blue">
+                      <Wrench size={18} strokeWidth={2.2} aria-hidden="true" />
+                    </span>
+                    <span className="settings-row-copy">
+                      <strong>浏览器 AI 工具</strong>
+                    </span>
+                    <span className="settings-row-action">待开发</span>
+                    <ChevronRight size={17} strokeWidth={2.2} aria-hidden="true" />
+                  </button>
+                </div>
               </div>
-              <div className="status-tile">
-                <CheckCircle2 size={20} strokeWidth={2.2} aria-hidden="true" />
-                <span>BFF</span>
-                <strong>{health?.bffStatus ?? "unknown"}</strong>
+
+              <div className="settings-group">
+                <p className="settings-group-title">帮助我们</p>
+                <div className="settings-list">
+                  <button className="settings-row" type="button">
+                    <span className="settings-row-icon settings-row-icon--purple">
+                      <HelpCircle size={18} strokeWidth={2.2} aria-hidden="true" />
+                    </span>
+                    <span className="settings-row-copy">
+                      <strong>帮助与反馈</strong>
+                    </span>
+                    <span className="settings-row-action">待开发</span>
+                    <ChevronRight size={17} strokeWidth={2.2} aria-hidden="true" />
+                  </button>
+                </div>
               </div>
-              <div className="status-tile">
-                <ShieldCheck size={20} strokeWidth={2.2} aria-hidden="true" />
-                <span>Agent</span>
-                <strong>{health?.agentStatus ?? "unknown"}</strong>
+            </section>
+
+            <section className={`settings-panel ${activeSection === "system" ? "settings-panel--active" : ""}`}>
+              <div className="settings-group">
+                <p className="settings-group-title">数据权限</p>
+                <div className="settings-list">
+                  <div className="settings-row">
+                    <span className="settings-row-icon settings-row-icon--blue">
+                      <Database size={18} strokeWidth={2.2} aria-hidden="true" />
+                    </span>
+                    <span className="settings-row-copy">
+                      <strong>历史会话</strong>
+                    </span>
+                    <span className="settings-row-action">{sessionCount} 个</span>
+                  </div>
+                </div>
               </div>
-            </div>
-          </section>
+
+              <div className="settings-group">
+                <p className="settings-group-title">本地服务</p>
+                <div className="settings-list">
+                  <div className="settings-row">
+                    <span className="settings-row-icon settings-row-icon--green">
+                      <Radio className={`stream-icon stream-icon--${streamState}`} size={18} strokeWidth={2.2} aria-hidden="true" />
+                    </span>
+                    <span className="settings-row-copy">
+                      <strong>SSE 连接</strong>
+                    </span>
+                    <span className="settings-row-action">{streamLabel(streamState)}</span>
+                  </div>
+                  <div className="settings-row">
+                    <span className="settings-row-icon settings-row-icon--blue">
+                      <CheckCircle2 size={18} strokeWidth={2.2} aria-hidden="true" />
+                    </span>
+                    <span className="settings-row-copy">
+                      <strong>BFF 服务</strong>
+                    </span>
+                    <span className="settings-row-action">{health?.bffStatus ?? "unknown"}</span>
+                  </div>
+                  <div className="settings-row">
+                    <span className="settings-row-icon settings-row-icon--green">
+                      <ShieldCheck size={18} strokeWidth={2.2} aria-hidden="true" />
+                    </span>
+                    <span className="settings-row-copy">
+                      <strong>Agent 服务</strong>
+                    </span>
+                    <span className="settings-row-action">{health?.agentStatus ?? "unknown"}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="settings-group">
+                <p className="settings-group-title">高级设置</p>
+                <div className="settings-list">
+                  <button className="settings-row" type="button">
+                    <span className="settings-row-icon settings-row-icon--orange">
+                      <Download size={18} strokeWidth={2.2} aria-hidden="true" />
+                    </span>
+                    <span className="settings-row-copy">
+                      <strong>获取最新配置</strong>
+                    </span>
+                    <span className="settings-row-link">获取配置</span>
+                  </button>
+                  <button className="settings-row" type="button">
+                    <span className="settings-row-icon settings-row-icon--orange">
+                      <RotateCcw size={18} strokeWidth={2.2} aria-hidden="true" />
+                    </span>
+                    <span className="settings-row-copy">
+                      <strong>还原初始设置</strong>
+                    </span>
+                    <span className="settings-row-link">还原</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="settings-group">
+                <p className="settings-group-title">其他</p>
+                <div className="settings-list">
+                  <button className="settings-row" type="button">
+                    <span className="settings-row-icon settings-row-icon--gray">
+                      <LogOut size={18} strokeWidth={2.2} aria-hidden="true" />
+                    </span>
+                    <span className="settings-row-copy">
+                      <strong>退出登录</strong>
+                    </span>
+                    <span className="settings-row-action">待开发</span>
+                    <ChevronRight size={17} strokeWidth={2.2} aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+            </section>
           </div>
         </div>
       </section>
