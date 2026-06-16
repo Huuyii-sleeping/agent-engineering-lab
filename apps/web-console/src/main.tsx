@@ -251,10 +251,6 @@ function SettingsPage({
           <h1>个人设置</h1>
           <span>AI Studio 本地控制台</span>
         </div>
-        <div className="settings-header-metrics" aria-label="设置概览">
-          <span>{sessionCount} 个会话</span>
-          <span>{streamLabel(streamState)}</span>
-        </div>
       </header>
 
       <section className="settings-body" aria-label="个人设置内容">
@@ -287,24 +283,6 @@ function SettingsPage({
         </aside>
 
         <div className="settings-workbench">
-          <section className="settings-overview" aria-label="运行概览">
-            <div className="settings-overview-item">
-              <UserRound size={18} strokeWidth={2.2} aria-hidden="true" />
-              <span>身份</span>
-              <strong>本地用户</strong>
-            </div>
-            <div className="settings-overview-item">
-              <Moon size={18} strokeWidth={2.2} aria-hidden="true" />
-              <span>主题</span>
-              <strong>{theme === "dark" ? "深色" : "浅色"}</strong>
-            </div>
-            <div className="settings-overview-item">
-              <Radio className={`stream-icon stream-icon--${streamState}`} size={18} strokeWidth={2.2} aria-hidden="true" />
-              <span>通道</span>
-              <strong>{streamLabel(streamState)}</strong>
-            </div>
-          </section>
-
           <div className="settings-panels">
           <section className={`settings-panel ${activeSection === "profile" ? "settings-panel--active" : ""}`}>
             <div className="settings-panel-heading">
