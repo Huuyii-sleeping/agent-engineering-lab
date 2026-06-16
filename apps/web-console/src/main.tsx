@@ -46,6 +46,7 @@ import {
   type SessionDetail,
   type SessionSummary,
 } from "./api";
+import { shouldReloadSessionFromAgentEvent } from "./chat-stream-state";
 import {
   hideSession,
   isSessionHidden,
@@ -234,6 +235,7 @@ function App() {
   );
   const [error, setError] = useState<string | null>(null);
   const activeSessionIdRef = useRef<string | null>(null);
+  const streamingSessionIdRef = useRef<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const activeSummary = useMemo(
@@ -327,8 +329,10 @@ function App() {
       return;
     }
     const message = draft.trim();
+    const targetSessionId = activeSessionId;
     setDraft("");
     setLoadState("sending");
+    streamingSessionIdRef.current = targetSessionId;
     setActiveSession((session) =>
       session
         ? {
@@ -381,6 +385,9 @@ function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
+      if (streamingSessionIdRef.current === targetSessionId) {
+        streamingSessionIdRef.current = null;
+      }
       setLoadState("idle");
     }
   }
@@ -463,7 +470,12 @@ function App() {
         onEvent: () => {
           void refreshSessions();
           const currentSessionId = activeSessionIdRef.current;
-          if (currentSessionId) {
+          if (
+            shouldReloadSessionFromAgentEvent({
+              activeSessionId: currentSessionId,
+              streamingSessionId: streamingSessionIdRef.current,
+            })
+          ) {
             void loadSession(currentSessionId, { silent: true });
           }
         },
