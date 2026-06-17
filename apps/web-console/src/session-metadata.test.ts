@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   hideSession,
+  hideSessions,
   isSessionHidden,
   readSessionMetadata,
   renameSession,
@@ -24,6 +25,14 @@ describe("session metadata helpers", () => {
     expect(sessionDisplayTitle({ id: "s123456789" }, metadata)).toBe("需求讨论");
     expect(metadata.s123456789.pinned).toBe(true);
     expect(isSessionHidden("s123456789", metadata)).toBe(true);
+  });
+
+  it("hides multiple sessions at once", () => {
+    const metadata = hideSessions({}, ["s1", "s2"]);
+
+    expect(isSessionHidden("s1", metadata)).toBe(true);
+    expect(isSessionHidden("s2", metadata)).toBe(true);
+    expect(isSessionHidden("s3", metadata)).toBe(false);
   });
 
   it("builds display title from the first user message when not renamed", () => {

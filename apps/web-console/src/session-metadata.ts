@@ -138,3 +138,12 @@ export function hideSession(metadata: SessionMetadataMap, sessionId: string): Se
     hidden: true,
   }));
 }
+
+/** Hides multiple sessions from the local Web history list. */
+export function hideSessions(metadata: SessionMetadataMap, sessionIds: Iterable<string>): SessionMetadataMap {
+  let next = metadata;
+  for (const sessionId of sessionIds) {
+    next = hideSession(next, sessionId);
+  }
+  return next;
+}
