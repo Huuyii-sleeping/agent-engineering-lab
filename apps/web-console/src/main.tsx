@@ -82,6 +82,7 @@ import {
   writeSessionMetadata,
   type SessionMetadataMap,
 } from "./session-metadata";
+import { resolveActiveSessionId } from "./session-selection";
 import { settingsSectionFromHash, type SettingsSection } from "./settings-route";
 import { getNextTheme, readStoredTheme, writeStoredTheme, type ThemeMode } from "./theme";
 import "./styles.css";
@@ -706,8 +707,12 @@ function App() {
   async function refreshSessions(selectFirst = false): Promise<void> {
     const next = sortSessionsByRecent(await fetchSessions());
     setSessions(next);
-    if (selectFirst && !activeSessionId && next[0]) {
-      setActiveSessionId(next[0].id);
+    const nextVisibleSessions = sortSessionsForSidebar(next, sessionMetadata).filter(
+      (session) => !isSessionHidden(session.id, sessionMetadata),
+    );
+    const nextActiveSessionId = resolveActiveSessionId(activeSessionId, nextVisibleSessions);
+    if (selectFirst && !activeSessionId && nextActiveSessionId) {
+      setActiveSessionId(nextActiveSessionId);
     }
   }
 
@@ -1031,6 +1036,18 @@ function App() {
       void loadSession(activeSessionId);
     }
   }, [activeSessionId]);
+
+  useEffect(() => {
+    if (!activeSessionId) {
+      return;
+    }
+    const nextActiveSessionId = resolveActiveSessionId(activeSessionId, visibleSessions);
+    if (nextActiveSessionId === activeSessionId) {
+      return;
+    }
+    setActiveSessionId(nextActiveSessionId);
+    setActiveSession(null);
+  }, [activeSessionId, visibleSessions]);
 
   useEffect(() => {
     const sessionsNeedingTitle = sessions.filter(
