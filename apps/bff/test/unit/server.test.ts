@@ -1,4 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { createBffHttpServer } from "../../src/server.js";
 
@@ -10,6 +13,7 @@ type SeenRequest = {
 };
 
 const servers: Server[] = [];
+const tempDirs: string[] = [];
 
 function json(res: ServerResponse, statusCode: number, payload: unknown): void {
   res.statusCode = statusCode;
@@ -115,7 +119,9 @@ async function startMockAgent(): Promise<{ baseUrl: string; seen: SeenRequest[] 
 }
 
 async function startBff(agentBaseUrl: string): Promise<string> {
-  return listen(createBffHttpServer({ agentBaseUrl }));
+  const tempDir = await mkdtemp(join(tmpdir(), "agent-bff-test-"));
+  tempDirs.push(tempDir);
+  return listen(await createBffHttpServer({ agentBaseUrl, filePath: join(tempDir, "state.json") }));
 }
 
 async function requestJson(input: string, init?: RequestInit): Promise<{ status: number; body: Record<string, unknown> }> {
@@ -135,6 +141,7 @@ afterEach(async () => {
         }),
     ),
   );
+  await Promise.all(tempDirs.splice(0).map((path) => rm(path, { force: true, recursive: true })));
 });
 
 describe("bff server", () => {
@@ -214,6 +221,51 @@ describe("bff server", () => {
       body: {
         ok: false,
         error: { code: "AGENT_UPSTREAM_UNAVAILABLE" },
+      },
+    });
+  });
+
+  it("serves and persists local profile and settings business APIs", async () => {
+    const agent = await startMockAgent();
+    const bffBaseUrl = await startBff(agent.baseUrl);
+
+    await expect(requestJson(`${bffBaseUrl}/api/profile`)).resolves.toMatchObject({
+      status: 200,
+      body: { ok: true, profile: { displayName: "本地用户", description: "AI Studio operator" } },
+    });
+    await expect(
+      requestJson(`${bffBaseUrl}/api/profile`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: " 花忆 ", description: " 控制台使用者 " }),
+      }),
+    ).resolves.toMatchObject({
+      status: 200,
+      body: { ok: true, profile: { displayName: "花忆", description: "控制台使用者" } },
+    });
+    await expect(requestJson(`${bffBaseUrl}/api/profile`)).resolves.toMatchObject({
+      status: 200,
+      body: { ok: true, profile: { displayName: "花忆", description: "控制台使用者" } },
+    });
+
+    await expect(requestJson(`${bffBaseUrl}/api/settings`)).resolves.toMatchObject({
+      status: 200,
+      body: {
+        ok: true,
+        settings: { theme: "dark", language: "zh-CN", shortcutHints: true, markdownRendering: true },
+      },
+    });
+    await expect(
+      requestJson(`${bffBaseUrl}/api/settings`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ theme: "light", shortcutHints: false }),
+      }),
+    ).resolves.toMatchObject({
+      status: 200,
+      body: {
+        ok: true,
+        settings: { theme: "light", language: "zh-CN", shortcutHints: false, markdownRendering: true },
       },
     });
   });

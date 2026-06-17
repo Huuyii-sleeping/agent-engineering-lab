@@ -32,6 +32,12 @@ export type HealthStatus = {
   agentStatus: string;
 };
 
+/** Local Web Console profile managed by the BFF business API. */
+export type UserProfile = {
+  displayName: string;
+  description: string;
+};
+
 /** Result returned after sending a user message to the active session. */
 export type SendMessageResult = {
   ok: boolean;
@@ -70,6 +76,11 @@ type EventSourceConstructor = new (url: string) => EventSourceLike;
 
 const agentStreamEventTypes = ["bridge.ready", "session.created", "chat.started", "chat.completed", "chat.failed"];
 
+export const defaultUserProfile: UserProfile = {
+  displayName: "本地用户",
+  description: "AI Studio operator",
+};
+
 function asObject(value: unknown): JsonObject {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonObject) : {};
 }
@@ -84,6 +95,23 @@ function asNumber(value: unknown): number | null {
 
 function asBoolean(value: unknown): boolean {
   return typeof value === "boolean" ? value : Boolean(value);
+}
+
+function cleanText(value: unknown, fallback: string): string {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+  const next = value.trim();
+  return next ? next : fallback;
+}
+
+/** Normalize a user profile before it is displayed in the Web console. */
+export function normalizeUserProfile(value: unknown): UserProfile {
+  const record = asObject(value);
+  return {
+    displayName: cleanText(record.displayName, defaultUserProfile.displayName).slice(0, 24),
+    description: cleanText(record.description, defaultUserProfile.description).slice(0, 48),
+  };
 }
 
 function normalizeMessage(value: unknown): ChatMessage | null {
@@ -268,6 +296,22 @@ export async function fetchHealth(): Promise<HealthStatus> {
     bffStatus: asString(bff.status) || "unknown",
     agentStatus: asString(agent.status) || (agent.ok === false ? "error" : "ok"),
   };
+}
+
+/** Fetches the current local Web profile from the BFF business API. */
+export async function fetchProfile(): Promise<UserProfile> {
+  const response = await requestJson<JsonObject>("/api/profile");
+  return normalizeUserProfile(response.profile);
+}
+
+/** Saves the current local Web profile through the BFF business API. */
+export async function updateProfile(profile: UserProfile): Promise<UserProfile> {
+  const response = await requestJson<JsonObject>("/api/profile", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(profile),
+  });
+  return normalizeUserProfile(response.profile);
 }
 
 /** Fetches the current session list through the BFF. */

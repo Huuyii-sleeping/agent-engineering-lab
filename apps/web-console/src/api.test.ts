@@ -3,10 +3,12 @@ import {
   createSession,
   createAgentEventStream,
   fetchHealth,
+  fetchProfile,
   fetchSession,
   fetchSessions,
   sendSessionMessage,
   sendSessionMessageStream,
+  updateProfile,
 } from "./api";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -143,6 +145,35 @@ describe("web-console api client", () => {
 
     await expect(fetchSessions()).rejects.toThrow("agent down");
   });
+
+  it("calls BFF profile business endpoints", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(String(input), "http://localhost");
+      const method = init?.method ?? "GET";
+
+      if (method === "GET" && url.pathname === "/api/profile") {
+        return jsonResponse({ ok: true, profile: { displayName: " 花忆 ", description: " 控制台用户 " } });
+      }
+      if (method === "PUT" && url.pathname === "/api/profile") {
+        return jsonResponse({ ok: true, profile: { displayName: "控制台用户", description: "BFF 已接入" } });
+      }
+
+      return jsonResponse({ ok: false, error: { code: "NOT_FOUND", message: url.pathname } }, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchProfile()).resolves.toEqual({ displayName: "花忆", description: "控制台用户" });
+    await expect(updateProfile({ displayName: "控制台用户", description: "BFF 已接入" })).resolves.toEqual({
+      displayName: "控制台用户",
+      description: "BFF 已接入",
+    });
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/profile", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ displayName: "控制台用户", description: "BFF 已接入" }),
+    });
+  });
+
 
   it("parses message-level SSE events from streamed sends", async () => {
     const fetchMock = vi.fn<typeof fetch>(async () =>

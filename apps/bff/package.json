@@ -14,5 +14,12 @@
     "tsx": "^4.20.0",
     "typescript": "^5.9.0",
     "vitest": "^2.0.5"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.1.27",
+    "@nestjs/core": "^11.1.27",
+    "@nestjs/platform-express": "^11.1.27",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
   }
 }

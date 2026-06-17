@@ -56,13 +56,17 @@ import {
   createAgentEventStream,
   createSession,
   fetchHealth,
+  fetchProfile,
   fetchSession,
   fetchSessions,
   sendSessionMessageStream,
+  updateProfile,
+  defaultUserProfile,
   type ChatMessage,
   type HealthStatus,
   type SessionDetail,
   type SessionSummary,
+  type UserProfile,
 } from "./api";
 import { shouldReloadSessionFromAgentEvent } from "./chat-stream-state";
 import {
@@ -243,8 +247,15 @@ function SettingsPage({
   sessionCount,
   streamState,
   theme,
+  editingProfile,
+  profile,
+  profileDraft,
   onBack,
+  onCancelProfileEdit,
+  onProfileDraftChange,
+  onSaveProfile,
   onSectionChange,
+  onStartProfileEdit,
   onThemeToggle,
 }: {
   activeSection: SettingsSection;
@@ -252,8 +263,15 @@ function SettingsPage({
   sessionCount: number;
   streamState: StreamState;
   theme: ThemeMode;
+  editingProfile: boolean;
+  profile: UserProfile;
+  profileDraft: UserProfile;
   onBack: () => void;
+  onCancelProfileEdit: () => void;
+  onProfileDraftChange: (profile: UserProfile) => void;
+  onSaveProfile: () => void;
   onSectionChange: (section: SettingsSection) => void;
+  onStartProfileEdit: () => void;
   onThemeToggle: () => void;
 }) {
   return (
@@ -319,17 +337,47 @@ function SettingsPage({
               <div className="settings-group">
                 <p className="settings-group-title">通用设置</p>
                 <div className="settings-list">
-                  <button className="settings-row" type="button">
+                  <button className="settings-row" type="button" onClick={onStartProfileEdit}>
                     <span className="settings-row-icon settings-row-icon--blue">
                       <UserRound size={18} strokeWidth={2.2} aria-hidden="true" />
                     </span>
                     <span className="settings-row-copy">
                       <strong>编辑个人资料</strong>
-                      <small>本地用户 · AI Studio operator</small>
+                      <small>
+                        {profile.displayName} · {profile.description}
+                      </small>
                     </span>
-                    <span className="settings-row-action">待开发</span>
+                    <span className="settings-row-action">已支持</span>
                     <ChevronRight size={17} strokeWidth={2.2} aria-hidden="true" />
                   </button>
+                  {editingProfile ? (
+                    <form className="profile-editor" onSubmit={(event) => event.preventDefault()}>
+                      <label className="profile-field">
+                        <span>显示名称</span>
+                        <input
+                          maxLength={24}
+                          value={profileDraft.displayName}
+                          onChange={(event) => onProfileDraftChange({ ...profileDraft, displayName: event.currentTarget.value })}
+                        />
+                      </label>
+                      <label className="profile-field">
+                        <span>身份描述</span>
+                        <input
+                          maxLength={48}
+                          value={profileDraft.description}
+                          onChange={(event) => onProfileDraftChange({ ...profileDraft, description: event.currentTarget.value })}
+                        />
+                      </label>
+                      <div className="profile-editor-actions">
+                        <button className="settings-secondary-action" type="button" onClick={onCancelProfileEdit}>
+                          取消
+                        </button>
+                        <button className="settings-primary-action" type="button" onClick={onSaveProfile}>
+                          保存
+                        </button>
+                      </div>
+                    </form>
+                  ) : null}
                   <div className="settings-row">
                     <span className="settings-row-icon settings-row-icon--blue">
                       <Globe2 size={18} strokeWidth={2.2} aria-hidden="true" />
@@ -392,6 +440,9 @@ function SettingsPage({
                     </span>
                     <span className="settings-row-copy">
                       <strong>AI Studio</strong>
+                      <small>
+                        {profile.displayName} · {profile.description}
+                      </small>
                     </span>
                     <span className="settings-row-action">本地控制台</span>
                   </div>
@@ -585,6 +636,9 @@ function App() {
   );
   const [view, setView] = useState<AppView>(initialSettingsSection ? "settings" : "chat");
   const [settingsSection, setSettingsSection] = useState<SettingsSection>(initialSettingsSection ?? "profile");
+  const [profile, setProfile] = useState<UserProfile>(defaultUserProfile);
+  const [profileDraft, setProfileDraft] = useState<UserProfile>(profile);
+  const [editingProfile, setEditingProfile] = useState(false);
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -641,6 +695,12 @@ function App() {
     }
   }
 
+  async function refreshProfile(): Promise<void> {
+    const nextProfile = await fetchProfile();
+    setProfile(nextProfile);
+    setProfileDraft(nextProfile);
+  }
+
   async function loadSession(sessionId: string, options: { silent?: boolean } = {}): Promise<void> {
     if (!options.silent) {
       setLoadState("loading");
@@ -665,8 +725,7 @@ function App() {
   async function bootstrap(): Promise<void> {
     setLoadState("loading");
     try {
-      await refreshHealth();
-      await refreshSessions(true);
+      await Promise.all([refreshHealth(), refreshProfile(), refreshSessions(true)]);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -792,6 +851,28 @@ function App() {
     setView("chat");
     if (window.location.hash.startsWith("#settings")) {
       window.history.pushState("", document.title, window.location.pathname + window.location.search);
+    }
+  }
+
+  function startProfileEdit(): void {
+    setProfileDraft(profile);
+    setEditingProfile(true);
+  }
+
+  function cancelProfileEdit(): void {
+    setProfileDraft(profile);
+    setEditingProfile(false);
+  }
+
+  async function saveProfile(): Promise<void> {
+    try {
+      const nextProfile = await updateProfile(profileDraft);
+      setProfile(nextProfile);
+      setProfileDraft(nextProfile);
+      setEditingProfile(false);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -1053,8 +1134,15 @@ function App() {
           sessionCount={sessions.length}
           streamState={streamState}
           theme={theme}
+          editingProfile={editingProfile}
+          profile={profile}
+          profileDraft={profileDraft}
           onBack={backToChat}
+          onCancelProfileEdit={cancelProfileEdit}
+          onProfileDraftChange={setProfileDraft}
+          onSaveProfile={() => void saveProfile()}
           onSectionChange={setSettingsSection}
+          onStartProfileEdit={startProfileEdit}
           onThemeToggle={handleThemeToggle}
         />
       ) : (

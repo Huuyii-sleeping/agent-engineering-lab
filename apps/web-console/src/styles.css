@@ -831,6 +831,69 @@ button.settings-row:hover {
   background: var(--surface-hover);
 }
 
+.profile-editor {
+  display: grid;
+  gap: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--chat-bg) 42%, transparent);
+  padding: 14px 16px 16px 66px;
+}
+
+.profile-field {
+  display: grid;
+  gap: 7px;
+}
+
+.profile-field span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.profile-field input {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel-bg) 70%, transparent);
+  color: var(--text-main);
+  padding: 0 12px;
+}
+
+.profile-field input:focus {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--border-subtle));
+  outline: 0;
+}
+
+.profile-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.settings-secondary-action,
+.settings-primary-action {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.settings-secondary-action {
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-soft);
+}
+
+.settings-primary-action {
+  background: var(--accent);
+  color: #062218;
+}
+
 .conversation-header {
   display: grid;
   min-height: 74px;
@@ -1502,6 +1565,8 @@ button.settings-row:hover {
 .session-menu-item:focus-visible,
 .settings-tab:focus-visible,
 .settings-row:focus-visible,
+.settings-secondary-action:focus-visible,
+.settings-primary-action:focus-visible,
 .error-toast button:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
@@ -1615,6 +1680,10 @@ button.settings-row:hover {
 
   .settings-row > svg {
     display: none;
+  }
+
+  .profile-editor {
+    padding-left: 16px;
   }
 
   .conversation-title h1 {
