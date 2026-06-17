@@ -9,6 +9,7 @@ import {
   BookOpen,
   CheckCircle2,
   ChevronRight,
+  ChevronUp,
   CircleDot,
   Code2,
   Database,
@@ -255,7 +256,7 @@ function SettingsPage({
   onProfileDraftChange,
   onSaveProfile,
   onSectionChange,
-  onStartProfileEdit,
+  onToggleProfileEdit,
   onThemeToggle,
 }: {
   activeSection: SettingsSection;
@@ -271,7 +272,7 @@ function SettingsPage({
   onProfileDraftChange: (profile: UserProfile) => void;
   onSaveProfile: () => void;
   onSectionChange: (section: SettingsSection) => void;
-  onStartProfileEdit: () => void;
+  onToggleProfileEdit: () => void;
   onThemeToggle: () => void;
 }) {
   return (
@@ -337,7 +338,12 @@ function SettingsPage({
               <div className="settings-group">
                 <p className="settings-group-title">通用设置</p>
                 <div className="settings-list">
-                  <button className="settings-row" type="button" onClick={onStartProfileEdit}>
+                  <button
+                    className="settings-row"
+                    type="button"
+                    aria-expanded={editingProfile}
+                    onClick={onToggleProfileEdit}
+                  >
                     <span className="settings-row-icon settings-row-icon--blue">
                       <UserRound size={18} strokeWidth={2.2} aria-hidden="true" />
                     </span>
@@ -348,7 +354,11 @@ function SettingsPage({
                       </small>
                     </span>
                     <span className="settings-row-action">已支持</span>
-                    <ChevronRight size={17} strokeWidth={2.2} aria-hidden="true" />
+                    {editingProfile ? (
+                      <ChevronUp size={17} strokeWidth={2.2} aria-hidden="true" />
+                    ) : (
+                      <ChevronRight size={17} strokeWidth={2.2} aria-hidden="true" />
+                    )}
                   </button>
                   {editingProfile ? (
                     <form className="profile-editor" onSubmit={(event) => event.preventDefault()}>
@@ -854,9 +864,9 @@ function App() {
     }
   }
 
-  function startProfileEdit(): void {
+  function toggleProfileEdit(): void {
     setProfileDraft(profile);
-    setEditingProfile(true);
+    setEditingProfile((current) => !current);
   }
 
   function cancelProfileEdit(): void {
@@ -1142,7 +1152,7 @@ function App() {
           onProfileDraftChange={setProfileDraft}
           onSaveProfile={() => void saveProfile()}
           onSectionChange={setSettingsSection}
-          onStartProfileEdit={startProfileEdit}
+          onToggleProfileEdit={toggleProfileEdit}
           onThemeToggle={handleThemeToggle}
         />
       ) : (
