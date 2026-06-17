@@ -228,7 +228,6 @@ p {
 .session-menu-item,
 .sidebar-setting-button,
 .icon-button,
-.theme-toggle,
 .primary-action,
 .send-button,
 .error-toast button {
@@ -270,8 +269,7 @@ p {
 
 .nav-item:hover,
 .session-item:hover,
-.icon-button:hover,
-.theme-toggle:hover {
+.icon-button:hover {
   background: var(--surface-hover);
   color: var(--text-main);
 }
@@ -993,24 +991,6 @@ button.settings-row:hover {
   color: var(--danger);
 }
 
-.theme-toggle {
-  display: inline-flex;
-  width: 40px;
-  min-height: 40px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  border: 1px solid var(--border-subtle);
-  background: var(--panel-bg);
-  color: var(--text-soft);
-  padding: 0;
-  box-shadow: var(--shadow-subtle);
-  transition:
-    background-color 140ms ease,
-    border-color 140ms ease,
-    color 140ms ease;
-}
-
 .error-toast {
   position: absolute;
   z-index: 5;
@@ -1557,7 +1537,6 @@ button.settings-row:hover {
 .nav-item:focus-visible,
 .session-item:focus-visible,
 .icon-button:focus-visible,
-.theme-toggle:focus-visible,
 .primary-action:focus-visible,
 .send-button:focus-visible,
 .quick-action:focus-visible,
@@ -1688,11 +1667,6 @@ button.settings-row:hover {
 
   .conversation-title h1 {
     font-size: 14px;
-  }
-
-  .theme-toggle {
-    width: 38px;
-    padding: 0 10px;
   }
 
   .transcript {

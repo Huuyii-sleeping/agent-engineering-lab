@@ -25,7 +25,6 @@ import {
   LogOut,
   MessageSquare,
   Monitor,
-  Moon,
   MoreHorizontal,
   MoreVertical,
   PanelLeftClose,
@@ -44,7 +43,6 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
-  Sun,
   Trash2,
   UserRound,
   Wrench,
@@ -1184,18 +1182,6 @@ function App() {
               </span>
               <button className="icon-button" type="button" onClick={() => void bootstrap()} aria-label="刷新连接与会话">
                 <RefreshCw size={19} strokeWidth={2.2} aria-hidden="true" />
-              </button>
-              <button
-                className="theme-toggle"
-                type="button"
-                onClick={handleThemeToggle}
-                aria-label={theme === "dark" ? "切换到浅色主题" : "切换到深色主题"}
-              >
-                {theme === "dark" ? (
-                  <Sun size={18} strokeWidth={2.1} aria-hidden="true" />
-                ) : (
-                  <Moon size={18} strokeWidth={2.1} aria-hidden="true" />
-                )}
               </button>
             </div>
           </header>
