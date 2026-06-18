@@ -4,6 +4,8 @@ export type AgentSkill = {
   name: string;
   summary: string;
   category: string;
+  provider: string;
+  version: string;
 };
 
 /** SOP step displayed in the Agent Builder workflow catalog. */
@@ -24,6 +26,7 @@ export type AgentBuilderConfig = {
 type BuilderStorage = Pick<Storage, "getItem" | "setItem">;
 
 const STORAGE_KEY = "agent-web-console-builder-config-v1";
+const SKILL_HUB_STORAGE_KEY = "agent-web-console-skill-hub-v1";
 
 export const agentSkillCatalog: AgentSkill[] = [
   {
@@ -31,30 +34,40 @@ export const agentSkillCatalog: AgentSkill[] = [
     name: "网页研究",
     summary: "检索、阅读页面并提取可信信息。",
     category: "输入",
+    provider: "Browser",
+    version: "1.0.0",
   },
   {
     id: "code-workspace",
     name: "代码工作区",
     summary: "读取仓库、修改文件、运行验证命令。",
     category: "执行",
+    provider: "Workspace",
+    version: "1.2.0",
   },
   {
     id: "memory-context",
     name: "长期记忆",
     summary: "复用偏好、项目背景和历史结论。",
     category: "上下文",
+    provider: "Local",
+    version: "0.8.0",
   },
   {
     id: "document-pipeline",
     name: "文档流水线",
     summary: "整理 PRD、方案、报告和交付说明。",
     category: "产出",
+    provider: "Documents",
+    version: "0.6.0",
   },
   {
     id: "quality-gate",
     name: "质量闸门",
     summary: "执行测试、构建、回归与发布前检查。",
     category: "验证",
+    provider: "Release",
+    version: "0.9.0",
   },
 ];
 
@@ -92,6 +105,8 @@ export const defaultAgentBuilderConfig: AgentBuilderConfig = {
   selectedSkillIds: ["code-workspace", "memory-context", "quality-gate"],
   selectedSopStepIds: ["clarify-goal", "plan-work", "execute-tools", "verify-result", "deliver-summary"],
 };
+
+export const defaultDownloadedSkillIds = ["code-workspace", "memory-context"];
 
 function cleanText(value: unknown, fallback: string, limit: number): string {
   if (typeof value !== "string") {
@@ -165,4 +180,25 @@ export function toggleAgentBuilderId(selectedIds: string[], id: string, orderedI
     selected.add(id);
   }
   return orderedIds.filter((item) => selected.has(item));
+}
+
+/** Reads locally downloaded skill ids for the Skill Hub page. */
+export function readDownloadedSkillIds(storage: BuilderStorage | null | undefined): string[] {
+  if (!storage) {
+    return defaultDownloadedSkillIds;
+  }
+  const raw = storage.getItem(SKILL_HUB_STORAGE_KEY);
+  if (!raw) {
+    return defaultDownloadedSkillIds;
+  }
+  try {
+    return normalizeIds(JSON.parse(raw) as unknown, knownIds(agentSkillCatalog), defaultDownloadedSkillIds);
+  } catch {
+    return defaultDownloadedSkillIds;
+  }
+}
+
+/** Persists locally downloaded skill ids for the Skill Hub page. */
+export function writeDownloadedSkillIds(storage: BuilderStorage | null | undefined, skillIds: string[]): void {
+  storage?.setItem(SKILL_HUB_STORAGE_KEY, JSON.stringify(normalizeIds(skillIds, knownIds(agentSkillCatalog), defaultDownloadedSkillIds)));
 }

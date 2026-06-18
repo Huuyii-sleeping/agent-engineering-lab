@@ -1,34 +1,34 @@
 ## MODIFIED Requirements
 
-### Requirement: Web Chat Console MUST provide an Agent Builder workspace
-Web Chat Console MUST provide an Agent Builder workspace for configuring an all-in-one local agent beyond single chat sessions.
-
-#### Scenario: User opens Agent Builder
-- **WHEN** 用户点击侧栏的应用生成入口
-- **THEN** 主区域切换到 Agent Builder 工作台
-- **AND** 工作台展示 skill 池、SOP 编排区和 Agent 配置预览
+### Requirement: Web Chat Console MUST provide a landing page and tabbed workspace
+Web Chat Console MUST provide an introductory landing page and a tabbed workspace for all-in-one local agent capabilities beyond a single chat surface.
 
 #### Scenario: User opens the default Web Console
 - **WHEN** 用户打开 Web Console
-- **THEN** 主区域默认保持原聊天工作台
-- **AND** Agent Builder 作为应用生成子页面存在，不替换聊天首页
+- **THEN** 页面展示项目介绍首页
+- **AND** 首页提供“立即开始”入口
 
-#### Scenario: User selects skills for an agent
-- **WHEN** 用户在 skill 池中选择或取消一个 skill
-- **THEN** 该 skill 的选中状态立即更新
-- **AND** Agent 配置预览展示最新 skill 列表
+#### Scenario: User enters the workspace
+- **WHEN** 用户点击“立即开始”
+- **THEN** 页面进入工作台
+- **AND** 工作台展示 Tab 导航
+- **AND** 默认选中 `Agent 测试` Tab
 
-#### Scenario: User assembles SOP steps
-- **WHEN** 用户在 SOP 编排区选择或取消一个步骤
-- **THEN** 该步骤的选中状态立即更新
-- **AND** Agent 配置预览展示最新 SOP 流程
+#### Scenario: User opens Agent test tab
+- **WHEN** 用户选择 `Agent 测试` Tab
+- **THEN** 主区域展示原聊天测试页面
+- **AND** 用户仍可创建会话、选择历史会话和发送消息
 
-#### Scenario: User edits builder metadata
-- **WHEN** 用户修改 agent 名称或适用场景
-- **THEN** Web Console 本地保存配置
-- **AND** 页面刷新后恢复该配置
+#### Scenario: User opens Skill loading tab
+- **WHEN** 用户选择 `Skill 加载` Tab
+- **THEN** 主区域展示 SkillHub 风格的 skill 列表
+- **AND** 每个 skill 展示名称、分类、来源、版本和下载状态
+
+#### Scenario: User toggles skill download state
+- **WHEN** 用户点击 skill 的下载按钮
+- **THEN** 该 skill 的下载状态立即更新
+- **AND** 页面刷新后恢复下载状态
 
 #### Scenario: User returns to chat
-- **WHEN** 用户点击聊天入口或历史会话
-- **THEN** 主区域切回聊天工作台
-- **AND** 已保存的 Agent Builder 配置不丢失
+- **WHEN** 用户点击 `Agent 测试` Tab 或历史会话
+- **THEN** 主区域切回聊天测试页

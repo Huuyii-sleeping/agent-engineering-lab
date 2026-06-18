@@ -56,8 +56,10 @@ import remarkGfm from "remark-gfm";
 import {
   agentSkillCatalog,
   agentSopCatalog,
+  readDownloadedSkillIds,
   readAgentBuilderConfig,
   toggleAgentBuilderId,
+  writeDownloadedSkillIds,
   writeAgentBuilderConfig,
   type AgentBuilderConfig,
 } from "./agent-builder";
@@ -97,12 +99,12 @@ import "./styles.css";
 
 type LoadState = "idle" | "loading" | "sending";
 type StreamState = "connecting" | "connected" | "disconnected";
-type AppView = "builder" | "chat" | "settings";
+type AppView = "landing" | "chat" | "skills" | "builder" | "settings";
+type WorkspaceTab = Exclude<AppView, "landing" | "settings">;
 
 type NavItem = {
   label: string;
   icon: LucideIcon;
-  view?: Exclude<AppView, "settings">;
 };
 
 type QuickAction = {
@@ -122,10 +124,15 @@ const shortcutHints = ["Ctrl K", "Ctrl Enter", "Shift Enter", "Ctrl C"];
 
 const navItems: NavItem[] = [
   { label: "AI 浏览器", icon: SearchCheck },
-  { label: "应用生成", icon: AppWindow, view: "builder" },
+  { label: "应用生成", icon: AppWindow },
   { label: "AI 创作", icon: PenTool },
   { label: "云盘", icon: Folder },
   { label: "更多", icon: Grid2X2 },
+];
+
+const workspaceTabs: Array<{ label: string; view: WorkspaceTab; icon: LucideIcon; description: string }> = [
+  { label: "Agent 测试", view: "chat", icon: MessageSquare, description: "运行本地 agent 对话链路" },
+  { label: "Skill 加载", view: "skills", icon: Download, description: "选择和下载可用技能" },
 ];
 
 const quickActions: QuickAction[] = [
@@ -650,6 +657,150 @@ function SettingsPage({
   );
 }
 
+function LandingPage({ onStart }: { onStart: () => void }) {
+  return (
+    <main className="landing-shell">
+      <nav className="landing-nav" aria-label="项目导航">
+        <span className="landing-brand">
+          <span className="brand-mark" aria-hidden="true">
+            <BrainCircuit size={21} strokeWidth={2.4} />
+          </span>
+          <strong>AI Studio</strong>
+        </span>
+        <button className="landing-nav-action" type="button" onClick={onStart}>
+          立即开始
+        </button>
+      </nav>
+
+      <section className="landing-hero" aria-label="项目介绍">
+        <div className="landing-kicker">
+          <Sparkles size={16} strokeWidth={2.2} aria-hidden="true" />
+          <span>All-in-one local agent workspace</span>
+        </div>
+        <h1>把对话、技能和流程装进一个本地 Agent 工作台</h1>
+        <p>
+          AI Studio 面向本地研发与自动化执行场景，把 Agent 测试、Skill 加载、SOP 编排和未来的 Agent 组装放到同一个可扩展控制台里。
+        </p>
+        <div className="landing-actions">
+          <button className="landing-primary-action" type="button" onClick={onStart}>
+            <span>立即开始</span>
+            <ChevronRight size={18} strokeWidth={2.2} aria-hidden="true" />
+          </button>
+          <span>进入后先提供 Agent 测试与 Skill 加载两个 Tab</span>
+        </div>
+      </section>
+
+      <section className="landing-preview" aria-label="能力概览">
+        <div className="landing-preview-card landing-preview-card--main">
+          <span>Agent 测试</span>
+          <strong>保留原聊天链路</strong>
+          <small>用于验证本地 Agent service、BFF、SSE 和 transcript。</small>
+        </div>
+        <div className="landing-preview-card">
+          <span>Skill 加载</span>
+          <strong>选择可用技能</strong>
+          <small>以 SkillHub 形式查看、下载和管理本地技能。</small>
+        </div>
+        <div className="landing-preview-card">
+          <span>待扩展</span>
+          <strong>SOP 与 Agent 组装</strong>
+          <small>后续继续增加流程编排、模板库和运行时注入。</small>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function WorkspaceTabs({ activeView, onChange }: { activeView: WorkspaceTab; onChange: (view: WorkspaceTab) => void }) {
+  return (
+    <header className="workspace-tabs" aria-label="工作台标签">
+      <div className="workspace-tabs-copy">
+        <span>Workspace</span>
+        <strong>{workspaceTabs.find((tab) => tab.view === activeView)?.label ?? "工作台"}</strong>
+      </div>
+      <div className="workspace-tab-list" role="tablist">
+        {workspaceTabs.map((tab) => {
+          const Icon = tab.icon;
+          const active = tab.view === activeView;
+          return (
+            <button
+              className={`workspace-tab ${active ? "workspace-tab--active" : ""}`}
+              key={tab.view}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => onChange(tab.view)}
+              title={tab.description}
+            >
+              <Icon size={16} strokeWidth={2.2} aria-hidden="true" />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </header>
+  );
+}
+
+function SkillHubPage({
+  downloadedSkillIds,
+  onToggleSkill,
+}: {
+  downloadedSkillIds: string[];
+  onToggleSkill: (skillId: string) => void;
+}) {
+  const downloadedCount = downloadedSkillIds.length;
+
+  return (
+    <main className="skillhub-shell">
+      <section className="skillhub-hero">
+        <div>
+          <span>Skill Hub</span>
+          <h1>加载适合当前工作流的技能</h1>
+          <p>先用本地 catalog 模拟 SkillHub：查看技能来源、版本和状态，选择下载后可作为后续 Agent 组装的能力池。</p>
+        </div>
+        <div className="skillhub-meter" aria-label="已下载技能数量">
+          <strong>{downloadedCount}</strong>
+          <span>已下载</span>
+        </div>
+      </section>
+
+      <section className="skillhub-grid" aria-label="可用技能">
+        {agentSkillCatalog.map((skill) => {
+          const downloaded = downloadedSkillIds.includes(skill.id);
+          return (
+            <article className={`skillhub-card ${downloaded ? "skillhub-card--downloaded" : ""}`} key={skill.id}>
+              <div className="skillhub-card-top">
+                <span>{skill.category}</span>
+                <strong>{skill.provider}</strong>
+              </div>
+              <h2>{skill.name}</h2>
+              <p>{skill.summary}</p>
+              <div className="skillhub-card-meta">
+                <span>v{skill.version}</span>
+                <span>{downloaded ? "已加载" : "可下载"}</span>
+              </div>
+              <button className="skillhub-action" type="button" onClick={() => onToggleSkill(skill.id)}>
+                {downloaded ? (
+                  <>
+                    <Check size={16} strokeWidth={2.4} aria-hidden="true" />
+                    <span>已下载</span>
+                  </>
+                ) : (
+                  <>
+                    <Download size={16} strokeWidth={2.4} aria-hidden="true" />
+                    <span>下载 Skill</span>
+                  </>
+                )}
+              </button>
+            </article>
+          );
+        })}
+      </section>
+    </main>
+  );
+}
+
 function AgentBuilderPage({
   config,
   onConfigChange,
@@ -809,10 +960,13 @@ function App() {
   const [theme, setTheme] = useState<ThemeMode>(() =>
     typeof window === "undefined" ? "dark" : readStoredTheme(window.localStorage),
   );
-  const [view, setView] = useState<AppView>(initialSettingsSection ? "settings" : "chat");
+  const [view, setView] = useState<AppView>(initialSettingsSection ? "settings" : "landing");
   const [settingsSection, setSettingsSection] = useState<SettingsSection>(initialSettingsSection ?? "profile");
   const [builderConfig, setBuilderConfig] = useState<AgentBuilderConfig>(() =>
     typeof window === "undefined" ? readAgentBuilderConfig(null) : readAgentBuilderConfig(window.localStorage),
+  );
+  const [downloadedSkillIds, setDownloadedSkillIds] = useState<string[]>(() =>
+    typeof window === "undefined" ? readDownloadedSkillIds(null) : readDownloadedSkillIds(window.localStorage),
   );
   const [profile, setProfile] = useState<UserProfile>(defaultUserProfile);
   const [profileDraft, setProfileDraft] = useState<UserProfile>(profile);
@@ -854,6 +1008,8 @@ function App() {
   const activeSessionSummaryTitle = activeSession ? summarizeSessionTitle(activeSession.messages) : null;
   const isSettingsView = view === "settings";
   const isBuilderView = view === "builder";
+  const isLandingView = view === "landing";
+  const activeWorkspaceTab: WorkspaceTab = view === "skills" || view === "builder" ? view : "chat";
   const conversationRuntimeState = loadState === "loading" ? "loading" : isBusy ? "running" : activeSessionId ? "completed" : "idle";
 
   function sessionTitleFor(session: SessionSummary | SessionDetail): string {
@@ -1049,6 +1205,18 @@ function App() {
     writeAgentBuilderConfig(window.localStorage, config);
   }
 
+  function toggleDownloadedSkill(skillId: string): void {
+    setDownloadedSkillIds((current) => {
+      const next = toggleAgentBuilderId(
+        current,
+        skillId,
+        agentSkillCatalog.map((skill) => skill.id),
+      );
+      writeDownloadedSkillIds(window.localStorage, next);
+      return next;
+    });
+  }
+
   function toggleProfileEdit(): void {
     setProfileDraft(profile);
     setEditingProfile((current) => !current);
@@ -1172,7 +1340,7 @@ function App() {
         setView("settings");
         return;
       }
-      setView("chat");
+      setView((current) => (current === "settings" ? "chat" : current));
     }
     window.addEventListener("hashchange", handleHashChange);
     return () => window.removeEventListener("hashchange", handleHashChange);
@@ -1282,6 +1450,10 @@ function App() {
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
   }, []);
 
+  if (isLandingView) {
+    return <LandingPage onStart={() => setView("chat")} />;
+  }
+
   return (
     <div className={`app-shell ${isSidebarCollapsed ? "app-shell--sidebar-collapsed" : ""} ${isSettingsView ? "app-shell--settings" : ""}`}>
       {!isSettingsView ? (
@@ -1296,24 +1468,16 @@ function App() {
           <nav className="primary-nav" aria-label="功能导航">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isEnabled = Boolean(item.view);
-              const isActive = item.view === view;
               return (
                 <button
-                  className={`nav-item ${isEnabled ? "" : "nav-item--pending"} ${isActive ? "nav-item--active" : ""}`}
+                  className="nav-item nav-item--pending"
                   key={item.label}
                   type="button"
-                  aria-label={isEnabled ? item.label : `${item.label}，待开发`}
-                  aria-current={isActive ? "page" : undefined}
-                  onClick={() => {
-                    if (item.view) {
-                      setView(item.view);
-                    }
-                  }}
+                  aria-label={`${item.label}，待开发`}
                 >
                   <Icon className="nav-icon" size={18} strokeWidth={2} aria-hidden="true" />
                   <span>{item.label}</span>
-                  {isEnabled ? null : <span className="pending-badge">待开发</span>}
+                  <span className="pending-badge">待开发</span>
                 </button>
               );
             })}
@@ -1485,10 +1649,15 @@ function App() {
           onToggleProfileEdit={toggleProfileEdit}
           onThemeToggle={handleThemeToggle}
         />
-      ) : isBuilderView ? (
-        <AgentBuilderPage config={builderConfig} onConfigChange={updateBuilderConfig} />
       ) : (
-        <main className={`chat-shell ${error ? "chat-shell--has-error" : ""}`}>
+        <section className="workspace-shell">
+          <WorkspaceTabs activeView={activeWorkspaceTab} onChange={setView} />
+          {view === "skills" ? (
+            <SkillHubPage downloadedSkillIds={downloadedSkillIds} onToggleSkill={toggleDownloadedSkill} />
+          ) : isBuilderView ? (
+            <AgentBuilderPage config={builderConfig} onConfigChange={updateBuilderConfig} />
+          ) : (
+            <main className={`chat-shell ${error ? "chat-shell--has-error" : ""}`}>
           <header className="conversation-header">
             <button
               aria-expanded={!isSidebarCollapsed}
@@ -1592,7 +1761,9 @@ function App() {
               </button>
             </div>
           </form>
-        </main>
+            </main>
+          )}
+        </section>
       )}
     </div>
   );

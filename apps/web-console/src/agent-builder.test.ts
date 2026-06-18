@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   defaultAgentBuilderConfig,
+  defaultDownloadedSkillIds,
   normalizeAgentBuilderConfig,
+  readDownloadedSkillIds,
   readAgentBuilderConfig,
   toggleAgentBuilderId,
+  writeDownloadedSkillIds,
   writeAgentBuilderConfig,
 } from "./agent-builder";
 
@@ -55,5 +58,19 @@ describe("agent builder helpers", () => {
         selectedSkillIds: ["code-workspace"],
       }),
     );
+  });
+
+  it("reads and writes downloaded skill ids", () => {
+    const storage = {
+      getItem: vi.fn(() => JSON.stringify(["browser-research", "missing", "browser-research"])),
+      setItem: vi.fn(),
+    };
+
+    expect(readDownloadedSkillIds(storage)).toEqual(["browser-research"]);
+    expect(readDownloadedSkillIds(null)).toEqual(defaultDownloadedSkillIds);
+
+    writeDownloadedSkillIds(storage, ["quality-gate", "missing"]);
+
+    expect(storage.setItem).toHaveBeenCalledWith("agent-web-console-skill-hub-v1", JSON.stringify(["quality-gate"]));
   });
 });
