@@ -15,7 +15,7 @@ export async function createBffHttpServer(options: BffServerOptions): Promise<Se
   });
   app.enableCors({
     origin: "*",
-    methods: ["GET", "POST", "PUT", "PATCH", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Last-Event-ID"],
   });
   await app.init();

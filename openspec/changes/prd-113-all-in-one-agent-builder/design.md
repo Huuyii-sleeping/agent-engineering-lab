@@ -3,8 +3,8 @@
 1. 第一阶段以 Web 前端本地状态实现 Agent Builder。
    - 理由：用户当前需要产品方向与可见体验的重心转移；在运行时协议尚未设计前，先做可操作的配置工作台能降低风险。
 
-2. 导航模型从 `chat/settings` 扩展为 `landing -> workspace tabs -> settings`。
-   - 理由：项目需要一个主介绍页表达定位；进入后再用 Tab 区分 Agent 测试、Skill 加载和未来能力。设置页仍保持独立全屏结构。
+2. 导航模型从 `chat/settings` 扩展为 `landing -> agent-manager -> agent-test/settings`。
+   - 理由：项目需要一个主介绍页表达定位；进入后应先管理 agent，而不是直接进入聊天。聊天作为某个 agent 的测试面板存在。
 
 3. 拼装交互先用点击添加/移除，视觉上表现为可组合的构件。
    - 理由：点击交互能快速验证 IA、状态和数据模型；真正拖拽会引入排序、可访问性和移动端复杂度，适合后续独立变更。
@@ -26,11 +26,10 @@
 └──────────────────────────────┬───────────────────────────────┘
                                ▼
 ┌──────────────────────────────────────────────────────────────┐
-│ Sidebar + Workspace Tabs                                     │
-│  [Agent 测试] [Skill 加载]                                   │
+│ Sidebar + Agent Manager                                      │
+│  Agent 列表 / Agent 详情 / Skill 与 Action 配置              │
 ├──────────────────────────────────────────────────────────────┤
-│ Agent 测试: 原聊天页                                         │
-│ Skill 加载: SkillHub cards + 下载状态                        │
+│ Use Agent -> 原聊天测试页 + 当前 Agent 摘要                  │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -47,12 +46,23 @@ type AgentBuilderConfig = {
 type SkillHubState = {
   downloadedSkillIds: string[];
 };
+
+type AgentProfile = {
+  id: string;
+  name: string;
+  description: string;
+  scenario: string;
+  skillIds: string[];
+  actions: string[];
+  systemPrompt: string;
+  createdAt: number;
+  updatedAt: number;
+};
 ```
 
 ## Follow-up Path
 
-1. 继续补齐未命名的后续 Tab。
+1. 将 agent 配置注入 system prompt / runtime plan。
 2. 拖拽排序和 SOP 分组。
-3. BFF 持久化 skill 下载与 agent profiles。
-4. 将配置转换为 system prompt / runtime plan。
-5. 模板库、导入导出、发布和复用。
+3. Agent 模板库、导入导出、发布和复用。
+4. Skill runtime loading 与权限边界。

@@ -64,15 +64,22 @@ import {
   type AgentBuilderConfig,
 } from "./agent-builder";
 import {
+  createAgentProfile,
   createAgentEventStream,
   createSession,
+  deleteAgentProfile,
+  fetchAgents,
   fetchHealth,
   fetchProfile,
   fetchSession,
   fetchSessions,
+  updateAgentProfile,
   sendSessionMessageStream,
   updateProfile,
+  defaultAgentProfileInput,
   defaultUserProfile,
+  type AgentProfile,
+  type AgentProfileInput,
   type ChatMessage,
   type HealthStatus,
   type SessionDetail,
@@ -99,7 +106,7 @@ import "./styles.css";
 
 type LoadState = "idle" | "loading" | "sending";
 type StreamState = "connecting" | "connected" | "disconnected";
-type AppView = "landing" | "chat" | "skills" | "builder" | "settings";
+type AppView = "landing" | "agents" | "chat" | "skills" | "builder" | "settings";
 type WorkspaceTab = Exclude<AppView, "landing" | "settings">;
 
 type NavItem = {
@@ -208,6 +215,21 @@ function sortSessionsForSidebar(sessions: SessionSummary[], metadata: SessionMet
     }
     return sessionTimestamp(right) - sessionTimestamp(left);
   });
+}
+
+function agentDraftFromProfile(agent: AgentProfile): AgentProfileInput {
+  return {
+    name: agent.name,
+    description: agent.description,
+    scenario: agent.scenario,
+    skillIds: agent.skillIds,
+    actions: agent.actions,
+    systemPrompt: agent.systemPrompt,
+  };
+}
+
+function agentSkillName(skillId: string): string {
+  return agentSkillCatalog.find((skill) => skill.id === skillId)?.name ?? skillId;
 }
 
 function streamLabel(state: StreamState): string {
@@ -686,28 +708,289 @@ function LandingPage({ onStart }: { onStart: () => void }) {
             <span>立即开始</span>
             <ChevronRight size={18} strokeWidth={2.2} aria-hidden="true" />
           </button>
-          <span>进入后先提供 Agent 测试与 Skill 加载两个 Tab</span>
+          <span>进入 Agent 管理界面，创建、配置并测试你的本地 agent</span>
         </div>
       </section>
 
       <section className="landing-preview" aria-label="能力概览">
         <div className="landing-preview-card landing-preview-card--main">
+          <span>Agent 管理</span>
+          <strong>管理不同角色的 agent</strong>
+          <small>创建、编辑、删除 agent，并为每个 agent 保存独立配置。</small>
+        </div>
+        <div className="landing-preview-card">
+          <span>Skill 与 Action</span>
+          <strong>组合可复用能力</strong>
+          <small>按 agent 选择技能，维护自定义操作和个性化说明。</small>
+        </div>
+        <div className="landing-preview-card">
           <span>Agent 测试</span>
           <strong>保留原聊天链路</strong>
-          <small>用于验证本地 Agent service、BFF、SSE 和 transcript。</small>
-        </div>
-        <div className="landing-preview-card">
-          <span>Skill 加载</span>
-          <strong>选择可用技能</strong>
-          <small>以 SkillHub 形式查看、下载和管理本地技能。</small>
-        </div>
-        <div className="landing-preview-card">
-          <span>待扩展</span>
-          <strong>SOP 与 Agent 组装</strong>
-          <small>后续继续增加流程编排、模板库和运行时注入。</small>
+          <small>从具体 agent 进入测试页，验证本地 Agent service、BFF 和 SSE。</small>
         </div>
       </section>
     </main>
+  );
+}
+
+function AgentManagerPage({
+  agents,
+  activeAgent,
+  draft,
+  loading,
+  saving,
+  onCreateAgent,
+  onDeleteAgent,
+  onDraftChange,
+  onRefresh,
+  onSaveAgent,
+  onSelectAgent,
+  onTestAgent,
+}: {
+  agents: AgentProfile[];
+  activeAgent: AgentProfile | null;
+  draft: AgentProfileInput;
+  loading: boolean;
+  saving: boolean;
+  onCreateAgent: () => void;
+  onDeleteAgent: (agent: AgentProfile) => void;
+  onDraftChange: (draft: AgentProfileInput) => void;
+  onRefresh: () => void;
+  onSaveAgent: () => void;
+  onSelectAgent: (agent: AgentProfile) => void;
+  onTestAgent: (agent: AgentProfile) => void;
+}) {
+  const selectedSkillSet = new Set(draft.skillIds);
+
+  function toggleSkill(skillId: string): void {
+    onDraftChange({
+      ...draft,
+      skillIds: toggleAgentBuilderId(
+        draft.skillIds,
+        skillId,
+        agentSkillCatalog.map((skill) => skill.id),
+      ),
+    });
+  }
+
+  function updateAction(index: number, value: string): void {
+    onDraftChange({
+      ...draft,
+      actions: draft.actions.map((action, actionIndex) => (actionIndex === index ? value : action)),
+    });
+  }
+
+  function removeAction(index: number): void {
+    onDraftChange({ ...draft, actions: draft.actions.filter((_, actionIndex) => actionIndex !== index) });
+  }
+
+  function addAction(): void {
+    onDraftChange({ ...draft, actions: [...draft.actions, "新的自定义操作"] });
+  }
+
+  return (
+    <main className="agent-manager-shell">
+      <header className="agent-manager-header">
+        <div className="agent-manager-title">
+          <span>Agent workspace</span>
+          <h1>Agent 管理</h1>
+          <p>先管理你的 agent，再进入测试对话。每个 agent 都可以拥有独立的技能、操作和个性化提示。</p>
+        </div>
+        <div className="agent-manager-actions">
+          <button className="agent-secondary-action" type="button" onClick={onRefresh} disabled={loading || saving}>
+            <RefreshCw size={16} strokeWidth={2.2} aria-hidden="true" />
+            <span>刷新</span>
+          </button>
+          <button className="agent-primary-action" type="button" onClick={onCreateAgent} disabled={saving}>
+            <Plus size={17} strokeWidth={2.3} aria-hidden="true" />
+            <span>新建 Agent</span>
+          </button>
+        </div>
+      </header>
+
+      <section className="agent-manager-grid" aria-label="Agent 管理工作台">
+        <aside className="agent-list-panel" aria-label="Agent 列表">
+          <div className="agent-panel-heading">
+            <span>Agents</span>
+            <strong>{agents.length} 个</strong>
+          </div>
+
+          <div className="agent-list">
+            {agents.length === 0 ? (
+              <div className="agent-empty">
+                <Bot size={24} strokeWidth={2.2} aria-hidden="true" />
+                <strong>还没有 agent</strong>
+                <span>点击新建 Agent 开始配置。</span>
+              </div>
+            ) : (
+              agents.map((agent) => (
+                <button
+                  className={`agent-list-item ${activeAgent?.id === agent.id ? "agent-list-item--active" : ""}`}
+                  key={agent.id}
+                  type="button"
+                  onClick={() => onSelectAgent(agent)}
+                >
+                  <span className="agent-list-icon" aria-hidden="true">
+                    <Bot size={17} strokeWidth={2.2} />
+                  </span>
+                  <span className="agent-list-copy">
+                    <strong>{agent.name}</strong>
+                    <small>{agent.description}</small>
+                  </span>
+                  <span className="agent-list-count">{agent.skillIds.length}</span>
+                </button>
+              ))
+            )}
+          </div>
+        </aside>
+
+        <section className="agent-editor-panel" aria-label="Agent 详情编辑">
+          {activeAgent ? (
+            <>
+              <div className="agent-panel-heading agent-panel-heading--editor">
+                <div>
+                  <span>Agent detail</span>
+                  <strong>{draft.name}</strong>
+                </div>
+                <div className="agent-editor-actions">
+                  <button className="agent-danger-action" type="button" onClick={() => onDeleteAgent(activeAgent)} disabled={saving}>
+                    <Trash2 size={16} strokeWidth={2.2} aria-hidden="true" />
+                    <span>删除</span>
+                  </button>
+                  <button className="agent-secondary-action" type="button" onClick={onSaveAgent} disabled={saving}>
+                    <Check size={16} strokeWidth={2.4} aria-hidden="true" />
+                    <span>{saving ? "保存中" : "保存"}</span>
+                  </button>
+                  <button className="agent-primary-action" type="button" onClick={() => onTestAgent(activeAgent)} disabled={saving}>
+                    <MessageSquare size={16} strokeWidth={2.2} aria-hidden="true" />
+                    <span>使用 / 测试</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="agent-editor-form">
+                <label className="agent-field">
+                  <span>Agent 名称</span>
+                  <input
+                    maxLength={36}
+                    value={draft.name}
+                    onChange={(event) => onDraftChange({ ...draft, name: event.currentTarget.value })}
+                  />
+                </label>
+                <label className="agent-field">
+                  <span>描述</span>
+                  <input
+                    maxLength={140}
+                    value={draft.description}
+                    onChange={(event) => onDraftChange({ ...draft, description: event.currentTarget.value })}
+                  />
+                </label>
+                <label className="agent-field">
+                  <span>适用场景</span>
+                  <textarea
+                    maxLength={180}
+                    rows={3}
+                    value={draft.scenario}
+                    onChange={(event) => onDraftChange({ ...draft, scenario: event.currentTarget.value })}
+                  />
+                </label>
+                <label className="agent-field agent-field--prompt">
+                  <span>System prompt / 个性化说明</span>
+                  <textarea
+                    maxLength={1600}
+                    rows={8}
+                    value={draft.systemPrompt}
+                    onChange={(event) => onDraftChange({ ...draft, systemPrompt: event.currentTarget.value })}
+                  />
+                </label>
+              </div>
+            </>
+          ) : (
+            <div className="agent-editor-empty">
+              <BrainCircuit size={30} strokeWidth={2.2} aria-hidden="true" />
+              <strong>选择或创建一个 agent</strong>
+              <span>Agent 详情会在这里编辑。</span>
+            </div>
+          )}
+        </section>
+
+        <aside className="agent-config-panel" aria-label="Agent 能力配置">
+          <div className="agent-panel-heading">
+            <span>Skills</span>
+            <strong>{draft.skillIds.length} 已选</strong>
+          </div>
+          <div className="agent-skill-list">
+            {agentSkillCatalog.map((skill) => {
+              const selected = selectedSkillSet.has(skill.id);
+              return (
+                <button
+                  className={`agent-skill-item ${selected ? "agent-skill-item--selected" : ""}`}
+                  key={skill.id}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => toggleSkill(skill.id)}
+                  disabled={!activeAgent}
+                >
+                  <span>
+                    <strong>{skill.name}</strong>
+                    <small>{skill.category} · {skill.provider} · v{skill.version}</small>
+                  </span>
+                  <span className="agent-skill-check">
+                    {selected ? <Check size={14} strokeWidth={2.7} aria-hidden="true" /> : <Plus size={14} strokeWidth={2.5} aria-hidden="true" />}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="agent-panel-heading agent-panel-heading--actions">
+            <span>Custom actions</span>
+            <button className="agent-mini-action" type="button" onClick={addAction} disabled={!activeAgent}>
+              <Plus size={14} strokeWidth={2.4} aria-hidden="true" />
+              <span>添加</span>
+            </button>
+          </div>
+          <div className="agent-action-list">
+            {draft.actions.length === 0 ? (
+              <span className="agent-muted-text">尚未配置自定义操作。</span>
+            ) : (
+              draft.actions.map((action, index) => (
+                <label className="agent-action-row" key={index}>
+                  <input value={action} maxLength={80} onChange={(event) => updateAction(index, event.currentTarget.value)} />
+                  <button type="button" aria-label="移除操作" onClick={() => removeAction(index)}>
+                    <X size={15} strokeWidth={2.3} aria-hidden="true" />
+                  </button>
+                </label>
+              ))
+            )}
+          </div>
+        </aside>
+      </section>
+    </main>
+  );
+}
+
+function AgentTestBanner({ agent, onBack }: { agent: AgentProfile | null; onBack: () => void }) {
+  if (!agent) {
+    return null;
+  }
+  return (
+    <section className="agent-test-banner" aria-label="当前测试 Agent">
+      <div className="agent-test-copy">
+        <span>当前测试 Agent</span>
+        <strong>{agent.name}</strong>
+        <small>{agent.scenario}</small>
+      </div>
+      <div className="agent-test-meta">
+        <span>{agent.skillIds.length} skills</span>
+        <span>{agent.actions.length} actions</span>
+        <span>{agent.skillIds.slice(0, 2).map(agentSkillName).join(" / ") || "未选择 skill"}</span>
+      </div>
+      <button className="agent-secondary-action" type="button" onClick={onBack}>
+        <ArrowLeft size={16} strokeWidth={2.2} aria-hidden="true" />
+        <span>返回管理</span>
+      </button>
+    </section>
   );
 }
 
@@ -968,6 +1251,10 @@ function App() {
   const [downloadedSkillIds, setDownloadedSkillIds] = useState<string[]>(() =>
     typeof window === "undefined" ? readDownloadedSkillIds(null) : readDownloadedSkillIds(window.localStorage),
   );
+  const [agents, setAgents] = useState<AgentProfile[]>([]);
+  const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
+  const [agentDraft, setAgentDraft] = useState<AgentProfileInput>(defaultAgentProfileInput);
+  const [agentSaving, setAgentSaving] = useState(false);
   const [profile, setProfile] = useState<UserProfile>(defaultUserProfile);
   const [profileDraft, setProfileDraft] = useState<UserProfile>(profile);
   const [editingProfile, setEditingProfile] = useState(false);
@@ -995,6 +1282,7 @@ function App() {
     () => sessions.find((session) => session.id === activeSessionId) ?? null,
     [activeSessionId, sessions],
   );
+  const activeAgent = useMemo(() => agents.find((agent) => agent.id === activeAgentId) ?? null, [activeAgentId, agents]);
   const visibleSessions = useMemo(
     () => sortSessionsForSidebar(sessions, sessionMetadata).filter((session) => !isSessionHidden(session.id, sessionMetadata)),
     [sessionMetadata, sessions],
@@ -1007,6 +1295,7 @@ function App() {
   const messages = activeSession?.messages ?? [];
   const activeSessionSummaryTitle = activeSession ? summarizeSessionTitle(activeSession.messages) : null;
   const isSettingsView = view === "settings";
+  const isAgentManagerView = view === "agents";
   const isBuilderView = view === "builder";
   const isLandingView = view === "landing";
   const activeWorkspaceTab: WorkspaceTab = view === "skills" || view === "builder" ? view : "chat";
@@ -1045,6 +1334,20 @@ function App() {
     setProfileDraft(nextProfile);
   }
 
+  async function refreshAgents(selectFirst = false): Promise<AgentProfile[]> {
+    const nextAgents = await fetchAgents();
+    setAgents(nextAgents);
+    const nextActiveAgent = nextAgents.find((agent) => agent.id === activeAgentId) ?? (selectFirst ? nextAgents[0] ?? null : null);
+    if (nextActiveAgent) {
+      setActiveAgentId(nextActiveAgent.id);
+      setAgentDraft(agentDraftFromProfile(nextActiveAgent));
+    } else if (nextAgents.length === 0) {
+      setActiveAgentId(null);
+      setAgentDraft(defaultAgentProfileInput);
+    }
+    return nextAgents;
+  }
+
   async function loadSession(sessionId: string, options: { silent?: boolean } = {}): Promise<void> {
     if (!options.silent) {
       setLoadState("loading");
@@ -1069,7 +1372,7 @@ function App() {
   async function bootstrap(): Promise<void> {
     setLoadState("loading");
     try {
-      await Promise.all([refreshHealth(), refreshProfile(), refreshSessions(true)]);
+      await Promise.all([refreshHealth(), refreshProfile(), refreshAgents(true), refreshSessions(true)]);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -1237,6 +1540,65 @@ function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
+  }
+
+  function selectAgent(agent: AgentProfile): void {
+    setActiveAgentId(agent.id);
+    setAgentDraft(agentDraftFromProfile(agent));
+  }
+
+  async function handleCreateAgent(): Promise<void> {
+    setAgentSaving(true);
+    try {
+      const agent = await createAgentProfile({ name: `新 Agent ${agents.length + 1}` });
+      setAgents((current) => [agent, ...current.filter((item) => item.id !== agent.id)]);
+      setActiveAgentId(agent.id);
+      setAgentDraft(agentDraftFromProfile(agent));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAgentSaving(false);
+    }
+  }
+
+  async function handleSaveAgent(): Promise<void> {
+    if (!activeAgent) {
+      return;
+    }
+    setAgentSaving(true);
+    try {
+      const agent = await updateAgentProfile(activeAgent.id, agentDraft);
+      setAgents((current) => current.map((item) => (item.id === agent.id ? agent : item)));
+      setAgentDraft(agentDraftFromProfile(agent));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAgentSaving(false);
+    }
+  }
+
+  async function handleDeleteAgent(agent: AgentProfile): Promise<void> {
+    setAgentSaving(true);
+    try {
+      await deleteAgentProfile(agent.id);
+      const nextAgents = agents.filter((item) => item.id !== agent.id);
+      setAgents(nextAgents);
+      const nextAgent = nextAgents[0] ?? null;
+      setActiveAgentId(nextAgent?.id ?? null);
+      setAgentDraft(nextAgent ? agentDraftFromProfile(nextAgent) : defaultAgentProfileInput);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAgentSaving(false);
+    }
+  }
+
+  function handleTestAgent(agent: AgentProfile): void {
+    setActiveAgentId(agent.id);
+    setView("chat");
   }
 
   function updateMetadata(updater: (current: SessionMetadataMap) => SessionMetadataMap): void {
@@ -1451,12 +1813,12 @@ function App() {
   }, []);
 
   if (isLandingView) {
-    return <LandingPage onStart={() => setView("chat")} />;
+    return <LandingPage onStart={() => setView("agents")} />;
   }
 
   return (
-    <div className={`app-shell ${isSidebarCollapsed ? "app-shell--sidebar-collapsed" : ""} ${isSettingsView ? "app-shell--settings" : ""}`}>
-      {!isSettingsView ? (
+    <div className={`app-shell ${isSidebarCollapsed ? "app-shell--sidebar-collapsed" : ""} ${isSettingsView || isAgentManagerView ? "app-shell--settings" : ""}`}>
+      {!isSettingsView && !isAgentManagerView ? (
         <aside className="sidebar" aria-hidden={isSidebarCollapsed} aria-label="本地控制台导航">
           <div className="profile-row">
             <div className="brand-mark" aria-hidden="true">
@@ -1649,15 +2011,24 @@ function App() {
           onToggleProfileEdit={toggleProfileEdit}
           onThemeToggle={handleThemeToggle}
         />
+      ) : isAgentManagerView ? (
+        <AgentManagerPage
+          agents={agents}
+          activeAgent={activeAgent}
+          draft={agentDraft}
+          loading={loadState === "loading"}
+          saving={agentSaving}
+          onCreateAgent={() => void handleCreateAgent()}
+          onDeleteAgent={(agent) => void handleDeleteAgent(agent)}
+          onDraftChange={setAgentDraft}
+          onRefresh={() => void refreshAgents(true)}
+          onSaveAgent={() => void handleSaveAgent()}
+          onSelectAgent={selectAgent}
+          onTestAgent={handleTestAgent}
+        />
       ) : (
         <section className="workspace-shell">
-          <WorkspaceTabs activeView={activeWorkspaceTab} onChange={setView} />
-          {view === "skills" ? (
-            <SkillHubPage downloadedSkillIds={downloadedSkillIds} onToggleSkill={toggleDownloadedSkill} />
-          ) : isBuilderView ? (
-            <AgentBuilderPage config={builderConfig} onConfigChange={updateBuilderConfig} />
-          ) : (
-            <main className={`chat-shell ${error ? "chat-shell--has-error" : ""}`}>
+          <main className={`chat-shell ${activeAgent ? "chat-shell--with-agent" : ""} ${error ? "chat-shell--has-error" : ""}`}>
           <header className="conversation-header">
             <button
               aria-expanded={!isSidebarCollapsed}
@@ -1698,6 +2069,8 @@ function App() {
               </button>
             </div>
           ) : null}
+
+          <AgentTestBanner agent={activeAgent} onBack={() => setView("agents")} />
 
           <section className="transcript" aria-label="聊天内容">
             {!activeSessionId ? (
@@ -1762,7 +2135,6 @@ function App() {
             </div>
           </form>
             </main>
-          )}
         </section>
       )}
     </div>

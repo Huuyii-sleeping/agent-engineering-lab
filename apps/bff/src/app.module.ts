@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { AgentProxyService, type AgentProxyOptions } from "./agent-proxy.service.js";
+import { AgentProfileService } from "./agent-profile.service.js";
 import { AppController } from "./app.controller.js";
 import { LocalStoreService, type LocalStoreOptions } from "./local-store.service.js";
 import { ProfileService } from "./profile.service.js";
@@ -16,6 +17,7 @@ export class AppModule {
       providers: [
         { provide: AgentProxyService, useValue: new AgentProxyService(options) },
         { provide: LocalStoreService, useValue: new LocalStoreService(options) },
+        AgentProfileService,
         ProfileService,
         SettingsService,
       ],

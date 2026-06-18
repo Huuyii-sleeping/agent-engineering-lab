@@ -38,6 +38,22 @@ export type UserProfile = {
   description: string;
 };
 
+/** User-managed agent profile displayed and edited in the Agent management workspace. */
+export type AgentProfile = {
+  id: string;
+  name: string;
+  description: string;
+  scenario: string;
+  skillIds: string[];
+  actions: string[];
+  systemPrompt: string;
+  createdAt: number | null;
+  updatedAt: number | null;
+};
+
+/** Editable payload accepted by the BFF agent profile APIs. */
+export type AgentProfileInput = Pick<AgentProfile, "name" | "description" | "scenario" | "skillIds" | "actions" | "systemPrompt">;
+
 /** Result returned after sending a user message to the active session. */
 export type SendMessageResult = {
   ok: boolean;
@@ -81,6 +97,15 @@ export const defaultUserProfile: UserProfile = {
   description: "AI Studio operator",
 };
 
+export const defaultAgentProfileInput: AgentProfileInput = {
+  name: "本地研发 Agent",
+  description: "面向代码、文档和自动化执行的本地 agent。",
+  scenario: "本地研发、资料整理、任务拆解和交付验证。",
+  skillIds: ["code-workspace", "memory-context", "quality-gate"],
+  actions: ["分析需求", "执行任务", "验证结果"],
+  systemPrompt: "你是一个严谨的本地工作台 agent，优先明确目标、执行验证，并给出可复查的结果。",
+};
+
 function asObject(value: unknown): JsonObject {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonObject) : {};
 }
@@ -105,12 +130,59 @@ function cleanText(value: unknown, fallback: string): string {
   return next ? next : fallback;
 }
 
+function cleanOptionalText(value: unknown, limit: number): string {
+  return typeof value === "string" ? value.trim().slice(0, limit) : "";
+}
+
+function cleanStringList(value: unknown, limit: number, itemLimit: number): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return [
+    ...new Set(
+      value
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim().slice(0, itemLimit))
+        .filter(Boolean),
+    ),
+  ].slice(0, limit);
+}
+
 /** Normalize a user profile before it is displayed in the Web console. */
 export function normalizeUserProfile(value: unknown): UserProfile {
   const record = asObject(value);
   return {
     displayName: cleanText(record.displayName, defaultUserProfile.displayName).slice(0, 24),
     description: cleanText(record.description, defaultUserProfile.description).slice(0, 48),
+  };
+}
+
+/** Normalize an agent profile before it is displayed in the Web console. */
+export function normalizeAgentProfile(value: unknown): AgentProfile {
+  const record = asObject(value);
+  return {
+    id: cleanText(record.id, "").slice(0, 80),
+    name: cleanText(record.name, defaultAgentProfileInput.name).slice(0, 36),
+    description: cleanOptionalText(record.description, 140) || defaultAgentProfileInput.description,
+    scenario: cleanOptionalText(record.scenario, 180) || defaultAgentProfileInput.scenario,
+    skillIds: cleanStringList(record.skillIds, 24, 80),
+    actions: cleanStringList(record.actions, 24, 80),
+    systemPrompt: cleanOptionalText(record.systemPrompt, 1600) || defaultAgentProfileInput.systemPrompt,
+    createdAt: asNumber(record.createdAt),
+    updatedAt: asNumber(record.updatedAt),
+  };
+}
+
+/** Normalize editable agent profile input before sending it to the BFF. */
+export function normalizeAgentProfileInput(value: unknown): AgentProfileInput {
+  const agent = normalizeAgentProfile(value);
+  return {
+    name: agent.name,
+    description: agent.description,
+    scenario: agent.scenario,
+    skillIds: agent.skillIds,
+    actions: agent.actions,
+    systemPrompt: agent.systemPrompt,
   };
 }
 
@@ -312,6 +384,38 @@ export async function updateProfile(profile: UserProfile): Promise<UserProfile> 
     body: JSON.stringify(profile),
   });
   return normalizeUserProfile(response.profile);
+}
+
+/** Fetches locally persisted agent profiles through the BFF business API. */
+export async function fetchAgents(): Promise<AgentProfile[]> {
+  const response = await requestJson<JsonObject>("/api/agents");
+  const agents = Array.isArray(response.agents) ? response.agents : [];
+  return agents.map(normalizeAgentProfile).filter((agent) => agent.id);
+}
+
+/** Creates a locally persisted agent profile through the BFF business API. */
+export async function createAgentProfile(input: Partial<AgentProfileInput> = {}): Promise<AgentProfile> {
+  const response = await requestJson<JsonObject>("/api/agents", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(normalizeAgentProfileInput({ ...defaultAgentProfileInput, ...input })),
+  });
+  return normalizeAgentProfile(response.agent);
+}
+
+/** Updates a locally persisted agent profile through the BFF business API. */
+export async function updateAgentProfile(agentId: string, input: AgentProfileInput): Promise<AgentProfile> {
+  const response = await requestJson<JsonObject>(`/api/agents/${encodeURIComponent(agentId)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(normalizeAgentProfileInput(input)),
+  });
+  return normalizeAgentProfile(response.agent);
+}
+
+/** Deletes a locally persisted agent profile through the BFF business API. */
+export async function deleteAgentProfile(agentId: string): Promise<void> {
+  await requestJson<JsonObject>(`/api/agents/${encodeURIComponent(agentId)}`, { method: "DELETE" });
 }
 
 /** Fetches the current session list through the BFF. */

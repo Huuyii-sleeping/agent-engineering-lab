@@ -1,13 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  createAgentProfile,
   createSession,
   createAgentEventStream,
+  deleteAgentProfile,
+  fetchAgents,
   fetchHealth,
   fetchProfile,
   fetchSession,
   fetchSessions,
   sendSessionMessage,
   sendSessionMessageStream,
+  updateAgentProfile,
   updateProfile,
 } from "./api";
 
@@ -172,6 +176,74 @@ describe("web-console api client", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ displayName: "控制台用户", description: "BFF 已接入" }),
     });
+  });
+
+  it("calls BFF agent profile CRUD endpoints", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(String(input), "http://localhost");
+      const method = init?.method ?? "GET";
+
+      if (method === "GET" && url.pathname === "/api/agents") {
+        return jsonResponse({
+          ok: true,
+          agents: [
+            {
+              id: "a1",
+              name: "  研发 Agent  ",
+              description: "  本地研发  ",
+              scenario: "  代码和验证  ",
+              skillIds: ["code-workspace", "code-workspace", "quality-gate"],
+              actions: [" 修改代码 ", " 运行测试 "],
+              systemPrompt: " 严格验证 ",
+              createdAt: 1,
+              updatedAt: 2,
+            },
+          ],
+        });
+      }
+      if (method === "POST" && url.pathname === "/api/agents") {
+        return jsonResponse({ ok: true, agent: { id: "a2", ...(JSON.parse(String(init?.body)) as Record<string, unknown>) } }, 201);
+      }
+      if (method === "PUT" && url.pathname === "/api/agents/a1") {
+        return jsonResponse({ ok: true, agent: { id: "a1", ...(JSON.parse(String(init?.body)) as Record<string, unknown>) } });
+      }
+      if (method === "DELETE" && url.pathname === "/api/agents/a1") {
+        return jsonResponse({ ok: true });
+      }
+
+      return jsonResponse({ ok: false, error: { code: "NOT_FOUND", message: url.pathname } }, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchAgents()).resolves.toMatchObject([
+      {
+        id: "a1",
+        name: "研发 Agent",
+        description: "本地研发",
+        scenario: "代码和验证",
+        skillIds: ["code-workspace", "quality-gate"],
+        actions: ["修改代码", "运行测试"],
+        systemPrompt: "严格验证",
+      },
+    ]);
+    await expect(createAgentProfile({ name: " 新 Agent ", actions: [" 分析 "] })).resolves.toMatchObject({
+      id: "a2",
+      name: "新 Agent",
+      actions: ["分析"],
+    });
+    await expect(
+      updateAgentProfile("a1", {
+        name: "交付 Agent",
+        description: "交付验证",
+        scenario: "上线前检查",
+        skillIds: ["quality-gate"],
+        actions: ["构建"],
+        systemPrompt: "输出风险",
+      }),
+    ).resolves.toMatchObject({ id: "a1", name: "交付 Agent" });
+    await expect(deleteAgentProfile("a1")).resolves.toBeUndefined();
+
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/agents/a1", { method: "DELETE" });
   });
 
 

@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
-### Requirement: Web Chat Console MUST provide a landing page and tabbed workspace
-Web Chat Console MUST provide an introductory landing page and a tabbed workspace for all-in-one local agent capabilities beyond a single chat surface.
+### Requirement: Web Chat Console MUST provide a landing page and Agent management workspace
+Web Chat Console MUST provide an introductory landing page and an Agent management workspace for all-in-one local agent capabilities beyond a single chat surface.
 
 #### Scenario: User opens the default Web Console
 - **WHEN** 用户打开 Web Console
@@ -10,25 +10,26 @@ Web Chat Console MUST provide an introductory landing page and a tabbed workspac
 
 #### Scenario: User enters the workspace
 - **WHEN** 用户点击“立即开始”
-- **THEN** 页面进入工作台
-- **AND** 工作台展示 Tab 导航
-- **AND** 默认选中 `Agent 测试` Tab
+- **THEN** 页面进入 Agent 管理界面
+- **AND** 页面展示 agent 列表和当前 agent 详情
 
-#### Scenario: User opens Agent test tab
-- **WHEN** 用户选择 `Agent 测试` Tab
-- **THEN** 主区域展示原聊天测试页面
+#### Scenario: User creates an agent
+- **WHEN** 用户点击新建 agent
+- **THEN** Web Console 调用 BFF 创建 agent
+- **AND** 新 agent 出现在 Agent 管理列表中
+
+#### Scenario: User edits an agent
+- **WHEN** 用户修改 agent 名称、描述、场景、skills、actions 或 system prompt
+- **THEN** Web Console 调用 BFF 保存 agent
+- **AND** 管理界面展示保存后的 agent 配置
+
+#### Scenario: User deletes an agent
+- **WHEN** 用户删除当前 agent
+- **THEN** Web Console 调用 BFF 删除 agent
+- **AND** 被删除 agent 从列表中移除
+
+#### Scenario: User tests an agent
+- **WHEN** 用户点击“使用 / 测试”当前 agent
+- **THEN** 主区域切换到原聊天测试页
+- **AND** 页面展示当前测试 agent 的摘要
 - **AND** 用户仍可创建会话、选择历史会话和发送消息
-
-#### Scenario: User opens Skill loading tab
-- **WHEN** 用户选择 `Skill 加载` Tab
-- **THEN** 主区域展示 SkillHub 风格的 skill 列表
-- **AND** 每个 skill 展示名称、分类、来源、版本和下载状态
-
-#### Scenario: User toggles skill download state
-- **WHEN** 用户点击 skill 的下载按钮
-- **THEN** 该 skill 的下载状态立即更新
-- **AND** 页面刷新后恢复下载状态
-
-#### Scenario: User returns to chat
-- **WHEN** 用户点击 `Agent 测试` Tab 或历史会话
-- **THEN** 主区域切回聊天测试页

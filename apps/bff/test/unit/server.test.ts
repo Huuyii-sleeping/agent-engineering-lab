@@ -270,6 +270,70 @@ describe("bff server", () => {
     });
   });
 
+  it("serves and persists local agent profile CRUD APIs", async () => {
+    const agent = await startMockAgent();
+    const bffBaseUrl = await startBff(agent.baseUrl);
+
+    await expect(requestJson(`${bffBaseUrl}/api/agents`)).resolves.toMatchObject({
+      status: 200,
+      body: { ok: true, agents: [] },
+    });
+
+    const created = await requestJson(`${bffBaseUrl}/api/agents`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "  文档分析 Agent  ",
+        description: "  处理长文档  ",
+        scenario: "  文档整理和摘要  ",
+        skillIds: ["document-pipeline", "document-pipeline", "memory-context"],
+        actions: [" 摘要文档 ", " 输出待办 "],
+        systemPrompt: " 保持结论可验证 ",
+      }),
+    });
+    const createdAgent = created.body.agent as Record<string, unknown>;
+    expect(created).toMatchObject({
+      status: 201,
+      body: {
+        ok: true,
+        agent: {
+          name: "文档分析 Agent",
+          description: "处理长文档",
+          scenario: "文档整理和摘要",
+          skillIds: ["document-pipeline", "memory-context"],
+          actions: ["摘要文档", "输出待办"],
+          systemPrompt: "保持结论可验证",
+        },
+      },
+    });
+    expect(typeof createdAgent.id).toBe("string");
+
+    await expect(requestJson(`${bffBaseUrl}/api/agents`)).resolves.toMatchObject({
+      status: 200,
+      body: { ok: true, agents: [{ id: createdAgent.id, name: "文档分析 Agent" }] },
+    });
+
+    await expect(
+      requestJson(`${bffBaseUrl}/api/agents/${createdAgent.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "交付 Agent", actions: ["验证构建"] }),
+      }),
+    ).resolves.toMatchObject({
+      status: 200,
+      body: { ok: true, agent: { id: createdAgent.id, name: "交付 Agent", actions: ["验证构建"] } },
+    });
+
+    await expect(requestJson(`${bffBaseUrl}/api/agents/${createdAgent.id}`, { method: "DELETE" })).resolves.toMatchObject({
+      status: 200,
+      body: { ok: true },
+    });
+    await expect(requestJson(`${bffBaseUrl}/api/agents/${createdAgent.id}`, { method: "DELETE" })).resolves.toMatchObject({
+      status: 404,
+      body: { ok: false, error: { code: "AGENT_NOT_FOUND" } },
+    });
+  });
+
   it("proxies agent service SSE events", async () => {
     const agent = await startMockAgent();
     const bffBaseUrl = await startBff(agent.baseUrl);
