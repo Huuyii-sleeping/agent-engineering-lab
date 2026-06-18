@@ -54,6 +54,14 @@ import rehypeHighlight from "rehype-highlight";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
+  agentSkillCatalog,
+  agentSopCatalog,
+  readAgentBuilderConfig,
+  toggleAgentBuilderId,
+  writeAgentBuilderConfig,
+  type AgentBuilderConfig,
+} from "./agent-builder";
+import {
   createAgentEventStream,
   createSession,
   fetchHealth,
@@ -89,11 +97,12 @@ import "./styles.css";
 
 type LoadState = "idle" | "loading" | "sending";
 type StreamState = "connecting" | "connected" | "disconnected";
-type AppView = "chat" | "settings";
+type AppView = "builder" | "chat" | "settings";
 
 type NavItem = {
   label: string;
   icon: LucideIcon;
+  view?: Exclude<AppView, "settings">;
 };
 
 type QuickAction = {
@@ -113,7 +122,7 @@ const shortcutHints = ["Ctrl K", "Ctrl Enter", "Shift Enter", "Ctrl C"];
 
 const navItems: NavItem[] = [
   { label: "AI 浏览器", icon: SearchCheck },
-  { label: "应用生成", icon: AppWindow },
+  { label: "应用生成", icon: AppWindow, view: "builder" },
   { label: "AI 创作", icon: PenTool },
   { label: "云盘", icon: Folder },
   { label: "更多", icon: Grid2X2 },
@@ -641,6 +650,160 @@ function SettingsPage({
   );
 }
 
+function AgentBuilderPage({
+  config,
+  onConfigChange,
+}: {
+  config: AgentBuilderConfig;
+  onConfigChange: (config: AgentBuilderConfig) => void;
+}) {
+  const selectedSkills = agentSkillCatalog.filter((skill) => config.selectedSkillIds.includes(skill.id));
+  const selectedSopSteps = agentSopCatalog.filter((step) => config.selectedSopStepIds.includes(step.id));
+  const readinessScore = Math.round(
+    ((selectedSkills.length / agentSkillCatalog.length + selectedSopSteps.length / agentSopCatalog.length) / 2) * 100,
+  );
+
+  function toggleSkill(skillId: string): void {
+    onConfigChange({
+      ...config,
+      selectedSkillIds: toggleAgentBuilderId(
+        config.selectedSkillIds,
+        skillId,
+        agentSkillCatalog.map((skill) => skill.id),
+      ),
+    });
+  }
+
+  function toggleSopStep(stepId: string): void {
+    onConfigChange({
+      ...config,
+      selectedSopStepIds: toggleAgentBuilderId(
+        config.selectedSopStepIds,
+        stepId,
+        agentSopCatalog.map((step) => step.id),
+      ),
+    });
+  }
+
+  return (
+    <main className="builder-shell">
+      <header className="builder-hero">
+        <div className="builder-hero-copy">
+          <span>Agent Builder</span>
+          <h1>Agent 工坊</h1>
+          <p>选择技能、编排 SOP，并把它保存为后续可复用的 agent 子页面。</p>
+        </div>
+        <div className="builder-status-panel" aria-label="Agent 配置就绪度">
+          <strong>{readinessScore}%</strong>
+          <span>配置就绪度</span>
+        </div>
+      </header>
+
+      <section className="builder-workbench" aria-label="Agent 装配台">
+        <div className="builder-column">
+          <div className="builder-section-heading">
+            <span>Skill 池</span>
+            <strong>{selectedSkills.length} 已选</strong>
+          </div>
+          <div className="builder-card-list">
+            {agentSkillCatalog.map((skill) => {
+              const selected = config.selectedSkillIds.includes(skill.id);
+              return (
+                <button
+                  className={`builder-skill-card ${selected ? "builder-skill-card--selected" : ""}`}
+                  key={skill.id}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => toggleSkill(skill.id)}
+                >
+                  <span className="builder-card-topline">
+                    <span>{skill.category}</span>
+                    <span className="builder-card-check">{selected ? <Check size={14} strokeWidth={2.8} aria-hidden="true" /> : <Plus size={14} strokeWidth={2.5} aria-hidden="true" />}</span>
+                  </span>
+                  <strong>{skill.name}</strong>
+                  <small>{skill.summary}</small>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="builder-column builder-column--wide">
+          <div className="builder-section-heading">
+            <span>SOP 编排</span>
+            <strong>{selectedSopSteps.length} 步</strong>
+          </div>
+          <div className="builder-sop-list">
+            {agentSopCatalog.map((step, index) => {
+              const selected = config.selectedSopStepIds.includes(step.id);
+              return (
+                <button
+                  className={`builder-sop-step ${selected ? "builder-sop-step--selected" : ""}`}
+                  key={step.id}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => toggleSopStep(step.id)}
+                >
+                  <span className="builder-sop-index">{String(index + 1).padStart(2, "0")}</span>
+                  <span className="builder-sop-copy">
+                    <strong>{step.title}</strong>
+                    <small>{step.summary}</small>
+                  </span>
+                  <span className="builder-card-check">{selected ? <Check size={14} strokeWidth={2.8} aria-hidden="true" /> : <Plus size={14} strokeWidth={2.5} aria-hidden="true" />}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <aside className="builder-preview" aria-label="Agent 配置预览">
+          <div className="builder-section-heading">
+            <span>Agent 预览</span>
+            <strong>本地草稿</strong>
+          </div>
+
+          <label className="builder-field">
+            <span>Agent 名称</span>
+            <input
+              maxLength={36}
+              value={config.name}
+              onChange={(event) => onConfigChange({ ...config, name: event.currentTarget.value })}
+            />
+          </label>
+
+          <label className="builder-field">
+            <span>适用场景</span>
+            <textarea
+              maxLength={120}
+              rows={4}
+              value={config.scenario}
+              onChange={(event) => onConfigChange({ ...config, scenario: event.currentTarget.value })}
+            />
+          </label>
+
+          <div className="builder-preview-group">
+            <span>已装配技能</span>
+            <div className="builder-token-list">
+              {selectedSkills.length > 0 ? selectedSkills.map((skill) => <strong key={skill.id}>{skill.name}</strong>) : <small>尚未选择 skill</small>}
+            </div>
+          </div>
+
+          <div className="builder-preview-group">
+            <span>SOP 流程</span>
+            <ol className="builder-preview-steps">
+              {selectedSopSteps.length > 0 ? (
+                selectedSopSteps.map((step) => <li key={step.id}>{step.title}</li>)
+              ) : (
+                <li>尚未选择 SOP 步骤</li>
+              )}
+            </ol>
+          </div>
+        </aside>
+      </section>
+    </main>
+  );
+}
+
 function App() {
   const initialSettingsSection = typeof window === "undefined" ? null : settingsSectionFromHash(window.location.hash);
   const [theme, setTheme] = useState<ThemeMode>(() =>
@@ -648,6 +811,9 @@ function App() {
   );
   const [view, setView] = useState<AppView>(initialSettingsSection ? "settings" : "chat");
   const [settingsSection, setSettingsSection] = useState<SettingsSection>(initialSettingsSection ?? "profile");
+  const [builderConfig, setBuilderConfig] = useState<AgentBuilderConfig>(() =>
+    typeof window === "undefined" ? readAgentBuilderConfig(null) : readAgentBuilderConfig(window.localStorage),
+  );
   const [profile, setProfile] = useState<UserProfile>(defaultUserProfile);
   const [profileDraft, setProfileDraft] = useState<UserProfile>(profile);
   const [editingProfile, setEditingProfile] = useState(false);
@@ -687,6 +853,7 @@ function App() {
   const messages = activeSession?.messages ?? [];
   const activeSessionSummaryTitle = activeSession ? summarizeSessionTitle(activeSession.messages) : null;
   const isSettingsView = view === "settings";
+  const isBuilderView = view === "builder";
   const conversationRuntimeState = loadState === "loading" ? "loading" : isBusy ? "running" : activeSessionId ? "completed" : "idle";
 
   function sessionTitleFor(session: SessionSummary | SessionDetail): string {
@@ -757,6 +924,7 @@ function App() {
 
   async function handleCreateSession(): Promise<void> {
     exitSessionBatchMode();
+    setView("chat");
     setLoadState("loading");
     try {
       const session = await createSession();
@@ -874,6 +1042,11 @@ function App() {
     if (window.location.hash.startsWith("#settings")) {
       window.history.pushState("", document.title, window.location.pathname + window.location.search);
     }
+  }
+
+  function updateBuilderConfig(config: AgentBuilderConfig): void {
+    setBuilderConfig(config);
+    writeAgentBuilderConfig(window.localStorage, config);
   }
 
   function toggleProfileEdit(): void {
@@ -1123,11 +1296,24 @@ function App() {
           <nav className="primary-nav" aria-label="功能导航">
             {navItems.map((item) => {
               const Icon = item.icon;
+              const isEnabled = Boolean(item.view);
+              const isActive = item.view === view;
               return (
-                <button className="nav-item nav-item--pending" key={item.label} type="button" aria-label={`${item.label}，待开发`}>
+                <button
+                  className={`nav-item ${isEnabled ? "" : "nav-item--pending"} ${isActive ? "nav-item--active" : ""}`}
+                  key={item.label}
+                  type="button"
+                  aria-label={isEnabled ? item.label : `${item.label}，待开发`}
+                  aria-current={isActive ? "page" : undefined}
+                  onClick={() => {
+                    if (item.view) {
+                      setView(item.view);
+                    }
+                  }}
+                >
                   <Icon className="nav-icon" size={18} strokeWidth={2} aria-hidden="true" />
                   <span>{item.label}</span>
-                  <span className="pending-badge">待开发</span>
+                  {isEnabled ? null : <span className="pending-badge">待开发</span>}
                 </button>
               );
             })}
@@ -1195,6 +1381,7 @@ function App() {
                           toggleSessionSelection(session.id);
                           return;
                         }
+                        setView("chat");
                         setActiveSessionId(session.id);
                       }}
                       aria-pressed={isSessionBatchMode ? selectedSessionIds.has(session.id) : undefined}
@@ -1298,6 +1485,8 @@ function App() {
           onToggleProfileEdit={toggleProfileEdit}
           onThemeToggle={handleThemeToggle}
         />
+      ) : isBuilderView ? (
+        <AgentBuilderPage config={builderConfig} onConfigChange={updateBuilderConfig} />
       ) : (
         <main className={`chat-shell ${error ? "chat-shell--has-error" : ""}`}>
           <header className="conversation-header">
