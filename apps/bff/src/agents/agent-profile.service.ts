@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import { LocalStoreService } from "./local-store.service.js";
+import { LocalStoreService } from "../local-store.service.js";
 
 /** User-managed agent profile persisted by the BFF business store. */
 export type AgentProfile = {

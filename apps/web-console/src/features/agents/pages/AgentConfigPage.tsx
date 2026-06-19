@@ -1,0 +1,205 @@
+import { ArrowLeft, BrainCircuit, Check, MessageSquare, Plus, Trash2, X } from "lucide-react";
+import { agentSkillCatalog, toggleAgentBuilderId } from "../../../agent-builder";
+import type { AgentProfile, AgentProfileInput } from "../../../api";
+
+export function AgentConfigPage({
+  activeAgent,
+  draft,
+  isNewDraft,
+  saving,
+  onBack,
+  onDeleteAgent,
+  onDraftChange,
+  onSaveAgent,
+  onTestAgent,
+}: {
+  activeAgent: AgentProfile | null;
+  draft: AgentProfileInput;
+  isNewDraft: boolean;
+  saving: boolean;
+  onBack: () => void;
+  onDeleteAgent: (agent: AgentProfile) => void;
+  onDraftChange: (draft: AgentProfileInput) => void;
+  onSaveAgent: () => void;
+  onTestAgent: (agent: AgentProfile) => void;
+}) {
+  const selectedSkillSet = new Set(draft.skillIds);
+
+  function toggleSkill(skillId: string): void {
+    onDraftChange({
+      ...draft,
+      skillIds: toggleAgentBuilderId(
+        draft.skillIds,
+        skillId,
+        agentSkillCatalog.map((skill) => skill.id),
+      ),
+    });
+  }
+
+  function updateAction(index: number, value: string): void {
+    onDraftChange({
+      ...draft,
+      actions: draft.actions.map((action, actionIndex) => (actionIndex === index ? value : action)),
+    });
+  }
+
+  function removeAction(index: number): void {
+    onDraftChange({ ...draft, actions: draft.actions.filter((_, actionIndex) => actionIndex !== index) });
+  }
+
+  function addAction(): void {
+    onDraftChange({ ...draft, actions: [...draft.actions, "新的自定义操作"] });
+  }
+
+  return (
+    <main className="agent-config-shell">
+      <header className="agent-config-header">
+        <button className="agent-secondary-action" type="button" onClick={onBack}>
+          <ArrowLeft size={16} strokeWidth={2.2} aria-hidden="true" />
+          <span>返回草稿库</span>
+        </button>
+        <div className="agent-config-title">
+          <span>Agent configuration</span>
+          <h1>{activeAgent || isNewDraft ? draft.name : "Agent 配置"}</h1>
+          <p>
+            {isNewDraft
+              ? "这是一个未保存草稿。保存后才会出现在 Agent 草稿库。"
+              : activeAgent
+                ? "编辑这个 agent 的身份、能力和测试入口。"
+                : "选择一个 agent 草稿后再编辑配置。"}
+          </p>
+        </div>
+        {activeAgent || isNewDraft ? (
+          <div className="agent-config-actions">
+            {activeAgent ? (
+              <button className="agent-danger-action" type="button" onClick={() => onDeleteAgent(activeAgent)} disabled={saving}>
+                <Trash2 size={16} strokeWidth={2.2} aria-hidden="true" />
+                <span>删除</span>
+              </button>
+            ) : null}
+            <button className="agent-secondary-action" type="button" onClick={onSaveAgent} disabled={saving}>
+              <Check size={16} strokeWidth={2.4} aria-hidden="true" />
+              <span>{saving ? "保存中" : "保存"}</span>
+            </button>
+            {activeAgent ? (
+              <button className="agent-primary-action" type="button" onClick={() => onTestAgent(activeAgent)} disabled={saving}>
+                <MessageSquare size={16} strokeWidth={2.2} aria-hidden="true" />
+                <span>使用 / 测试</span>
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </header>
+
+      {activeAgent || isNewDraft ? (
+        <section className="agent-config-layout" aria-label="Agent 配置工作台">
+          <section className="agent-config-main" aria-label="Agent 基础信息">
+            <div className="agent-config-panel-heading">
+              <span>Identity</span>
+              <strong>基础信息</strong>
+            </div>
+            <div className="agent-editor-form">
+              <label className="agent-field">
+                <span>Agent 名称</span>
+                <input
+                  maxLength={36}
+                  value={draft.name}
+                  onChange={(event) => onDraftChange({ ...draft, name: event.currentTarget.value })}
+                />
+              </label>
+              <label className="agent-field">
+                <span>描述</span>
+                <input
+                  maxLength={140}
+                  value={draft.description}
+                  onChange={(event) => onDraftChange({ ...draft, description: event.currentTarget.value })}
+                />
+              </label>
+              <label className="agent-field">
+                <span>适用场景</span>
+                <textarea
+                  maxLength={180}
+                  rows={3}
+                  value={draft.scenario}
+                  onChange={(event) => onDraftChange({ ...draft, scenario: event.currentTarget.value })}
+                />
+              </label>
+              <label className="agent-field agent-field--prompt">
+                <span>System prompt / 个性化说明</span>
+                <textarea
+                  maxLength={1600}
+                  rows={8}
+                  value={draft.systemPrompt}
+                  onChange={(event) => onDraftChange({ ...draft, systemPrompt: event.currentTarget.value })}
+                />
+              </label>
+            </div>
+          </section>
+
+          <aside className="agent-config-side" aria-label="Agent 能力配置">
+            <div className="agent-config-panel-heading">
+              <span>Skills</span>
+              <strong>{draft.skillIds.length} 已选</strong>
+            </div>
+            <div className="agent-skill-list">
+              {agentSkillCatalog.map((skill) => {
+                const selected = selectedSkillSet.has(skill.id);
+                return (
+                  <button
+                    className={`agent-skill-item ${selected ? "agent-skill-item--selected" : ""}`}
+                    key={skill.id}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => toggleSkill(skill.id)}
+                  >
+                    <span>
+                      <strong>{skill.name}</strong>
+                      <small>
+                        {skill.category} · {skill.provider} · v{skill.version}
+                      </small>
+                    </span>
+                    <span className="agent-skill-check">
+                      {selected ? (
+                        <Check size={14} strokeWidth={2.7} aria-hidden="true" />
+                      ) : (
+                        <Plus size={14} strokeWidth={2.5} aria-hidden="true" />
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="agent-config-panel-heading agent-config-panel-heading--actions">
+              <span>Custom actions</span>
+              <button className="agent-mini-action" type="button" onClick={addAction}>
+                <Plus size={14} strokeWidth={2.4} aria-hidden="true" />
+                <span>添加</span>
+              </button>
+            </div>
+            <div className="agent-action-list">
+              {draft.actions.length === 0 ? (
+                <span className="agent-muted-text">尚未配置自定义操作。</span>
+              ) : (
+                draft.actions.map((action, index) => (
+                  <label className="agent-action-row" key={index}>
+                    <input value={action} maxLength={80} onChange={(event) => updateAction(index, event.currentTarget.value)} />
+                    <button type="button" aria-label="移除操作" onClick={() => removeAction(index)}>
+                      <X size={15} strokeWidth={2.3} aria-hidden="true" />
+                    </button>
+                  </label>
+                ))
+              )}
+            </div>
+          </aside>
+        </section>
+      ) : (
+        <section className="agent-config-empty">
+          <BrainCircuit size={30} strokeWidth={2.2} aria-hidden="true" />
+          <strong>没有选中的 agent</strong>
+          <span>返回草稿库后选择一个 agent。</span>
+        </section>
+      )}
+    </main>
+  );
+}

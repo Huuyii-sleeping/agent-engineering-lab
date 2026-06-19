@@ -1,6 +1,5 @@
-import { All, Body, Controller, Delete, Get, Inject, Param, Post, Put, Patch, Req, Res } from "@nestjs/common";
+import { All, Body, Controller, Get, Inject, Param, Post, Put, Patch, Req, Res } from "@nestjs/common";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { AgentProfileService } from "./agent-profile.service.js";
 import { AgentProxyService } from "./agent-proxy.service.js";
 import { ProfileService } from "./profile.service.js";
 import { SettingsService } from "./settings.service.js";
@@ -20,8 +19,6 @@ export class AppController {
   constructor(
     @Inject(AgentProxyService)
     private readonly agentProxy: AgentProxyService,
-    @Inject(AgentProfileService)
-    private readonly agentProfileService: AgentProfileService,
     @Inject(ProfileService)
     private readonly profileService: ProfileService,
     @Inject(SettingsService)
@@ -61,40 +58,6 @@ export class AppController {
   @Patch("settings")
   async patchSettings(@Body() body: unknown, @Res() res: ServerResponse): Promise<void> {
     writeJson(res, 200, { ok: true, settings: await this.settingsService.patchSettings(body) });
-  }
-
-  @Get("agents")
-  async agents(@Res() res: ServerResponse): Promise<void> {
-    writeJson(res, 200, { ok: true, agents: await this.agentProfileService.listAgents() });
-  }
-
-  @Post("agents")
-  async createAgent(@Body() body: unknown, @Res() res: ServerResponse): Promise<void> {
-    writeJson(res, 201, { ok: true, agent: await this.agentProfileService.createAgent(body) });
-  }
-
-  @Put("agents/:agentId")
-  async updateAgent(
-    @Param("agentId") agentId: string,
-    @Body() body: unknown,
-    @Res() res: ServerResponse,
-  ): Promise<void> {
-    const agent = await this.agentProfileService.updateAgent(agentId, body);
-    if (!agent) {
-      writeJson(res, 404, errorPayload("AGENT_NOT_FOUND", `agent ${agentId} was not found`));
-      return;
-    }
-    writeJson(res, 200, { ok: true, agent });
-  }
-
-  @Delete("agents/:agentId")
-  async deleteAgent(@Param("agentId") agentId: string, @Res() res: ServerResponse): Promise<void> {
-    const deleted = await this.agentProfileService.deleteAgent(agentId);
-    if (!deleted) {
-      writeJson(res, 404, errorPayload("AGENT_NOT_FOUND", `agent ${agentId} was not found`));
-      return;
-    }
-    writeJson(res, 200, { ok: true });
   }
 
   @Get("sessions")
