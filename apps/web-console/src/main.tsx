@@ -106,7 +106,7 @@ import "./styles.css";
 
 type LoadState = "idle" | "loading" | "sending";
 type StreamState = "connecting" | "connected" | "disconnected";
-type AppView = "landing" | "agents" | "chat" | "skills" | "builder" | "settings";
+type AppView = "landing" | "agents" | "agent-config" | "chat" | "skills" | "builder" | "settings";
 type WorkspaceTab = Exclude<AppView, "landing" | "settings">;
 
 type NavItem = {
@@ -733,31 +733,133 @@ function LandingPage({ onStart }: { onStart: () => void }) {
   );
 }
 
-function AgentManagerPage({
+function AgentDraftsPage({
   agents,
-  activeAgent,
-  draft,
   loading,
   saving,
   onCreateAgent,
-  onDeleteAgent,
-  onDraftChange,
+  onOpenAgent,
   onRefresh,
-  onSaveAgent,
-  onSelectAgent,
-  onTestAgent,
 }: {
   agents: AgentProfile[];
-  activeAgent: AgentProfile | null;
-  draft: AgentProfileInput;
   loading: boolean;
   saving: boolean;
   onCreateAgent: () => void;
+  onOpenAgent: (agent: AgentProfile) => void;
+  onRefresh: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const filteredAgents = agents.filter((agent) => {
+    const keyword = query.trim().toLowerCase();
+    if (!keyword) {
+      return true;
+    }
+    return `${agent.name} ${agent.description} ${agent.scenario}`.toLowerCase().includes(keyword);
+  });
+  const totalSkillCount = new Set(agents.flatMap((agent) => agent.skillIds)).size;
+  const totalActionCount = agents.reduce((count, agent) => count + agent.actions.length, 0);
+
+  return (
+    <main className="agent-drafts-shell">
+      <header className="agent-drafts-hero">
+        <div className="agent-drafts-title">
+          <span>Agent drafts</span>
+          <h1>选择一个 Agent 草稿继续配置</h1>
+          <p>这里像设计稿工作台一样管理所有 agent。配置项不会在列表页展开，进入具体草稿后再编辑技能、动作和提示词。</p>
+        </div>
+        <div className="agent-drafts-actions">
+          <button className="agent-secondary-action" type="button" onClick={onRefresh} disabled={loading || saving}>
+            <RefreshCw size={16} strokeWidth={2.2} aria-hidden="true" />
+            <span>刷新</span>
+          </button>
+          <button className="agent-primary-action" type="button" onClick={onCreateAgent} disabled={saving}>
+            <Plus size={17} strokeWidth={2.3} aria-hidden="true" />
+            <span>新建 Agent</span>
+          </button>
+        </div>
+      </header>
+
+      <section className="agent-drafts-summary" aria-label="Agent 草稿概览">
+        <div>
+          <span>草稿</span>
+          <strong>{agents.length}</strong>
+        </div>
+        <div>
+          <span>已使用 Skill</span>
+          <strong>{totalSkillCount}</strong>
+        </div>
+        <div>
+          <span>自定义 Action</span>
+          <strong>{totalActionCount}</strong>
+        </div>
+      </section>
+
+      <section className="agent-drafts-workspace" aria-label="Agent 草稿库">
+        <div className="agent-drafts-toolbar">
+          <div className="agent-drafts-search">
+            <SearchCheck size={17} strokeWidth={2.2} aria-hidden="true" />
+            <input value={query} placeholder="搜索 Agent 草稿" onChange={(event) => setQuery(event.currentTarget.value)} />
+          </div>
+          <span>{filteredAgents.length} 个草稿</span>
+        </div>
+
+        <div className="agent-draft-grid">
+          <button className="agent-draft-card agent-draft-card--new" type="button" onClick={onCreateAgent} disabled={saving}>
+            <span className="agent-draft-new-mark">
+              <Plus size={24} strokeWidth={2.2} aria-hidden="true" />
+            </span>
+            <strong>新建 Agent</strong>
+            <small>创建一个新的 agent 草稿</small>
+          </button>
+
+          {filteredAgents.length === 0 ? (
+            <div className="agent-draft-empty">
+              <Bot size={26} strokeWidth={2.2} aria-hidden="true" />
+              <strong>{agents.length === 0 ? "还没有 agent 草稿" : "没有匹配的草稿"}</strong>
+              <span>{agents.length === 0 ? "点击新建 Agent 后会出现在这里。" : "换一个关键词再试。"}</span>
+            </div>
+          ) : (
+            filteredAgents.map((agent) => (
+              <button className="agent-draft-card" key={agent.id} type="button" onClick={() => onOpenAgent(agent)}>
+                <span className="agent-draft-preview" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+                <span className="agent-draft-copy">
+                  <strong>{agent.name}</strong>
+                  <small>{agent.description}</small>
+                </span>
+                <span className="agent-draft-meta">
+                  <span>{agent.skillIds.length} skills</span>
+                  <span>{agent.actions.length} actions</span>
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function AgentConfigPage({
+  activeAgent,
+  draft,
+  saving,
+  onBack,
+  onDeleteAgent,
+  onDraftChange,
+  onSaveAgent,
+  onTestAgent,
+}: {
+  activeAgent: AgentProfile | null;
+  draft: AgentProfileInput;
+  saving: boolean;
+  onBack: () => void;
   onDeleteAgent: (agent: AgentProfile) => void;
   onDraftChange: (draft: AgentProfileInput) => void;
-  onRefresh: () => void;
   onSaveAgent: () => void;
-  onSelectAgent: (agent: AgentProfile) => void;
   onTestAgent: (agent: AgentProfile) => void;
 }) {
   const selectedSkillSet = new Set(draft.skillIds);
@@ -789,184 +891,203 @@ function AgentManagerPage({
   }
 
   return (
-    <main className="agent-manager-shell">
-      <header className="agent-manager-header">
-        <div className="agent-manager-title">
-          <span>Agent workspace</span>
-          <h1>Agent 管理</h1>
-          <p>先管理你的 agent，再进入测试对话。每个 agent 都可以拥有独立的技能、操作和个性化提示。</p>
+    <main className="agent-config-shell">
+      <header className="agent-config-header">
+        <button className="agent-secondary-action" type="button" onClick={onBack}>
+          <ArrowLeft size={16} strokeWidth={2.2} aria-hidden="true" />
+          <span>返回草稿库</span>
+        </button>
+        <div className="agent-config-title">
+          <span>Agent configuration</span>
+          <h1>{activeAgent ? draft.name : "Agent 配置"}</h1>
+          <p>{activeAgent ? "编辑这个 agent 的身份、能力和测试入口。" : "选择一个 agent 草稿后再编辑配置。"}</p>
         </div>
-        <div className="agent-manager-actions">
-          <button className="agent-secondary-action" type="button" onClick={onRefresh} disabled={loading || saving}>
-            <RefreshCw size={16} strokeWidth={2.2} aria-hidden="true" />
-            <span>刷新</span>
-          </button>
-          <button className="agent-primary-action" type="button" onClick={onCreateAgent} disabled={saving}>
-            <Plus size={17} strokeWidth={2.3} aria-hidden="true" />
-            <span>新建 Agent</span>
-          </button>
-        </div>
-      </header>
-
-      <section className="agent-manager-grid" aria-label="Agent 管理工作台">
-        <aside className="agent-list-panel" aria-label="Agent 列表">
-          <div className="agent-panel-heading">
-            <span>Agents</span>
-            <strong>{agents.length} 个</strong>
-          </div>
-
-          <div className="agent-list">
-            {agents.length === 0 ? (
-              <div className="agent-empty">
-                <Bot size={24} strokeWidth={2.2} aria-hidden="true" />
-                <strong>还没有 agent</strong>
-                <span>点击新建 Agent 开始配置。</span>
-              </div>
-            ) : (
-              agents.map((agent) => (
-                <button
-                  className={`agent-list-item ${activeAgent?.id === agent.id ? "agent-list-item--active" : ""}`}
-                  key={agent.id}
-                  type="button"
-                  onClick={() => onSelectAgent(agent)}
-                >
-                  <span className="agent-list-icon" aria-hidden="true">
-                    <Bot size={17} strokeWidth={2.2} />
-                  </span>
-                  <span className="agent-list-copy">
-                    <strong>{agent.name}</strong>
-                    <small>{agent.description}</small>
-                  </span>
-                  <span className="agent-list-count">{agent.skillIds.length}</span>
-                </button>
-              ))
-            )}
-          </div>
-        </aside>
-
-        <section className="agent-editor-panel" aria-label="Agent 详情编辑">
-          {activeAgent ? (
-            <>
-              <div className="agent-panel-heading agent-panel-heading--editor">
-                <div>
-                  <span>Agent detail</span>
-                  <strong>{draft.name}</strong>
-                </div>
-                <div className="agent-editor-actions">
-                  <button className="agent-danger-action" type="button" onClick={() => onDeleteAgent(activeAgent)} disabled={saving}>
-                    <Trash2 size={16} strokeWidth={2.2} aria-hidden="true" />
-                    <span>删除</span>
-                  </button>
-                  <button className="agent-secondary-action" type="button" onClick={onSaveAgent} disabled={saving}>
-                    <Check size={16} strokeWidth={2.4} aria-hidden="true" />
-                    <span>{saving ? "保存中" : "保存"}</span>
-                  </button>
-                  <button className="agent-primary-action" type="button" onClick={() => onTestAgent(activeAgent)} disabled={saving}>
-                    <MessageSquare size={16} strokeWidth={2.2} aria-hidden="true" />
-                    <span>使用 / 测试</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="agent-editor-form">
-                <label className="agent-field">
-                  <span>Agent 名称</span>
-                  <input
-                    maxLength={36}
-                    value={draft.name}
-                    onChange={(event) => onDraftChange({ ...draft, name: event.currentTarget.value })}
-                  />
-                </label>
-                <label className="agent-field">
-                  <span>描述</span>
-                  <input
-                    maxLength={140}
-                    value={draft.description}
-                    onChange={(event) => onDraftChange({ ...draft, description: event.currentTarget.value })}
-                  />
-                </label>
-                <label className="agent-field">
-                  <span>适用场景</span>
-                  <textarea
-                    maxLength={180}
-                    rows={3}
-                    value={draft.scenario}
-                    onChange={(event) => onDraftChange({ ...draft, scenario: event.currentTarget.value })}
-                  />
-                </label>
-                <label className="agent-field agent-field--prompt">
-                  <span>System prompt / 个性化说明</span>
-                  <textarea
-                    maxLength={1600}
-                    rows={8}
-                    value={draft.systemPrompt}
-                    onChange={(event) => onDraftChange({ ...draft, systemPrompt: event.currentTarget.value })}
-                  />
-                </label>
-              </div>
-            </>
-          ) : (
-            <div className="agent-editor-empty">
-              <BrainCircuit size={30} strokeWidth={2.2} aria-hidden="true" />
-              <strong>选择或创建一个 agent</strong>
-              <span>Agent 详情会在这里编辑。</span>
-            </div>
-          )}
-        </section>
-
-        <aside className="agent-config-panel" aria-label="Agent 能力配置">
-          <div className="agent-panel-heading">
-            <span>Skills</span>
-            <strong>{draft.skillIds.length} 已选</strong>
-          </div>
-          <div className="agent-skill-list">
-            {agentSkillCatalog.map((skill) => {
-              const selected = selectedSkillSet.has(skill.id);
-              return (
-                <button
-                  className={`agent-skill-item ${selected ? "agent-skill-item--selected" : ""}`}
-                  key={skill.id}
-                  type="button"
-                  aria-pressed={selected}
-                  onClick={() => toggleSkill(skill.id)}
-                  disabled={!activeAgent}
-                >
-                  <span>
-                    <strong>{skill.name}</strong>
-                    <small>{skill.category} · {skill.provider} · v{skill.version}</small>
-                  </span>
-                  <span className="agent-skill-check">
-                    {selected ? <Check size={14} strokeWidth={2.7} aria-hidden="true" /> : <Plus size={14} strokeWidth={2.5} aria-hidden="true" />}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="agent-panel-heading agent-panel-heading--actions">
-            <span>Custom actions</span>
-            <button className="agent-mini-action" type="button" onClick={addAction} disabled={!activeAgent}>
-              <Plus size={14} strokeWidth={2.4} aria-hidden="true" />
-              <span>添加</span>
+        {activeAgent ? (
+          <div className="agent-config-actions">
+            <button className="agent-danger-action" type="button" onClick={() => onDeleteAgent(activeAgent)} disabled={saving}>
+              <Trash2 size={16} strokeWidth={2.2} aria-hidden="true" />
+              <span>删除</span>
+            </button>
+            <button className="agent-secondary-action" type="button" onClick={onSaveAgent} disabled={saving}>
+              <Check size={16} strokeWidth={2.4} aria-hidden="true" />
+              <span>{saving ? "保存中" : "保存"}</span>
+            </button>
+            <button className="agent-primary-action" type="button" onClick={() => onTestAgent(activeAgent)} disabled={saving}>
+              <MessageSquare size={16} strokeWidth={2.2} aria-hidden="true" />
+              <span>使用 / 测试</span>
             </button>
           </div>
-          <div className="agent-action-list">
-            {draft.actions.length === 0 ? (
-              <span className="agent-muted-text">尚未配置自定义操作。</span>
-            ) : (
-              draft.actions.map((action, index) => (
-                <label className="agent-action-row" key={index}>
-                  <input value={action} maxLength={80} onChange={(event) => updateAction(index, event.currentTarget.value)} />
-                  <button type="button" aria-label="移除操作" onClick={() => removeAction(index)}>
-                    <X size={15} strokeWidth={2.3} aria-hidden="true" />
+        ) : null}
+      </header>
+
+      {activeAgent ? (
+        <section className="agent-config-layout" aria-label="Agent 配置工作台">
+          <section className="agent-config-main" aria-label="Agent 基础信息">
+            <div className="agent-config-panel-heading">
+              <span>Identity</span>
+              <strong>基础信息</strong>
+            </div>
+            <div className="agent-editor-form">
+              <label className="agent-field">
+                <span>Agent 名称</span>
+                <input
+                  maxLength={36}
+                  value={draft.name}
+                  onChange={(event) => onDraftChange({ ...draft, name: event.currentTarget.value })}
+                />
+              </label>
+              <label className="agent-field">
+                <span>描述</span>
+                <input
+                  maxLength={140}
+                  value={draft.description}
+                  onChange={(event) => onDraftChange({ ...draft, description: event.currentTarget.value })}
+                />
+              </label>
+              <label className="agent-field">
+                <span>适用场景</span>
+                <textarea
+                  maxLength={180}
+                  rows={3}
+                  value={draft.scenario}
+                  onChange={(event) => onDraftChange({ ...draft, scenario: event.currentTarget.value })}
+                />
+              </label>
+              <label className="agent-field agent-field--prompt">
+                <span>System prompt / 个性化说明</span>
+                <textarea
+                  maxLength={1600}
+                  rows={8}
+                  value={draft.systemPrompt}
+                  onChange={(event) => onDraftChange({ ...draft, systemPrompt: event.currentTarget.value })}
+                />
+              </label>
+            </div>
+          </section>
+
+          <aside className="agent-config-side" aria-label="Agent 能力配置">
+            <div className="agent-config-panel-heading">
+              <span>Skills</span>
+              <strong>{draft.skillIds.length} 已选</strong>
+            </div>
+            <div className="agent-skill-list">
+              {agentSkillCatalog.map((skill) => {
+                const selected = selectedSkillSet.has(skill.id);
+                return (
+                  <button
+                    className={`agent-skill-item ${selected ? "agent-skill-item--selected" : ""}`}
+                    key={skill.id}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => toggleSkill(skill.id)}
+                  >
+                    <span>
+                      <strong>{skill.name}</strong>
+                      <small>
+                        {skill.category} · {skill.provider} · v{skill.version}
+                      </small>
+                    </span>
+                    <span className="agent-skill-check">
+                      {selected ? (
+                        <Check size={14} strokeWidth={2.7} aria-hidden="true" />
+                      ) : (
+                        <Plus size={14} strokeWidth={2.5} aria-hidden="true" />
+                      )}
+                    </span>
                   </button>
-                </label>
-              ))
-            )}
-          </div>
-        </aside>
-      </section>
+                );
+              })}
+            </div>
+
+            <div className="agent-config-panel-heading agent-config-panel-heading--actions">
+              <span>Custom actions</span>
+              <button className="agent-mini-action" type="button" onClick={addAction}>
+                <Plus size={14} strokeWidth={2.4} aria-hidden="true" />
+                <span>添加</span>
+              </button>
+            </div>
+            <div className="agent-action-list">
+              {draft.actions.length === 0 ? (
+                <span className="agent-muted-text">尚未配置自定义操作。</span>
+              ) : (
+                draft.actions.map((action, index) => (
+                  <label className="agent-action-row" key={index}>
+                    <input value={action} maxLength={80} onChange={(event) => updateAction(index, event.currentTarget.value)} />
+                    <button type="button" aria-label="移除操作" onClick={() => removeAction(index)}>
+                      <X size={15} strokeWidth={2.3} aria-hidden="true" />
+                    </button>
+                  </label>
+                ))
+              )}
+            </div>
+          </aside>
+        </section>
+      ) : (
+        <section className="agent-config-empty">
+          <BrainCircuit size={30} strokeWidth={2.2} aria-hidden="true" />
+          <strong>没有选中的 agent</strong>
+          <span>返回草稿库后选择一个 agent。</span>
+        </section>
+      )}
     </main>
+  );
+}
+
+function AgentManagerPage({
+  agents,
+  activeAgent,
+  draft,
+  loading,
+  saving,
+  mode,
+  onBackToDrafts,
+  onCreateAgent,
+  onDeleteAgent,
+  onDraftChange,
+  onOpenAgent,
+  onRefresh,
+  onSaveAgent,
+  onTestAgent,
+}: {
+  agents: AgentProfile[];
+  activeAgent: AgentProfile | null;
+  draft: AgentProfileInput;
+  loading: boolean;
+  saving: boolean;
+  mode: "drafts" | "config";
+  onBackToDrafts: () => void;
+  onCreateAgent: () => void;
+  onDeleteAgent: (agent: AgentProfile) => void;
+  onDraftChange: (draft: AgentProfileInput) => void;
+  onOpenAgent: (agent: AgentProfile) => void;
+  onRefresh: () => void;
+  onSaveAgent: () => void;
+  onTestAgent: (agent: AgentProfile) => void;
+}) {
+  if (mode === "config") {
+    return (
+      <AgentConfigPage
+        activeAgent={activeAgent}
+        draft={draft}
+        saving={saving}
+        onBack={onBackToDrafts}
+        onDeleteAgent={onDeleteAgent}
+        onDraftChange={onDraftChange}
+        onSaveAgent={onSaveAgent}
+        onTestAgent={onTestAgent}
+      />
+    );
+  }
+
+  return (
+    <AgentDraftsPage
+      agents={agents}
+      loading={loading}
+      saving={saving}
+      onCreateAgent={onCreateAgent}
+      onOpenAgent={onOpenAgent}
+      onRefresh={onRefresh}
+    />
   );
 }
 
@@ -1296,6 +1417,8 @@ function App() {
   const activeSessionSummaryTitle = activeSession ? summarizeSessionTitle(activeSession.messages) : null;
   const isSettingsView = view === "settings";
   const isAgentManagerView = view === "agents";
+  const isAgentConfigView = view === "agent-config";
+  const isAgentSurfaceView = isAgentManagerView || isAgentConfigView;
   const isBuilderView = view === "builder";
   const isLandingView = view === "landing";
   const activeWorkspaceTab: WorkspaceTab = view === "skills" || view === "builder" ? view : "chat";
@@ -1547,6 +1670,11 @@ function App() {
     setAgentDraft(agentDraftFromProfile(agent));
   }
 
+  function openAgentConfig(agent: AgentProfile): void {
+    selectAgent(agent);
+    setView("agent-config");
+  }
+
   async function handleCreateAgent(): Promise<void> {
     setAgentSaving(true);
     try {
@@ -1554,6 +1682,7 @@ function App() {
       setAgents((current) => [agent, ...current.filter((item) => item.id !== agent.id)]);
       setActiveAgentId(agent.id);
       setAgentDraft(agentDraftFromProfile(agent));
+      setView("agent-config");
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -1588,6 +1717,7 @@ function App() {
       const nextAgent = nextAgents[0] ?? null;
       setActiveAgentId(nextAgent?.id ?? null);
       setAgentDraft(nextAgent ? agentDraftFromProfile(nextAgent) : defaultAgentProfileInput);
+      setView("agents");
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -1817,8 +1947,8 @@ function App() {
   }
 
   return (
-    <div className={`app-shell ${isSidebarCollapsed ? "app-shell--sidebar-collapsed" : ""} ${isSettingsView || isAgentManagerView ? "app-shell--settings" : ""}`}>
-      {!isSettingsView && !isAgentManagerView ? (
+    <div className={`app-shell ${isSidebarCollapsed ? "app-shell--sidebar-collapsed" : ""} ${isSettingsView || isAgentSurfaceView ? "app-shell--settings" : ""}`}>
+      {!isSettingsView && !isAgentSurfaceView ? (
         <aside className="sidebar" aria-hidden={isSidebarCollapsed} aria-label="本地控制台导航">
           <div className="profile-row">
             <div className="brand-mark" aria-hidden="true">
@@ -2011,19 +2141,21 @@ function App() {
           onToggleProfileEdit={toggleProfileEdit}
           onThemeToggle={handleThemeToggle}
         />
-      ) : isAgentManagerView ? (
+      ) : isAgentSurfaceView ? (
         <AgentManagerPage
           agents={agents}
           activeAgent={activeAgent}
           draft={agentDraft}
           loading={loadState === "loading"}
           saving={agentSaving}
+          mode={isAgentConfigView ? "config" : "drafts"}
+          onBackToDrafts={() => setView("agents")}
           onCreateAgent={() => void handleCreateAgent()}
           onDeleteAgent={(agent) => void handleDeleteAgent(agent)}
           onDraftChange={setAgentDraft}
+          onOpenAgent={openAgentConfig}
           onRefresh={() => void refreshAgents(true)}
           onSaveAgent={() => void handleSaveAgent()}
-          onSelectAgent={selectAgent}
           onTestAgent={handleTestAgent}
         />
       ) : (
@@ -2070,7 +2202,7 @@ function App() {
             </div>
           ) : null}
 
-          <AgentTestBanner agent={activeAgent} onBack={() => setView("agents")} />
+          <AgentTestBanner agent={activeAgent} onBack={() => setView(activeAgent ? "agent-config" : "agents")} />
 
           <section className="transcript" aria-label="聊天内容">
             {!activeSessionId ? (
