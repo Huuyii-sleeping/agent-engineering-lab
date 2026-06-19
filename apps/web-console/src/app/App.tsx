@@ -97,6 +97,7 @@ export function App() {
     typeof window === "undefined" ? {} : readSessionMetadata(window.localStorage),
   );
   const [error, setError] = useState<string | null>(null);
+  const [agentError, setAgentError] = useState<string | null>(null);
   const activeSessionIdRef = useRef<string | null>(null);
   const streamingSessionIdRef = useRef<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -175,6 +176,15 @@ export function App() {
     return nextAgents;
   }
 
+  async function refreshAgentsSafely(selectFirst = false): Promise<void> {
+    try {
+      await refreshAgents(selectFirst);
+      setAgentError(null);
+    } catch (err) {
+      setAgentError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   async function loadSession(sessionId: string, options: { silent?: boolean } = {}): Promise<void> {
     if (!options.silent) {
       setLoadState("loading");
@@ -198,14 +208,22 @@ export function App() {
 
   async function bootstrap(): Promise<void> {
     setLoadState("loading");
-    try {
-      await Promise.all([refreshHealth(), refreshProfile(), refreshAgents(true), refreshSessions(true)]);
+    const profileResult = refreshProfile();
+    const agentResult = refreshAgentsSafely(true);
+    const runtimeResultsPromise = Promise.allSettled([refreshHealth(), refreshSessions(true)]);
+    const businessResultsPromise = Promise.allSettled([profileResult, agentResult]);
+    const [runtimeResults, businessResults] = await Promise.all([runtimeResultsPromise, businessResultsPromise]);
+    const failedRuntime = runtimeResults.find((result) => result.status === "rejected");
+    const failedBusiness = businessResults.find((result) => result.status === "rejected");
+
+    if (failedRuntime?.status === "rejected") {
+      setError(failedRuntime.reason instanceof Error ? failedRuntime.reason.message : String(failedRuntime.reason));
+    } else if (failedBusiness?.status === "rejected") {
+      setError(failedBusiness.reason instanceof Error ? failedBusiness.reason.message : String(failedBusiness.reason));
+    } else {
       setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoadState("idle");
     }
+    setLoadState("idle");
   }
 
   async function handleCreateSession(): Promise<void> {
@@ -388,7 +406,7 @@ export function App() {
     });
     setIsNewAgentDraft(true);
     setView("agent-config");
-    setError(null);
+    setAgentError(null);
   }
 
   async function handleSaveAgent(): Promise<void> {
@@ -407,9 +425,9 @@ export function App() {
       setAgentDraft(agentDraftFromProfile(agent));
       setIsNewAgentDraft(false);
       setView("agent-config");
-      setError(null);
+      setAgentError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setAgentError(err instanceof Error ? err.message : String(err));
     } finally {
       setAgentSaving(false);
     }
@@ -426,12 +444,21 @@ export function App() {
       setAgentDraft(nextAgent ? agentDraftFromProfile(nextAgent) : defaultAgentProfileInput);
       setIsNewAgentDraft(false);
       setView("agents");
-      setError(null);
+      setAgentError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setAgentError(err instanceof Error ? err.message : String(err));
     } finally {
       setAgentSaving(false);
     }
+  }
+
+  function discardAgentDraft(): void {
+    const nextAgent = activeAgent ?? agents[0] ?? null;
+    setActiveAgentId(nextAgent?.id ?? null);
+    setAgentDraft(nextAgent ? agentDraftFromProfile(nextAgent) : defaultAgentProfileInput);
+    setIsNewAgentDraft(false);
+    setAgentError(null);
+    setView("agents");
   }
 
   function handleTestAgent(agent: AgentProfile): void {
@@ -709,19 +736,18 @@ export function App() {
           agents={agents}
           activeAgent={activeAgent}
           draft={agentDraft}
+          error={agentError}
           isNewDraft={isNewAgentDraft}
           loading={loadState === "loading"}
           saving={agentSaving}
           mode={isAgentConfigView ? "config" : "drafts"}
-          onBackToDrafts={() => {
-            setIsNewAgentDraft(false);
-            setView("agents");
-          }}
+          onBackToDrafts={discardAgentDraft}
           onCreateAgent={() => void handleCreateAgent()}
           onDeleteAgent={(agent) => void handleDeleteAgent(agent)}
+          onDiscardDraft={discardAgentDraft}
           onDraftChange={setAgentDraft}
           onOpenAgent={openAgentConfig}
-          onRefresh={() => void refreshAgents(true)}
+          onRefresh={() => void refreshAgentsSafely(true)}
           onSaveAgent={() => void handleSaveAgent()}
           onTestAgent={handleTestAgent}
         />

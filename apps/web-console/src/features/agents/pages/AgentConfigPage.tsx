@@ -5,20 +5,24 @@ import type { AgentProfile, AgentProfileInput } from "../../../api";
 export function AgentConfigPage({
   activeAgent,
   draft,
+  error,
   isNewDraft,
   saving,
   onBack,
   onDeleteAgent,
+  onDiscardDraft,
   onDraftChange,
   onSaveAgent,
   onTestAgent,
 }: {
   activeAgent: AgentProfile | null;
   draft: AgentProfileInput;
+  error: string | null;
   isNewDraft: boolean;
   saving: boolean;
   onBack: () => void;
   onDeleteAgent: (agent: AgentProfile) => void;
+  onDiscardDraft: () => void;
   onDraftChange: (draft: AgentProfileInput) => void;
   onSaveAgent: () => void;
   onTestAgent: (agent: AgentProfile) => void;
@@ -56,7 +60,7 @@ export function AgentConfigPage({
       <header className="agent-config-header">
         <button className="agent-secondary-action" type="button" onClick={onBack}>
           <ArrowLeft size={16} strokeWidth={2.2} aria-hidden="true" />
-          <span>返回草稿库</span>
+          <span>{isNewDraft ? "丢弃并返回" : "返回草稿库"}</span>
         </button>
         <div className="agent-config-title">
           <span>Agent configuration</span>
@@ -76,7 +80,12 @@ export function AgentConfigPage({
                 <Trash2 size={16} strokeWidth={2.2} aria-hidden="true" />
                 <span>删除</span>
               </button>
-            ) : null}
+            ) : (
+              <button className="agent-danger-action" type="button" onClick={onDiscardDraft} disabled={saving}>
+                <Trash2 size={16} strokeWidth={2.2} aria-hidden="true" />
+                <span>丢弃草稿</span>
+              </button>
+            )}
             <button className="agent-secondary-action" type="button" onClick={onSaveAgent} disabled={saving}>
               <Check size={16} strokeWidth={2.4} aria-hidden="true" />
               <span>{saving ? "保存中" : "保存"}</span>
@@ -90,6 +99,13 @@ export function AgentConfigPage({
           </div>
         ) : null}
       </header>
+
+      {error ? (
+        <div className="agent-error-banner" role="alert">
+          <strong>Agent 草稿操作失败</strong>
+          <span>{error}</span>
+        </div>
+      ) : null}
 
       {activeAgent || isNewDraft ? (
         <section className="agent-config-layout" aria-label="Agent 配置工作台">

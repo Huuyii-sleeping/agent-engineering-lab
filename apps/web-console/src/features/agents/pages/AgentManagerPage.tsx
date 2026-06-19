@@ -6,6 +6,7 @@ export function AgentManagerPage({
   agents,
   activeAgent,
   draft,
+  error,
   isNewDraft,
   loading,
   saving,
@@ -13,6 +14,7 @@ export function AgentManagerPage({
   onBackToDrafts,
   onCreateAgent,
   onDeleteAgent,
+  onDiscardDraft,
   onDraftChange,
   onOpenAgent,
   onRefresh,
@@ -22,6 +24,7 @@ export function AgentManagerPage({
   agents: AgentProfile[];
   activeAgent: AgentProfile | null;
   draft: AgentProfileInput;
+  error: string | null;
   isNewDraft: boolean;
   loading: boolean;
   saving: boolean;
@@ -29,6 +32,7 @@ export function AgentManagerPage({
   onBackToDrafts: () => void;
   onCreateAgent: () => void;
   onDeleteAgent: (agent: AgentProfile) => void;
+  onDiscardDraft: () => void;
   onDraftChange: (draft: AgentProfileInput) => void;
   onOpenAgent: (agent: AgentProfile) => void;
   onRefresh: () => void;
@@ -40,10 +44,12 @@ export function AgentManagerPage({
       <AgentConfigPage
         activeAgent={activeAgent}
         draft={draft}
+        error={error}
         isNewDraft={isNewDraft}
         saving={saving}
         onBack={onBackToDrafts}
         onDeleteAgent={onDeleteAgent}
+        onDiscardDraft={onDiscardDraft}
         onDraftChange={onDraftChange}
         onSaveAgent={onSaveAgent}
         onTestAgent={onTestAgent}
@@ -54,6 +60,7 @@ export function AgentManagerPage({
   return (
     <AgentDraftsPage
       agents={agents}
+      error={error}
       loading={loading}
       saving={saving}
       onCreateAgent={onCreateAgent}

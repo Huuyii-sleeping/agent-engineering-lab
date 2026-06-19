@@ -819,11 +819,12 @@ p {
 }
 
 .agent-drafts-shell {
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
 }
 
 .agent-drafts-hero,
+.agent-error-banner,
 .agent-drafts-summary,
 .agent-drafts-workspace,
 .agent-config-header,
@@ -920,6 +921,7 @@ p {
 
 .agent-drafts-workspace {
   display: grid;
+  flex: 1 1 auto;
   min-height: 0;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
@@ -1138,8 +1140,8 @@ p {
 }
 
 .agent-config-shell {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
 }
 
 .agent-config-header {
@@ -1153,6 +1155,7 @@ p {
 
 .agent-config-layout {
   display: grid;
+  flex: 1 1 auto;
   min-height: 0;
   grid-template-columns: minmax(420px, 1fr) minmax(320px, 0.48fr);
   gap: 16px;
@@ -1214,6 +1217,7 @@ p {
 
 .agent-config-empty {
   display: grid;
+  flex: 1 1 auto;
   align-content: center;
   justify-items: center;
   gap: 9px;
@@ -1225,6 +1229,29 @@ p {
   color: var(--text-main);
   font-size: 18px;
   font-weight: 900;
+}
+
+.agent-error-banner {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 16px;
+  border: 1px solid color-mix(in srgb, var(--danger) 36%, transparent);
+  border-radius: 12px;
+  background: var(--danger-bg);
+  color: var(--text-main);
+  padding: 11px 14px;
+}
+
+.agent-error-banner strong {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.agent-error-banner span {
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .agent-manager-shell {

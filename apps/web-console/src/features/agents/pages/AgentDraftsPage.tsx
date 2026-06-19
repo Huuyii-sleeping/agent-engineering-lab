@@ -4,6 +4,7 @@ import type { AgentProfile } from "../../../api";
 
 export function AgentDraftsPage({
   agents,
+  error,
   loading,
   saving,
   onCreateAgent,
@@ -11,6 +12,7 @@ export function AgentDraftsPage({
   onRefresh,
 }: {
   agents: AgentProfile[];
+  error: string | null;
   loading: boolean;
   saving: boolean;
   onCreateAgent: () => void;
@@ -47,6 +49,13 @@ export function AgentDraftsPage({
           </button>
         </div>
       </header>
+
+      {error ? (
+        <div className="agent-error-banner" role="alert">
+          <strong>Agent 草稿操作失败</strong>
+          <span>{error}</span>
+        </div>
+      ) : null}
 
       <section className="agent-drafts-summary" aria-label="Agent 草稿概览">
         <div>
