@@ -67,10 +67,10 @@ export function AgentConfigPage({
           <h1>{activeAgent || isNewDraft ? draft.name : "Agent 配置"}</h1>
           <p>
             {isNewDraft
-              ? "这是一个未保存草稿。保存后才会出现在 Agent 草稿库。"
+              ? "未保存。保存后进入草稿库。"
               : activeAgent
-                ? "编辑这个 agent 的身份、能力和测试入口。"
-                : "选择一个 agent 草稿后再编辑配置。"}
+                ? "编辑身份、技能、动作和提示词。"
+                : "先选择一个草稿。"}
           </p>
         </div>
         {activeAgent || isNewDraft ? (

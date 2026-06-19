@@ -47,7 +47,7 @@ export function AgentBuilderPage({
         <div className="builder-hero-copy">
           <span>Agent Builder</span>
           <h1>Agent 工坊</h1>
-          <p>选择技能、编排 SOP，并把它保存为后续可复用的 agent 子页面。</p>
+          <p>选择技能与 SOP，形成可复用 Agent。</p>
         </div>
         <div className="builder-status-panel" aria-label="Agent 配置就绪度">
           <strong>{readinessScore}%</strong>

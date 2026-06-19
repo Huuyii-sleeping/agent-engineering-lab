@@ -35,8 +35,8 @@ export function AgentDraftsPage({
       <header className="agent-drafts-hero">
         <div className="agent-drafts-title">
           <span>Agent drafts</span>
-          <h1>选择一个 Agent 草稿继续配置</h1>
-          <p>这里像设计稿工作台一样管理所有 agent。配置项不会在列表页展开，进入具体草稿后再编辑技能、动作和提示词。</p>
+          <h1>Agent 草稿</h1>
+          <p>选择草稿，继续配置技能、动作和提示词。</p>
         </div>
         <div className="agent-drafts-actions">
           <button className="agent-secondary-action" type="button" onClick={onRefresh} disabled={loading || saving}>
@@ -87,14 +87,14 @@ export function AgentDraftsPage({
               <Plus size={24} strokeWidth={2.2} aria-hidden="true" />
             </span>
             <strong>新建 Agent</strong>
-            <small>创建一个新的 agent 草稿</small>
+            <small>创建新草稿</small>
           </button>
 
           {filteredAgents.length === 0 ? (
             <div className="agent-draft-empty">
               <Bot size={26} strokeWidth={2.2} aria-hidden="true" />
               <strong>{agents.length === 0 ? "还没有 agent 草稿" : "没有匹配的草稿"}</strong>
-              <span>{agents.length === 0 ? "点击新建 Agent 后会出现在这里。" : "换一个关键词再试。"}</span>
+              <span>{agents.length === 0 ? "新建后会显示在这里。" : "换个关键词再试。"}</span>
             </div>
           ) : (
             filteredAgents.map((agent) => (

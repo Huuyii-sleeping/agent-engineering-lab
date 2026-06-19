@@ -15,8 +15,8 @@ export function SkillHubPage({
       <section className="skillhub-hero">
         <div>
           <span>Skill Hub</span>
-          <h1>加载适合当前工作流的技能</h1>
-          <p>先用本地 catalog 模拟 SkillHub：查看技能来源、版本和状态，选择下载后可作为后续 Agent 组装的能力池。</p>
+          <h1>技能库</h1>
+          <p>选择要加载的技能。</p>
         </div>
         <div className="skillhub-meter" aria-label="已下载技能数量">
           <strong>{downloadedCount}</strong>
