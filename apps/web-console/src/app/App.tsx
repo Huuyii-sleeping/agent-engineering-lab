@@ -48,7 +48,7 @@ import { settingsSectionFromHash, type SettingsSection } from "../settings-route
 import { getNextTheme, readStoredTheme, writeStoredTheme, type ThemeMode } from "../theme";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { ChatWorkspace } from "../components/layout/ChatWorkspace";
-import type { AppView, LoadState, SessionSummaryTitleMap, StreamState, WorkspaceTab } from "./types";
+import type { AppView, LoadState, SessionSummaryTitleMap, StreamState } from "./types";
 import { agentDraftFromProfile } from "../features/agents/lib/agent-profile";
 import {
   sortSessionsByRecent,
@@ -56,6 +56,7 @@ import {
 } from "../features/chat/lib/chat-format";
 import { AgentManagerPage } from "../features/agents/pages/AgentManagerPage";
 import { AgentBuilderPage } from "../features/agents/pages/AgentBuilderPage";
+import { AgentWorkspaceTree } from "../features/agents/components/AgentWorkspaceTree";
 import { LandingPage } from "../pages/LandingPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { SkillHubPage } from "../features/skills/pages/SkillHubPage";
@@ -122,9 +123,9 @@ export function App() {
   const isAgentManagerView = view === "agents";
   const isAgentConfigView = view === "agent-config";
   const isAgentSurfaceView = isAgentManagerView || isAgentConfigView;
+  const isAgentWorkspaceView = isAgentSurfaceView || view === "skills" || view === "builder";
   const isBuilderView = view === "builder";
   const isLandingView = view === "landing";
-  const activeWorkspaceTab: WorkspaceTab = view === "skills" || view === "builder" ? view : "chat";
   const conversationRuntimeState = loadState === "loading" ? "loading" : isBusy ? "running" : activeSessionId ? "completed" : "idle";
 
   function sessionTitleFor(session: SessionSummary | SessionDetail): string {
@@ -682,8 +683,8 @@ export function App() {
   }
 
   return (
-    <div className={`app-shell ${isSidebarCollapsed ? "app-shell--sidebar-collapsed" : ""} ${isSettingsView || isAgentSurfaceView ? "app-shell--settings" : ""}`}>
-      {!isSettingsView && !isAgentSurfaceView ? (
+    <div className={`app-shell ${isSidebarCollapsed ? "app-shell--sidebar-collapsed" : ""} ${isSettingsView || isAgentWorkspaceView ? "app-shell--settings" : ""}`}>
+      {!isSettingsView && !isAgentWorkspaceView ? (
         <AppSidebar
           activeSessionId={activeSessionId}
           areAllVisibleSessionsSelected={areAllVisibleSessionsSelected}
@@ -731,26 +732,50 @@ export function App() {
           onToggleProfileEdit={toggleProfileEdit}
           onThemeToggle={handleThemeToggle}
         />
-      ) : isAgentSurfaceView ? (
-        <AgentManagerPage
-          agents={agents}
-          activeAgent={activeAgent}
-          draft={agentDraft}
-          error={agentError}
-          isNewDraft={isNewAgentDraft}
-          loading={loadState === "loading"}
-          saving={agentSaving}
-          mode={isAgentConfigView ? "config" : "drafts"}
-          onBackToDrafts={discardAgentDraft}
-          onCreateAgent={() => void handleCreateAgent()}
-          onDeleteAgent={(agent) => void handleDeleteAgent(agent)}
-          onDiscardDraft={discardAgentDraft}
-          onDraftChange={setAgentDraft}
-          onOpenAgent={openAgentConfig}
-          onRefresh={() => void refreshAgentsSafely(true)}
-          onSaveAgent={() => void handleSaveAgent()}
-          onTestAgent={handleTestAgent}
-        />
+      ) : isAgentWorkspaceView ? (
+        <main className="agent-workspace-shell">
+          <AgentWorkspaceTree
+            activeAgentId={activeAgentId}
+            activeView={view}
+            agents={agents}
+            downloadedSkillCount={downloadedSkillIds.length}
+            saving={agentSaving}
+            onCreateAgent={() => void handleCreateAgent()}
+            onOpenAgent={openAgentConfig}
+            onOpenBuilder={() => setView("builder")}
+            onOpenChat={() => setView("chat")}
+            onOpenDrafts={discardAgentDraft}
+            onOpenSkillHub={() => setView("skills")}
+            onRefreshAgents={() => void refreshAgentsSafely(true)}
+          />
+          <section className="agent-workspace-content" aria-label="Agent 工作台内容">
+            {isAgentSurfaceView ? (
+              <AgentManagerPage
+                agents={agents}
+                activeAgent={activeAgent}
+                draft={agentDraft}
+                error={agentError}
+                isNewDraft={isNewAgentDraft}
+                loading={loadState === "loading"}
+                saving={agentSaving}
+                mode={isAgentConfigView ? "config" : "drafts"}
+                onBackToDrafts={discardAgentDraft}
+                onCreateAgent={() => void handleCreateAgent()}
+                onDeleteAgent={(agent) => void handleDeleteAgent(agent)}
+                onDiscardDraft={discardAgentDraft}
+                onDraftChange={setAgentDraft}
+                onOpenAgent={openAgentConfig}
+                onRefresh={() => void refreshAgentsSafely(true)}
+                onSaveAgent={() => void handleSaveAgent()}
+                onTestAgent={handleTestAgent}
+              />
+            ) : isBuilderView ? (
+              <AgentBuilderPage config={builderConfig} onConfigChange={updateBuilderConfig} />
+            ) : (
+              <SkillHubPage downloadedSkillIds={downloadedSkillIds} onToggleSkill={toggleDownloadedSkill} />
+            )}
+          </section>
+        </main>
       ) : (
         <ChatWorkspace
           activeAgent={activeAgent}

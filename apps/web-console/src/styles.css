@@ -800,6 +800,233 @@ p {
   background: var(--chat-bg);
 }
 
+.agent-workspace-shell {
+  --agent-tree-bg: color-mix(in srgb, var(--chat-bg) 92%, #111827);
+  --agent-tree-panel: color-mix(in srgb, var(--panel-bg) 82%, var(--chat-bg));
+  --agent-tree-line: color-mix(in srgb, var(--border-subtle) 74%, var(--text-muted) 10%);
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  height: 100dvh;
+  grid-template-columns: 292px minmax(0, 1fr);
+  overflow: hidden;
+  background: var(--chat-bg);
+}
+
+.agent-workspace-content {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.agent-workspace-content .agent-drafts-shell,
+.agent-workspace-content .agent-config-shell,
+.agent-workspace-content .builder-shell,
+.agent-workspace-content .skillhub-shell {
+  height: 100%;
+}
+
+.agent-tree-panel {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 14px;
+  border-right: 1px solid var(--agent-tree-line);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--agent-tree-bg) 88%, #1f2937) 0, var(--agent-tree-bg) 280px),
+    var(--agent-tree-bg);
+  padding: 18px 14px;
+}
+
+.agent-tree-brand {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+}
+
+.agent-tree-brand-mark {
+  display: inline-flex;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--agent-tree-line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent-soft) 68%, transparent);
+  color: var(--accent);
+}
+
+.agent-tree-brand strong {
+  display: block;
+  overflow: hidden;
+  color: var(--text-main);
+  font-size: 15px;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-tree-brand small {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.agent-tree-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.agent-tree-actions button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--agent-tree-line);
+  border-radius: 9px;
+  background: var(--agent-tree-panel);
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.agent-tree-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.agent-tree-nav {
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+  scrollbar-width: thin;
+}
+
+.agent-tree-section {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 16px;
+}
+
+.agent-tree-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  padding: 0 5px;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.agent-tree-section ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-tree-node {
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-soft);
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.agent-tree-node::before {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: -5px;
+  width: 2px;
+  border-radius: 999px;
+  background: transparent;
+  content: "";
+}
+
+.agent-tree-node:hover {
+  border-color: color-mix(in srgb, var(--agent-tree-line) 80%, transparent);
+  background: color-mix(in srgb, var(--panel-bg) 58%, transparent);
+  color: var(--text-main);
+}
+
+.agent-tree-node--active {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--agent-tree-line));
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--accent-soft) 74%, transparent), transparent 76%),
+    color-mix(in srgb, var(--panel-bg) 70%, transparent);
+  color: var(--text-main);
+}
+
+.agent-tree-node--active::before {
+  background: var(--accent);
+}
+
+.agent-tree-node-icon {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--agent-tree-line) 78%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--chat-bg) 62%, transparent);
+  color: currentColor;
+}
+
+.agent-tree-node-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.agent-tree-node-copy strong,
+.agent-tree-node-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-tree-node-copy strong {
+  color: currentColor;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.agent-tree-node-copy small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.agent-tree-empty {
+  margin: 0;
+  border: 1px dashed var(--agent-tree-line);
+  border-radius: 10px;
+  color: var(--text-muted);
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .agent-drafts-shell,
 .agent-config-shell {
   --agent-blue: #3b82f6;
@@ -811,7 +1038,7 @@ p {
   --agent-canvas: color-mix(in srgb, var(--chat-bg) 82%, #f8fbff);
   min-width: 0;
   min-height: 0;
-  height: 100dvh;
+  height: 100%;
   overflow: hidden;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--chat-bg) 90%, #ffffff) 0, var(--chat-bg) 310px),
@@ -3269,6 +3496,8 @@ button.settings-row:hover {
 .landing-nav-action:focus-visible,
 .landing-primary-action:focus-visible,
 .workspace-tab:focus-visible,
+.agent-tree-actions button:focus-visible,
+.agent-tree-node:focus-visible,
 .primary-action:focus-visible,
 .send-button:focus-visible,
 .quick-action:focus-visible,
@@ -3338,6 +3567,23 @@ button.settings-row:hover {
 
   .transcript {
     padding-inline: 22px;
+  }
+
+  .agent-workspace-shell {
+    grid-template-columns: 232px minmax(0, 1fr);
+  }
+
+  .agent-tree-panel {
+    padding: 14px 10px;
+  }
+
+  .agent-tree-brand {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .agent-tree-brand-mark {
+    width: 34px;
+    height: 34px;
   }
 
   .builder-hero {
@@ -3482,6 +3728,40 @@ button.settings-row:hover {
 
   .sidebar {
     display: none;
+  }
+
+  .agent-workspace-shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .agent-tree-panel {
+    min-height: 0;
+    max-height: 260px;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    border-right: 0;
+    border-bottom: 1px solid var(--agent-tree-line);
+    padding: 12px;
+  }
+
+  .agent-tree-nav {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .agent-tree-section {
+    margin-bottom: 10px;
+  }
+
+  .agent-tree-section ul {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(172px, 1fr);
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .agent-tree-node {
+    min-height: 50px;
   }
 
   .conversation-header {
