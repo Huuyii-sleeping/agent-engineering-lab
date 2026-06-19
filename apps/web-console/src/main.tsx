@@ -846,6 +846,7 @@ function AgentDraftsPage({
 function AgentConfigPage({
   activeAgent,
   draft,
+  isNewDraft,
   saving,
   onBack,
   onDeleteAgent,
@@ -855,6 +856,7 @@ function AgentConfigPage({
 }: {
   activeAgent: AgentProfile | null;
   draft: AgentProfileInput;
+  isNewDraft: boolean;
   saving: boolean;
   onBack: () => void;
   onDeleteAgent: (agent: AgentProfile) => void;
@@ -899,28 +901,38 @@ function AgentConfigPage({
         </button>
         <div className="agent-config-title">
           <span>Agent configuration</span>
-          <h1>{activeAgent ? draft.name : "Agent 配置"}</h1>
-          <p>{activeAgent ? "编辑这个 agent 的身份、能力和测试入口。" : "选择一个 agent 草稿后再编辑配置。"}</p>
+          <h1>{activeAgent || isNewDraft ? draft.name : "Agent 配置"}</h1>
+          <p>
+            {isNewDraft
+              ? "这是一个未保存草稿。保存后才会出现在 Agent 草稿库。"
+              : activeAgent
+                ? "编辑这个 agent 的身份、能力和测试入口。"
+                : "选择一个 agent 草稿后再编辑配置。"}
+          </p>
         </div>
-        {activeAgent ? (
+        {activeAgent || isNewDraft ? (
           <div className="agent-config-actions">
-            <button className="agent-danger-action" type="button" onClick={() => onDeleteAgent(activeAgent)} disabled={saving}>
-              <Trash2 size={16} strokeWidth={2.2} aria-hidden="true" />
-              <span>删除</span>
-            </button>
+            {activeAgent ? (
+              <button className="agent-danger-action" type="button" onClick={() => onDeleteAgent(activeAgent)} disabled={saving}>
+                <Trash2 size={16} strokeWidth={2.2} aria-hidden="true" />
+                <span>删除</span>
+              </button>
+            ) : null}
             <button className="agent-secondary-action" type="button" onClick={onSaveAgent} disabled={saving}>
               <Check size={16} strokeWidth={2.4} aria-hidden="true" />
               <span>{saving ? "保存中" : "保存"}</span>
             </button>
-            <button className="agent-primary-action" type="button" onClick={() => onTestAgent(activeAgent)} disabled={saving}>
-              <MessageSquare size={16} strokeWidth={2.2} aria-hidden="true" />
-              <span>使用 / 测试</span>
-            </button>
+            {activeAgent ? (
+              <button className="agent-primary-action" type="button" onClick={() => onTestAgent(activeAgent)} disabled={saving}>
+                <MessageSquare size={16} strokeWidth={2.2} aria-hidden="true" />
+                <span>使用 / 测试</span>
+              </button>
+            ) : null}
           </div>
         ) : null}
       </header>
 
-      {activeAgent ? (
+      {activeAgent || isNewDraft ? (
         <section className="agent-config-layout" aria-label="Agent 配置工作台">
           <section className="agent-config-main" aria-label="Agent 基础信息">
             <div className="agent-config-panel-heading">
@@ -1037,6 +1049,7 @@ function AgentManagerPage({
   agents,
   activeAgent,
   draft,
+  isNewDraft,
   loading,
   saving,
   mode,
@@ -1052,6 +1065,7 @@ function AgentManagerPage({
   agents: AgentProfile[];
   activeAgent: AgentProfile | null;
   draft: AgentProfileInput;
+  isNewDraft: boolean;
   loading: boolean;
   saving: boolean;
   mode: "drafts" | "config";
@@ -1069,6 +1083,7 @@ function AgentManagerPage({
       <AgentConfigPage
         activeAgent={activeAgent}
         draft={draft}
+        isNewDraft={isNewDraft}
         saving={saving}
         onBack={onBackToDrafts}
         onDeleteAgent={onDeleteAgent}
@@ -1375,6 +1390,7 @@ function App() {
   const [agents, setAgents] = useState<AgentProfile[]>([]);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [agentDraft, setAgentDraft] = useState<AgentProfileInput>(defaultAgentProfileInput);
+  const [isNewAgentDraft, setIsNewAgentDraft] = useState(false);
   const [agentSaving, setAgentSaving] = useState(false);
   const [profile, setProfile] = useState<UserProfile>(defaultUserProfile);
   const [profileDraft, setProfileDraft] = useState<UserProfile>(profile);
@@ -1464,9 +1480,11 @@ function App() {
     if (nextActiveAgent) {
       setActiveAgentId(nextActiveAgent.id);
       setAgentDraft(agentDraftFromProfile(nextActiveAgent));
+      setIsNewAgentDraft(false);
     } else if (nextAgents.length === 0) {
       setActiveAgentId(null);
       setAgentDraft(defaultAgentProfileInput);
+      setIsNewAgentDraft(false);
     }
     return nextAgents;
   }
@@ -1668,6 +1686,7 @@ function App() {
   function selectAgent(agent: AgentProfile): void {
     setActiveAgentId(agent.id);
     setAgentDraft(agentDraftFromProfile(agent));
+    setIsNewAgentDraft(false);
   }
 
   function openAgentConfig(agent: AgentProfile): void {
@@ -1675,31 +1694,33 @@ function App() {
     setView("agent-config");
   }
 
-  async function handleCreateAgent(): Promise<void> {
-    setAgentSaving(true);
-    try {
-      const agent = await createAgentProfile({ name: `新 Agent ${agents.length + 1}` });
-      setAgents((current) => [agent, ...current.filter((item) => item.id !== agent.id)]);
-      setActiveAgentId(agent.id);
-      setAgentDraft(agentDraftFromProfile(agent));
-      setView("agent-config");
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setAgentSaving(false);
-    }
+  function handleCreateAgent(): void {
+    setActiveAgentId(null);
+    setAgentDraft({
+      ...defaultAgentProfileInput,
+      name: `新 Agent ${agents.length + 1}`,
+    });
+    setIsNewAgentDraft(true);
+    setView("agent-config");
+    setError(null);
   }
 
   async function handleSaveAgent(): Promise<void> {
-    if (!activeAgent) {
+    if (!activeAgent && !isNewAgentDraft) {
       return;
     }
     setAgentSaving(true);
     try {
-      const agent = await updateAgentProfile(activeAgent.id, agentDraft);
-      setAgents((current) => current.map((item) => (item.id === agent.id ? agent : item)));
+      const agent = activeAgent
+        ? await updateAgentProfile(activeAgent.id, agentDraft)
+        : await createAgentProfile(agentDraft);
+      setAgents((current) =>
+        activeAgent ? current.map((item) => (item.id === agent.id ? agent : item)) : [agent, ...current],
+      );
+      setActiveAgentId(agent.id);
       setAgentDraft(agentDraftFromProfile(agent));
+      setIsNewAgentDraft(false);
+      setView("agent-config");
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -1717,6 +1738,7 @@ function App() {
       const nextAgent = nextAgents[0] ?? null;
       setActiveAgentId(nextAgent?.id ?? null);
       setAgentDraft(nextAgent ? agentDraftFromProfile(nextAgent) : defaultAgentProfileInput);
+      setIsNewAgentDraft(false);
       setView("agents");
       setError(null);
     } catch (err) {
@@ -2146,10 +2168,14 @@ function App() {
           agents={agents}
           activeAgent={activeAgent}
           draft={agentDraft}
+          isNewDraft={isNewAgentDraft}
           loading={loadState === "loading"}
           saving={agentSaving}
           mode={isAgentConfigView ? "config" : "drafts"}
-          onBackToDrafts={() => setView("agents")}
+          onBackToDrafts={() => {
+            setIsNewAgentDraft(false);
+            setView("agents");
+          }}
           onCreateAgent={() => void handleCreateAgent()}
           onDeleteAgent={(agent) => void handleDeleteAgent(agent)}
           onDraftChange={setAgentDraft}
