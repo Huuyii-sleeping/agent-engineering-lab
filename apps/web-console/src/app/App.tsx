@@ -31,6 +31,7 @@ import {
   type UserProfile,
 } from "../api";
 import { shouldReloadSessionFromAgentEvent } from "../chat-stream-state";
+import { appRouteFromPathname, appRoutePath, type AppRoute } from "../app-route";
 import {
   hideSession,
   hideSessions,
@@ -63,10 +64,13 @@ import { SkillHubPage } from "../features/skills/pages/SkillHubPage";
 
 export function App() {
   const initialSettingsSection = typeof window === "undefined" ? null : settingsSectionFromHash(window.location.hash);
+  const [route, setRoute] = useState<AppRoute>(() =>
+    typeof window === "undefined" ? "workspace" : appRouteFromPathname(window.location.pathname),
+  );
   const [theme, setTheme] = useState<ThemeMode>(() =>
     typeof window === "undefined" ? "dark" : readStoredTheme(window.localStorage),
   );
-  const [view, setView] = useState<AppView>(initialSettingsSection ? "settings" : "landing");
+  const [view, setView] = useState<AppView>(initialSettingsSection ? "settings" : "agents");
   const [settingsSection, setSettingsSection] = useState<SettingsSection>(initialSettingsSection ?? "profile");
   const [builderConfig, setBuilderConfig] = useState<AgentBuilderConfig>(() =>
     typeof window === "undefined" ? readAgentBuilderConfig(null) : readAgentBuilderConfig(window.localStorage),
@@ -125,7 +129,7 @@ export function App() {
   const isAgentSurfaceView = isAgentManagerView || isAgentConfigView;
   const isAgentWorkspaceView = isAgentSurfaceView || view === "skills" || view === "builder";
   const isBuilderView = view === "builder";
-  const isLandingView = view === "landing";
+  const isLandingRoute = route === "landing";
   const conversationRuntimeState = loadState === "loading" ? "loading" : isBusy ? "running" : activeSessionId ? "completed" : "idle";
 
   function sessionTitleFor(session: SessionSummary | SessionDetail): string {
@@ -339,6 +343,11 @@ export function App() {
   function openSettings(section: SettingsSection): void {
     setSettingsSection(section);
     setView("settings");
+    setRoute("workspace");
+    if (window.location.pathname !== appRoutePath("workspace")) {
+      window.history.pushState("", document.title, `${appRoutePath("workspace")}#settings/${section}`);
+      return;
+    }
     window.location.hash = `settings/${section}`;
   }
 
@@ -346,6 +355,14 @@ export function App() {
     setView("chat");
     if (window.location.hash.startsWith("#settings")) {
       window.history.pushState("", document.title, window.location.pathname + window.location.search);
+    }
+  }
+
+  function openWorkspace(initialView: AppView = "agents"): void {
+    setRoute("workspace");
+    setView(initialView);
+    if (window.location.pathname !== appRoutePath("workspace") || window.location.hash) {
+      window.history.pushState("", document.title, appRoutePath("workspace"));
     }
   }
 
@@ -561,6 +578,24 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    function handlePopState(): void {
+      const nextRoute = appRouteFromPathname(window.location.pathname);
+      setRoute(nextRoute);
+      if (nextRoute === "workspace") {
+        const nextSection = settingsSectionFromHash(window.location.hash);
+        if (nextSection) {
+          setSettingsSection(nextSection);
+          setView("settings");
+          return;
+        }
+        setView((current) => (current === "settings" ? "chat" : current));
+      }
+    }
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  useEffect(() => {
     function handleHashChange(): void {
       const nextSection = settingsSectionFromHash(window.location.hash);
       if (nextSection) {
@@ -678,8 +713,8 @@ export function App() {
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
   }, []);
 
-  if (isLandingView) {
-    return <LandingPage onStart={() => setView("agents")} />;
+  if (isLandingRoute) {
+    return <LandingPage onStart={() => openWorkspace("agents")} />;
   }
 
   return (
