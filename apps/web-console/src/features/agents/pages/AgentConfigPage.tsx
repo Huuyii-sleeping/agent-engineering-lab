@@ -1,6 +1,8 @@
 import { ArrowLeft, BrainCircuit, Check, MessageSquare, Plus, Trash2, X } from "lucide-react";
 import { agentSkillCatalog, toggleAgentBuilderId } from "../../../agent-builder";
 import type { AgentProfile, AgentProfileInput } from "../../../api";
+import { AgentAvatar } from "../components/AgentAvatar";
+import { agentAvatarOptions } from "../lib/agent-avatar";
 
 export function AgentConfigPage({
   activeAgent,
@@ -64,7 +66,10 @@ export function AgentConfigPage({
         </button>
         <div className="agent-config-title">
           <span>Agent configuration</span>
-          <h1>{activeAgent || isNewDraft ? draft.name : "Agent 配置"}</h1>
+          <div className="agent-config-title-row">
+            {activeAgent || isNewDraft ? <AgentAvatar avatarId={draft.avatarId} label={draft.name} /> : null}
+            <h1>{activeAgent || isNewDraft ? draft.name : "Agent 配置"}</h1>
+          </div>
           <p>
             {isNewDraft
               ? "未保存。保存后进入草稿库。"
@@ -115,6 +120,29 @@ export function AgentConfigPage({
               <strong>基础信息</strong>
             </div>
             <div className="agent-editor-form">
+              <div className="agent-field agent-avatar-field">
+                <span>Agent 头像</span>
+                <div className="agent-avatar-picker" role="group" aria-label="选择内置 Agent 头像">
+                  {agentAvatarOptions.map((option) => (
+                    <button
+                      className={`agent-avatar-option ${draft.avatarId === option.id ? "agent-avatar-option--selected" : ""}`}
+                      key={option.id}
+                      type="button"
+                      aria-pressed={draft.avatarId === option.id}
+                      onClick={() => onDraftChange({ ...draft, avatarId: option.id })}
+                    >
+                      <AgentAvatar avatarId={option.id} label={option.label} />
+                      <span>{option.label}</span>
+                    </button>
+                  ))}
+                  <button className="agent-avatar-option agent-avatar-option--upload" type="button" disabled>
+                    <span className="agent-avatar agent-avatar--upload" aria-hidden="true">
+                      <Plus size={19} strokeWidth={2.4} />
+                    </span>
+                    <span>上传</span>
+                  </button>
+                </div>
+              </div>
               <label className="agent-field">
                 <span>Agent 名称</span>
                 <input

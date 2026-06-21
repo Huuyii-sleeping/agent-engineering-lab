@@ -7,6 +7,7 @@ import { AgentDraftsPage } from "./AgentDraftsPage";
 const agent: AgentProfile = {
   id: "agent-1",
   ...defaultAgentProfileInput,
+  avatarId: "code",
   name: "交付 Agent",
   description: "负责交付前检查和回归验证。",
   createdAt: Date.UTC(2026, 5, 20, 8, 30),
@@ -45,6 +46,7 @@ describe("AgentDraftsPage", () => {
     );
 
     expect(html).toContain("交付 Agent");
+    expect(html).toContain("交付 Agent 头像");
     expect(html).toContain("负责交付前检查和回归验证。");
     expect(html).toContain("最新修改");
     expect(html).toContain(formatDateTime(agent.updatedAt));

@@ -283,6 +283,7 @@ describe("bff server", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        avatarId: "code",
         name: "  文档分析 Agent  ",
         description: "  处理长文档  ",
         scenario: "  文档整理和摘要  ",
@@ -297,6 +298,7 @@ describe("bff server", () => {
       body: {
         ok: true,
         agent: {
+          avatarId: "code",
           name: "文档分析 Agent",
           description: "处理长文档",
           scenario: "文档整理和摘要",
@@ -310,18 +312,18 @@ describe("bff server", () => {
 
     await expect(requestJson(`${bffBaseUrl}/api/agents`)).resolves.toMatchObject({
       status: 200,
-      body: { ok: true, agents: [{ id: createdAgent.id, name: "文档分析 Agent" }] },
+      body: { ok: true, agents: [{ id: createdAgent.id, avatarId: "code", name: "文档分析 Agent" }] },
     });
 
     await expect(
       requestJson(`${bffBaseUrl}/api/agents/${createdAgent.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: "交付 Agent", actions: ["验证构建"] }),
+        body: JSON.stringify({ avatarId: "compass", name: "交付 Agent", actions: ["验证构建"] }),
       }),
     ).resolves.toMatchObject({
       status: 200,
-      body: { ok: true, agent: { id: createdAgent.id, name: "交付 Agent", actions: ["验证构建"] } },
+      body: { ok: true, agent: { id: createdAgent.id, avatarId: "compass", name: "交付 Agent", actions: ["验证构建"] } },
     });
 
     await expect(requestJson(`${bffBaseUrl}/api/agents/${createdAgent.id}`, { method: "DELETE" })).resolves.toMatchObject({

@@ -1096,6 +1096,20 @@ p {
   font-size: clamp(26px, 3vw, 38px);
 }
 
+.agent-config-title-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.agent-config-title-row h1 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .agent-drafts-title p,
 .agent-config-title p {
   max-width: 76ch;
@@ -1111,6 +1125,44 @@ p {
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
+}
+
+.agent-avatar {
+  display: inline-flex;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--agent-blue) 34%, var(--agent-line));
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--agent-blue-soft) 82%, var(--panel-bg));
+  color: color-mix(in srgb, var(--agent-blue) 88%, var(--text-main));
+}
+
+.agent-avatar--bot {
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--agent-line));
+  background: color-mix(in srgb, var(--accent-soft) 72%, var(--panel-bg));
+  color: color-mix(in srgb, var(--accent) 84%, var(--text-main));
+}
+
+.agent-avatar--code {
+  border-color: color-mix(in srgb, #8b5cf6 38%, var(--agent-line));
+  background: color-mix(in srgb, rgba(139, 92, 246, 0.16) 76%, var(--panel-bg));
+  color: color-mix(in srgb, #8b5cf6 82%, var(--text-main));
+}
+
+.agent-avatar--compass {
+  border-color: color-mix(in srgb, var(--agent-gold) 44%, var(--agent-line));
+  background: color-mix(in srgb, var(--agent-gold-soft) 78%, var(--panel-bg));
+  color: color-mix(in srgb, var(--agent-gold) 90%, var(--text-main));
+}
+
+.agent-avatar--upload {
+  border-style: dashed;
+  border-color: var(--agent-line);
+  background: color-mix(in srgb, var(--panel-bg) 72%, transparent);
+  color: var(--text-muted);
 }
 
 .agent-drafts-workspace {
@@ -1227,6 +1279,14 @@ p {
   border-radius: 16px;
   background: var(--agent-gold-soft);
   color: var(--agent-gold);
+}
+
+.agent-draft-heading {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
 }
 
 .agent-draft-copy {
@@ -1727,7 +1787,7 @@ p {
   gap: 7px;
 }
 
-.agent-field span {
+.agent-field > span {
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 850;
@@ -1753,6 +1813,52 @@ p {
 
 .agent-field--prompt textarea {
   min-height: 190px;
+}
+
+.agent-avatar-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: 8px;
+}
+
+.agent-avatar-option {
+  display: grid;
+  min-width: 0;
+  min-height: 74px;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--agent-line);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--chat-bg) 62%, var(--panel-bg));
+  color: var(--text-main);
+  padding: 10px;
+  text-align: left;
+}
+
+.agent-avatar-option > span:last-child {
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-avatar-option--selected {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--agent-line));
+  background:
+    linear-gradient(135deg, var(--accent-soft), transparent),
+    color-mix(in srgb, var(--surface-hover) 68%, transparent);
+}
+
+.agent-avatar-option--selected > span:last-child {
+  color: var(--text-main);
+}
+
+.agent-avatar-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
 }
 
 .agent-field input:focus,
@@ -3449,6 +3555,7 @@ button.settings-row:hover {
 .agent-danger-action:focus-visible,
 .agent-mini-action:focus-visible,
 .agent-draft-card:focus-visible,
+.agent-avatar-option:focus-visible,
 .agent-list-item:focus-visible,
 .agent-skill-item:focus-visible,
 .agent-action-row button:focus-visible,

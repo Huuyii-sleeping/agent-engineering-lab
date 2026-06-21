@@ -2,6 +2,7 @@ import { Bot, Plus, RefreshCw, SearchCheck } from "lucide-react";
 import { useState } from "react";
 import type { AgentProfile } from "../../../api";
 import { formatDateTime } from "../../../lib/format";
+import { AgentAvatar } from "../components/AgentAvatar";
 
 function draftUpdatedTime(agent: AgentProfile): string {
   return formatDateTime(agent.updatedAt ?? agent.createdAt);
@@ -92,9 +93,12 @@ export function AgentDraftsPage({
           ) : (
             filteredAgents.map((agent) => (
               <button className="agent-draft-card" key={agent.id} type="button" onClick={() => onOpenAgent(agent)}>
-                <span className="agent-draft-copy">
-                  <strong>{agent.name}</strong>
-                  <small>{agent.description}</small>
+                <span className="agent-draft-heading">
+                  <AgentAvatar avatarId={agent.avatarId} label={agent.name} />
+                  <span className="agent-draft-copy">
+                    <strong>{agent.name}</strong>
+                    <small>{agent.description}</small>
+                  </span>
                 </span>
                 <span className="agent-draft-meta">
                   <span>最新修改</span>

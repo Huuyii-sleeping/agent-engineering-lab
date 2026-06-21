@@ -6,6 +6,7 @@ import { AgentConfigPage } from "./AgentConfigPage";
 const savedAgent: AgentProfile = {
   id: "agent-1",
   ...defaultAgentProfileInput,
+  avatarId: "bot",
   createdAt: 1,
   updatedAt: 2,
 };
@@ -52,6 +53,10 @@ describe("AgentConfigPage", () => {
     );
 
     expect(html).toContain("返回草稿库");
+    expect(html).toContain("Agent 头像");
+    expect(html).toContain("bot");
+    expect(html).toContain("上传");
+    expect(html).toContain("disabled=\"\"");
     expect(html).toContain("删除");
     expect(html).not.toContain("丢弃草稿");
   });

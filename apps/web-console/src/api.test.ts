@@ -189,6 +189,7 @@ describe("web-console api client", () => {
           agents: [
             {
               id: "a1",
+              avatarId: "code",
               name: "  研发 Agent  ",
               description: "  本地研发  ",
               scenario: "  代码和验证  ",
@@ -218,6 +219,7 @@ describe("web-console api client", () => {
     await expect(fetchAgents()).resolves.toMatchObject([
       {
         id: "a1",
+        avatarId: "code",
         name: "研发 Agent",
         description: "本地研发",
         scenario: "代码和验证",
@@ -228,19 +230,21 @@ describe("web-console api client", () => {
     ]);
     await expect(createAgentProfile({ name: " 新 Agent ", actions: [" 分析 "] })).resolves.toMatchObject({
       id: "a2",
+      avatarId: "brain",
       name: "新 Agent",
       actions: ["分析"],
     });
     await expect(
       updateAgentProfile("a1", {
         name: "交付 Agent",
+        avatarId: "compass",
         description: "交付验证",
         scenario: "上线前检查",
         skillIds: ["quality-gate"],
         actions: ["构建"],
         systemPrompt: "输出风险",
       }),
-    ).resolves.toMatchObject({ id: "a1", name: "交付 Agent" });
+    ).resolves.toMatchObject({ id: "a1", avatarId: "compass", name: "交付 Agent" });
     await expect(deleteAgentProfile("a1")).resolves.toBeUndefined();
 
     expect(fetchMock).toHaveBeenLastCalledWith("/api/agents/a1", { method: "DELETE" });

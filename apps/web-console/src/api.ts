@@ -41,6 +41,7 @@ export type UserProfile = {
 /** User-managed agent profile displayed and edited in the Agent management workspace. */
 export type AgentProfile = {
   id: string;
+  avatarId: string;
   name: string;
   description: string;
   scenario: string;
@@ -52,7 +53,10 @@ export type AgentProfile = {
 };
 
 /** Editable payload accepted by the BFF agent profile APIs. */
-export type AgentProfileInput = Pick<AgentProfile, "name" | "description" | "scenario" | "skillIds" | "actions" | "systemPrompt">;
+export type AgentProfileInput = Pick<
+  AgentProfile,
+  "avatarId" | "name" | "description" | "scenario" | "skillIds" | "actions" | "systemPrompt"
+>;
 
 /** Result returned after sending a user message to the active session. */
 export type SendMessageResult = {
@@ -98,6 +102,7 @@ export const defaultUserProfile: UserProfile = {
 };
 
 export const defaultAgentProfileInput: AgentProfileInput = {
+  avatarId: "brain",
   name: "本地研发 Agent",
   description: "面向代码、文档和自动化执行的本地 agent。",
   scenario: "本地研发、资料整理、任务拆解和交付验证。",
@@ -162,6 +167,7 @@ export function normalizeAgentProfile(value: unknown): AgentProfile {
   const record = asObject(value);
   return {
     id: cleanText(record.id, "").slice(0, 80),
+    avatarId: cleanText(record.avatarId, defaultAgentProfileInput.avatarId).slice(0, 40),
     name: cleanText(record.name, defaultAgentProfileInput.name).slice(0, 36),
     description: cleanOptionalText(record.description, 140) || defaultAgentProfileInput.description,
     scenario: cleanOptionalText(record.scenario, 180) || defaultAgentProfileInput.scenario,
@@ -177,6 +183,7 @@ export function normalizeAgentProfile(value: unknown): AgentProfile {
 export function normalizeAgentProfileInput(value: unknown): AgentProfileInput {
   const agent = normalizeAgentProfile(value);
   return {
+    avatarId: agent.avatarId,
     name: agent.name,
     description: agent.description,
     scenario: agent.scenario,

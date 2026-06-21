@@ -5,6 +5,7 @@ import { LocalStoreService } from "../local-store.service.js";
 /** User-managed agent profile persisted by the BFF business store. */
 export type AgentProfile = {
   id: string;
+  avatarId: string;
   name: string;
   description: string;
   scenario: string;
@@ -18,6 +19,7 @@ export type AgentProfile = {
 const AGENTS_STORE_KEY = "agents";
 
 const defaultAgentProfile: Omit<AgentProfile, "id" | "createdAt" | "updatedAt"> = {
+  avatarId: "brain",
   name: "本地研发 Agent",
   description: "面向代码、文档和自动化执行的本地 agent。",
   scenario: "本地研发、资料整理、任务拆解和交付验证。",
@@ -56,6 +58,11 @@ function cleanStringList(value: unknown, limit: number, itemLimit: number): stri
   ].slice(0, limit);
 }
 
+function cleanAvatarId(value: unknown): string {
+  const avatarIds = new Set(["brain", "bot", "code", "compass"]);
+  return typeof value === "string" && avatarIds.has(value) ? value : defaultAgentProfile.avatarId;
+}
+
 function cleanTimestamp(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
 }
@@ -67,6 +74,7 @@ export function normalizeAgentProfile(value: unknown, fallbackId: string = rando
   const createdAt = cleanTimestamp(record.createdAt, fallbackTime);
   return {
     id,
+    avatarId: cleanAvatarId(record.avatarId),
     name: cleanText(record.name, defaultAgentProfile.name, 36),
     description: cleanOptionalText(record.description, 140) || defaultAgentProfile.description,
     scenario: cleanOptionalText(record.scenario, 180) || defaultAgentProfile.scenario,
