@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { defaultAgentProfileInput, type AgentProfile } from "../../../api";
+import { formatDateTime } from "../../../lib/format";
 import { AgentWorkspaceTree } from "./AgentWorkspaceTree";
 
 const agent: AgentProfile = {
@@ -37,6 +38,8 @@ describe("AgentWorkspaceTree", () => {
     expect(html).toContain("Agent Builder");
     expect(html).toContain("测试聊天");
     expect(html).toContain("交付 Agent");
+    expect(html).toContain(`最新修改 ${formatDateTime(agent.updatedAt)}`);
+    expect(html).not.toContain("3 skills · 3 actions");
     expect(html).toContain("aria-current=\"page\"");
   });
 });

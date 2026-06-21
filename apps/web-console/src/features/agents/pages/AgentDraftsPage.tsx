@@ -1,6 +1,16 @@
 import { Bot, Plus, RefreshCw, SearchCheck } from "lucide-react";
 import { useState } from "react";
 import type { AgentProfile } from "../../../api";
+import { formatDateTime } from "../../../lib/format";
+
+function draftUpdatedTime(agent: AgentProfile): string {
+  return formatDateTime(agent.updatedAt ?? agent.createdAt);
+}
+
+function draftUpdatedDateTime(agent: AgentProfile): string | undefined {
+  const value = agent.updatedAt ?? agent.createdAt;
+  return value ? new Date(value).toISOString() : undefined;
+}
 
 export function AgentDraftsPage({
   agents,
@@ -27,8 +37,6 @@ export function AgentDraftsPage({
     }
     return `${agent.name} ${agent.description} ${agent.scenario}`.toLowerCase().includes(keyword);
   });
-  const totalSkillCount = new Set(agents.flatMap((agent) => agent.skillIds)).size;
-  const totalActionCount = agents.reduce((count, agent) => count + agent.actions.length, 0);
 
   return (
     <main className="agent-drafts-shell">
@@ -57,21 +65,6 @@ export function AgentDraftsPage({
         </div>
       ) : null}
 
-      <section className="agent-drafts-summary" aria-label="Agent 草稿概览">
-        <div>
-          <span>草稿</span>
-          <strong>{agents.length}</strong>
-        </div>
-        <div>
-          <span>已使用 Skill</span>
-          <strong>{totalSkillCount}</strong>
-        </div>
-        <div>
-          <span>自定义 Action</span>
-          <strong>{totalActionCount}</strong>
-        </div>
-      </section>
-
       <section className="agent-drafts-workspace" aria-label="Agent 草稿库">
         <div className="agent-drafts-toolbar">
           <div className="agent-drafts-search">
@@ -99,18 +92,13 @@ export function AgentDraftsPage({
           ) : (
             filteredAgents.map((agent) => (
               <button className="agent-draft-card" key={agent.id} type="button" onClick={() => onOpenAgent(agent)}>
-                <span className="agent-draft-preview" aria-hidden="true">
-                  <span />
-                  <span />
-                  <span />
-                </span>
                 <span className="agent-draft-copy">
                   <strong>{agent.name}</strong>
                   <small>{agent.description}</small>
                 </span>
                 <span className="agent-draft-meta">
-                  <span>{agent.skillIds.length} skills</span>
-                  <span>{agent.actions.length} actions</span>
+                  <span>最新修改</span>
+                  <time dateTime={draftUpdatedDateTime(agent)}>{draftUpdatedTime(agent)}</time>
                 </span>
               </button>
             ))

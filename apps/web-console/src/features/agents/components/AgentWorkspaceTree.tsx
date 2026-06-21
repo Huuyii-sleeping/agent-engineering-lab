@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { AgentProfile } from "../../../api";
 import type { AppView } from "../../../app/types";
+import { formatDateTime } from "../../../lib/format";
 
 type WorkspaceTreeNode = {
   id: string;
@@ -156,7 +157,7 @@ export function AgentWorkspaceTree({
                   node={{
                     id: agent.id,
                     label: agent.name,
-                    meta: `${agent.skillIds.length} skills · ${agent.actions.length} actions`,
+                    meta: `最新修改 ${formatDateTime(agent.updatedAt ?? agent.createdAt)}`,
                     icon: Bot,
                     active: activeView === "agent-config" && activeAgentId === agent.id,
                     onSelect: () => onOpenAgent(agent),
