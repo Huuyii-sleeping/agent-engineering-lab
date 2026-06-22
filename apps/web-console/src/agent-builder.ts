@@ -6,6 +6,11 @@ export type AgentSkill = {
   category: string;
   provider: string;
   version: string;
+  runtime: string;
+  permissions: string[];
+  updatedAt: string;
+  maturity: "stable" | "beta";
+  tags: string[];
 };
 
 /** SOP step displayed in the Agent Builder workflow catalog. */
@@ -36,6 +41,11 @@ export const agentSkillCatalog: AgentSkill[] = [
     category: "输入",
     provider: "Browser",
     version: "1.0.0",
+    runtime: "Browser connector",
+    permissions: ["网络访问", "页面读取"],
+    updatedAt: "2026-06-14",
+    maturity: "stable",
+    tags: ["research", "web", "citation"],
   },
   {
     id: "code-workspace",
@@ -44,6 +54,11 @@ export const agentSkillCatalog: AgentSkill[] = [
     category: "执行",
     provider: "Workspace",
     version: "1.2.0",
+    runtime: "Local workspace",
+    permissions: ["文件读写", "命令执行"],
+    updatedAt: "2026-06-18",
+    maturity: "stable",
+    tags: ["code", "test", "repo"],
   },
   {
     id: "memory-context",
@@ -52,6 +67,11 @@ export const agentSkillCatalog: AgentSkill[] = [
     category: "上下文",
     provider: "Local",
     version: "0.8.0",
+    runtime: "Local memory",
+    permissions: ["本地存储"],
+    updatedAt: "2026-06-10",
+    maturity: "beta",
+    tags: ["context", "profile", "history"],
   },
   {
     id: "document-pipeline",
@@ -60,6 +80,11 @@ export const agentSkillCatalog: AgentSkill[] = [
     category: "产出",
     provider: "Documents",
     version: "0.6.0",
+    runtime: "Document runtime",
+    permissions: ["文档生成", "文件读写"],
+    updatedAt: "2026-06-12",
+    maturity: "beta",
+    tags: ["prd", "report", "handoff"],
   },
   {
     id: "quality-gate",
@@ -68,6 +93,11 @@ export const agentSkillCatalog: AgentSkill[] = [
     category: "验证",
     provider: "Release",
     version: "0.9.0",
+    runtime: "Validation runner",
+    permissions: ["命令执行", "日志读取"],
+    updatedAt: "2026-06-17",
+    maturity: "stable",
+    tags: ["build", "regression", "release"],
   },
 ];
 
