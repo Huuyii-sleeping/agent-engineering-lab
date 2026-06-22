@@ -59,6 +59,9 @@ export type AgentProfileInput = Pick<
 >;
 
 /** Local skill registry item returned by the BFF Skill Hub APIs. */
+export type SkillSourceType = "builtin" | "remote" | "custom";
+export type SkillStatus = "available" | "downloaded" | "installed" | "updateAvailable" | "invalid";
+
 export type SkillRegistryItem = {
   id: string;
   name: string;
@@ -73,7 +76,15 @@ export type SkillRegistryItem = {
   maturity: "stable" | "beta";
   tags: string[];
   entry: string;
+  sourceType: SkillSourceType;
+  status: SkillStatus;
   installed: boolean;
+  validationErrors: string[];
+};
+
+/** JSON package accepted by the custom Skill Hub upload API. */
+export type SkillPackageInput = {
+  files: Array<{ path: string; content: string }>;
 };
 
 /** Result returned after sending a user message to the active session. */
@@ -228,8 +239,23 @@ export function normalizeSkillRegistryItem(value: unknown): SkillRegistryItem {
     updatedAt: cleanOptionalText(record.updatedAt, 32),
     maturity: record.maturity === "beta" ? "beta" : "stable",
     tags: cleanStringList(record.tags, 16, 40),
-    entry: cleanText(record.entry, "README.md").slice(0, 120),
+    entry: cleanText(record.entry, "SKILL.md").slice(0, 120),
+    sourceType:
+      record.sourceType === "remote" || record.sourceType === "custom" || record.sourceType === "builtin"
+        ? record.sourceType
+        : "builtin",
+    status:
+      record.status === "available" ||
+      record.status === "downloaded" ||
+      record.status === "installed" ||
+      record.status === "updateAvailable" ||
+      record.status === "invalid"
+        ? record.status
+        : asBoolean(record.installed)
+          ? "installed"
+          : "downloaded",
     installed: asBoolean(record.installed),
+    validationErrors: cleanStringList(record.validationErrors, 12, 180),
   };
 }
 
@@ -480,10 +506,28 @@ export async function installSkill(skillId: string): Promise<SkillRegistryItem> 
   return normalizeSkillRegistryItem(response.skill);
 }
 
+/** Downloads one remote skill through the BFF business API. */
+export async function downloadSkill(skillId: string): Promise<SkillRegistryItem> {
+  const response = await requestJson<JsonObject>(`/api/skills/${encodeURIComponent(skillId)}/download`, {
+    method: "POST",
+  });
+  return normalizeSkillRegistryItem(response.skill);
+}
+
 /** Uninstalls one local skill through the BFF business API. */
 export async function uninstallSkill(skillId: string): Promise<SkillRegistryItem> {
   const response = await requestJson<JsonObject>(`/api/skills/${encodeURIComponent(skillId)}/uninstall`, {
     method: "POST",
+  });
+  return normalizeSkillRegistryItem(response.skill);
+}
+
+/** Uploads a custom skill package through the BFF business API. */
+export async function uploadSkillPackage(input: SkillPackageInput): Promise<SkillRegistryItem> {
+  const response = await requestJson<JsonObject>("/api/skills/upload", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
   });
   return normalizeSkillRegistryItem(response.skill);
 }

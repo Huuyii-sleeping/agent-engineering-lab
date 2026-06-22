@@ -1,0 +1,22 @@
+{
+  "skills": [
+    {
+      "id": "remote-prd-review",
+      "version": "1.0.0",
+      "packageUrl": "./remote-prd-review.package.json",
+      "metadata": {
+        "name": "远端 PRD 评审",
+        "description": "Use when an agent needs to review product requirement documents for completeness, ambiguity, risk, and implementation readiness.",
+        "summary": "检查 PRD 完整性、歧义、风险和实现可行性。",
+        "category": "远端",
+        "provider": "Default Registry",
+        "runtime": "Skill runtime",
+        "permissions": ["文档读取", "评审输出"],
+        "updatedAt": "2026-06-22",
+        "maturity": "stable",
+        "tags": ["prd", "review", "planning"],
+        "entry": "SKILL.md"
+      }
+    }
+  ]
+}

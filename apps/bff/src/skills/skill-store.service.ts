@@ -1,0 +1,217 @@
+import { Injectable } from "@nestjs/common";
+import { existsSync } from "node:fs";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join, normalize, resolve } from "node:path";
+import type {
+  RemoteSkillIndexItem,
+  RemoteSkillRegistry,
+  SkillPackageFile,
+  SkillPackageInput,
+  SkillSourceType,
+  ValidatedSkillPackage,
+} from "./skill-types.js";
+import { SkillValidatorService } from "./skill-validator.service.js";
+
+export type SkillStoreOptions = {
+  skillsRoot?: string;
+  skillDataRoot?: string;
+  remoteRegistryUrl?: string;
+};
+
+export type StoredSkillPackage = ValidatedSkillPackage & {
+  sourceType: SkillSourceType;
+};
+
+function defaultSkillsRoot(): string {
+  const cwdRoot = join(process.cwd(), "skills");
+  return existsSync(cwdRoot) ? cwdRoot : join(process.cwd(), "..", "..", "skills");
+}
+
+function defaultSkillDataRoot(): string {
+  return join(process.cwd(), ".data", "skills");
+}
+
+function defaultRemoteRegistryUrl(): string {
+  const cwdRegistry = join(process.cwd(), "registries", "default-skill-registry.json");
+  return existsSync(cwdRegistry)
+    ? cwdRegistry
+    : join(process.cwd(), "..", "..", "registries", "default-skill-registry.json");
+}
+
+function asObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function isHttpUrl(value: string): boolean {
+  return value.startsWith("http://") || value.startsWith("https://");
+}
+
+function safePackagePath(root: string, file: SkillPackageFile): string {
+  const target = resolve(root, file.path);
+  const resolvedRoot = resolve(root);
+  if (target !== resolvedRoot && !target.startsWith(`${resolvedRoot}/`)) {
+    throw new Error(`unsafe package path: ${file.path}`);
+  }
+  return target;
+}
+
+/** Reads and writes skill packages across builtin, downloaded remote, and custom stores. */
+@Injectable()
+export class SkillStoreService {
+  private readonly skillsRoot: string;
+  private readonly skillDataRoot: string;
+  private readonly remoteRegistryUrl: string;
+
+  constructor(
+    private readonly validator: SkillValidatorService,
+    options: SkillStoreOptions = {},
+  ) {
+    this.skillsRoot = options.skillsRoot ?? defaultSkillsRoot();
+    this.skillDataRoot = options.skillDataRoot ?? defaultSkillDataRoot();
+    this.remoteRegistryUrl = options.remoteRegistryUrl ?? defaultRemoteRegistryUrl();
+  }
+
+  /** Lists bundled skill packages from the repository skills directory. */
+  async listBuiltinPackages(): Promise<StoredSkillPackage[]> {
+    return this.readSkillDirectories(this.skillsRoot, "builtin");
+  }
+
+  /** Lists previously downloaded remote skill packages. */
+  async listDownloadedPackages(): Promise<StoredSkillPackage[]> {
+    return this.readVersionedPackages(join(this.skillDataRoot, "remote"), "remote");
+  }
+
+  /** Lists uploaded custom skill packages. */
+  async listCustomPackages(): Promise<StoredSkillPackage[]> {
+    return this.readVersionedPackages(join(this.skillDataRoot, "custom"), "custom");
+  }
+
+  /** Reads the configured remote registry index. */
+  async readRemoteRegistry(): Promise<RemoteSkillRegistry> {
+    try {
+      const raw = await this.readText(this.remoteRegistryUrl);
+      const parsed = asObject(JSON.parse(raw) as unknown);
+      const skills = Array.isArray(parsed.skills) ? parsed.skills : [];
+      return {
+        skills: skills
+          .map((item) => this.normalizeRemoteIndexItem(item))
+          .filter((item): item is RemoteSkillIndexItem => Boolean(item)),
+      };
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+        return { skills: [] };
+      }
+      throw error;
+    }
+  }
+
+  /** Reads a remote package JSON referenced by a registry index entry. */
+  async readRemotePackage(entry: RemoteSkillIndexItem): Promise<SkillPackageInput> {
+    const raw = await this.readText(this.resolvePackageUrl(entry.packageUrl));
+    const parsed = asObject(JSON.parse(raw) as unknown);
+    return { files: Array.isArray(parsed.files) ? (parsed.files as SkillPackageFile[]) : [] };
+  }
+
+  /** Writes a validated package to the local downloaded/custom store. */
+  async writePackage(sourceType: "remote" | "custom", skillPackage: ValidatedSkillPackage): Promise<void> {
+    const packageRoot = join(this.skillDataRoot, sourceType, skillPackage.manifest.id, skillPackage.manifest.version);
+    await mkdir(packageRoot, { recursive: true });
+    for (const file of skillPackage.files) {
+      const target = safePackagePath(packageRoot, file);
+      await mkdir(dirname(target), { recursive: true });
+      await writeFile(target, file.content, "utf8");
+    }
+  }
+
+  private async readSkillDirectories(root: string, sourceType: SkillSourceType): Promise<StoredSkillPackage[]> {
+    let entries;
+    try {
+      entries = await readdir(root, { withFileTypes: true });
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+        return [];
+      }
+      throw error;
+    }
+    const packages = await Promise.all(
+      entries
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => this.readPackageAt(join(root, entry.name), sourceType)),
+    );
+    return packages.filter((item): item is StoredSkillPackage => Boolean(item));
+  }
+
+  private async readVersionedPackages(root: string, sourceType: "remote" | "custom"): Promise<StoredSkillPackage[]> {
+    let skillEntries;
+    try {
+      skillEntries = await readdir(root, { withFileTypes: true });
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+        return [];
+      }
+      throw error;
+    }
+    const packages: StoredSkillPackage[] = [];
+    for (const skillEntry of skillEntries.filter((entry) => entry.isDirectory())) {
+      const skillRoot = join(root, skillEntry.name);
+      const versionEntries = await readdir(skillRoot, { withFileTypes: true });
+      for (const versionEntry of versionEntries.filter((entry) => entry.isDirectory())) {
+        const skillPackage = await this.readPackageAt(join(skillRoot, versionEntry.name), sourceType);
+        if (skillPackage) {
+          packages.push(skillPackage);
+        }
+      }
+    }
+    return packages;
+  }
+
+  private async readPackageAt(root: string, sourceType: SkillSourceType): Promise<StoredSkillPackage | null> {
+    try {
+      const [skillFile, metadataFile] = await Promise.all([
+        readFile(join(root, "SKILL.md"), "utf8"),
+        readFile(join(root, "skill.json"), "utf8"),
+      ]);
+      const validated = this.validator.validatePackage(this.validator.packageFromRequiredFiles(skillFile, metadataFile));
+      return validated.ok ? { ...validated.package, sourceType } : null;
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  private async readText(location: string): Promise<string> {
+    if (isHttpUrl(location)) {
+      const response = await fetch(location);
+      if (!response.ok) {
+        throw new Error(`failed to fetch ${location}: ${response.status}`);
+      }
+      return response.text();
+    }
+    return readFile(location, "utf8");
+  }
+
+  private resolvePackageUrl(packageUrl: string): string {
+    if (isHttpUrl(packageUrl) || packageUrl.startsWith("/")) {
+      return packageUrl;
+    }
+    if (isHttpUrl(this.remoteRegistryUrl)) {
+      return new URL(packageUrl, this.remoteRegistryUrl).toString();
+    }
+    return normalize(join(dirname(this.remoteRegistryUrl), packageUrl));
+  }
+
+  private normalizeRemoteIndexItem(value: unknown): RemoteSkillIndexItem | null {
+    const record = asObject(value);
+    if (typeof record.id !== "string" || typeof record.version !== "string" || typeof record.packageUrl !== "string") {
+      return null;
+    }
+    return {
+      id: record.id.trim(),
+      version: record.version.trim(),
+      packageUrl: record.packageUrl.trim(),
+      metadata: asObject(record.metadata),
+    };
+  }
+}

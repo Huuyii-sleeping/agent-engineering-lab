@@ -1,21 +1,26 @@
-import { Check, Download, Layers3, PackageCheck, Search, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { Check, Download, Layers3, PackageCheck, Search, ShieldCheck, SlidersHorizontal, Upload } from "lucide-react";
 import { useMemo, useState } from "react";
-import type { SkillRegistryItem } from "../../../api";
+import type { SkillPackageInput, SkillRegistryItem } from "../../../api";
 
 const allCategories = "全部";
 
 /** Render the local registry of skills that can be loaded into agents. */
 export function SkillHubPage({
   skills,
-  onToggleSkill,
+  onSkillAction,
+  onUploadPackage,
 }: {
   skills: SkillRegistryItem[];
-  onToggleSkill: (skillId: string) => void;
+  onSkillAction: (skill: SkillRegistryItem) => void;
+  onUploadPackage: (input: SkillPackageInput) => void;
 }) {
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState(allCategories);
   const [showLoadedOnly, setShowLoadedOnly] = useState(false);
-  const downloadedCount = skills.filter((skill) => skill.installed).length;
+  const [customPackageText, setCustomPackageText] = useState("");
+  const [customPackageError, setCustomPackageError] = useState<string | null>(null);
+  const installedCount = skills.filter((skill) => skill.installed).length;
+  const localCount = skills.filter((skill) => skill.status !== "available").length;
   const categories = useMemo(() => [allCategories, ...new Set(skills.map((skill) => skill.category))], [skills]);
   const filteredSkills = skills.filter((skill) => {
     const keyword = query.trim().toLowerCase();
@@ -27,6 +32,30 @@ export function SkillHubPage({
     return matchesKeyword && matchesCategory && matchesLoaded;
   });
   const stableCount = skills.filter((skill) => skill.maturity === "stable").length;
+
+  function actionLabel(skill: SkillRegistryItem): string {
+    if (skill.status === "available") {
+      return "下载";
+    }
+    if (skill.installed) {
+      return "已安装";
+    }
+    if (skill.status === "invalid") {
+      return "不可用";
+    }
+    return "安装";
+  }
+
+  function handleUpload(): void {
+    try {
+      const parsed = JSON.parse(customPackageText) as SkillPackageInput;
+      setCustomPackageError(null);
+      onUploadPackage(parsed);
+      setCustomPackageText("");
+    } catch {
+      setCustomPackageError("请输入合法的 Skill package JSON。");
+    }
+  }
 
   return (
     <main className="skillhub-shell">
@@ -42,8 +71,12 @@ export function SkillHubPage({
             <small>可用 Skill</small>
           </span>
           <span>
-            <strong>{downloadedCount}</strong>
-            <small>已加载</small>
+            <strong>{localCount}</strong>
+            <small>已下载</small>
+          </span>
+          <span>
+            <strong>{installedCount}</strong>
+            <small>已安装</small>
           </span>
           <span>
             <strong>{stableCount}</strong>
@@ -87,8 +120,22 @@ export function SkillHubPage({
             onClick={() => setShowLoadedOnly((current) => !current)}
           >
             <PackageCheck size={16} strokeWidth={2.3} aria-hidden="true" />
-            <span>只看已加载</span>
+            <span>只看已安装</span>
           </button>
+          <div className="skillhub-upload-panel" aria-label="上传自定义 Skill">
+            <strong>Custom upload</strong>
+            <textarea
+              value={customPackageText}
+              rows={8}
+              placeholder='{"files":[{"path":"SKILL.md","content":"---\\nname: my-skill\\ndescription: ..."}]}'
+              onChange={(event) => setCustomPackageText(event.currentTarget.value)}
+            />
+            {customPackageError ? <small role="alert">{customPackageError}</small> : null}
+            <button type="button" disabled={!customPackageText.trim()} onClick={handleUpload}>
+              <Upload size={15} strokeWidth={2.3} aria-hidden="true" />
+              <span>上传 Skill</span>
+            </button>
+          </div>
         </aside>
 
         <section className="skillhub-registry" aria-label="可用 Skill">
@@ -99,12 +146,16 @@ export function SkillHubPage({
 
           <div className="skillhub-grid">
             {filteredSkills.map((skill) => {
-              const downloaded = skill.installed;
+              const installed = skill.installed;
               return (
-                <article className={`skillhub-card ${downloaded ? "skillhub-card--downloaded" : ""}`} key={skill.id}>
+                <article className={`skillhub-card ${installed ? "skillhub-card--downloaded" : ""}`} key={skill.id}>
                   <div className="skillhub-card-top">
                     <span>{skill.category}</span>
                     <strong>{skill.maturity === "stable" ? "Stable" : "Beta"}</strong>
+                  </div>
+                  <div className="skillhub-card-top skillhub-card-source">
+                    <span>{skill.sourceType}</span>
+                    <strong>{skill.status}</strong>
                   </div>
                   <div className="skillhub-card-title">
                     <h2>{skill.name}</h2>
@@ -130,16 +181,21 @@ export function SkillHubPage({
                     <span>v{skill.version}</span>
                     <span>{skill.updatedAt}</span>
                   </div>
-                  <button className="skillhub-action" type="button" onClick={() => onToggleSkill(skill.id)}>
-                    {downloaded ? (
+                  <button className="skillhub-action" type="button" onClick={() => onSkillAction(skill)}>
+                    {skill.status === "available" ? (
+                      <>
+                        <Download size={16} strokeWidth={2.4} aria-hidden="true" />
+                        <span>{actionLabel(skill)}</span>
+                      </>
+                    ) : installed ? (
                       <>
                         <Check size={16} strokeWidth={2.4} aria-hidden="true" />
-                        <span>已加载</span>
+                        <span>{actionLabel(skill)}</span>
                       </>
                     ) : (
                       <>
-                        <Download size={16} strokeWidth={2.4} aria-hidden="true" />
-                        <span>加载 Skill</span>
+                        <PackageCheck size={16} strokeWidth={2.4} aria-hidden="true" />
+                        <span>{actionLabel(skill)}</span>
                       </>
                     )}
                   </button>

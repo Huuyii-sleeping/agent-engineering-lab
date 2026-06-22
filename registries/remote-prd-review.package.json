@@ -1,0 +1,12 @@
+{
+  "files": [
+    {
+      "path": "SKILL.md",
+      "content": "---\nname: remote-prd-review\ndescription: Use when an agent needs to review product requirement documents for completeness, ambiguity, risk, and implementation readiness.\n---\n\n# Remote PRD Review\n\n## Workflow\n\n1. Identify the product goal, user value, and acceptance criteria.\n2. Check whether scope, non-goals, dependencies, and rollout constraints are explicit.\n3. Surface ambiguous terms, missing edge cases, and untestable requirements.\n4. Return findings ordered by implementation risk.\n\n## Guardrails\n\n- Do not invent product decisions.\n- Keep review comments tied to observable text.\n- Separate blockers from suggestions.\n"
+    },
+    {
+      "path": "skill.json",
+      "content": "{\n  \"id\": \"remote-prd-review\",\n  \"name\": \"远端 PRD 评审\",\n  \"summary\": \"检查 PRD 完整性、歧义、风险和实现可行性。\",\n  \"category\": \"远端\",\n  \"provider\": \"Default Registry\",\n  \"version\": \"1.0.0\",\n  \"runtime\": \"Skill runtime\",\n  \"permissions\": [\"文档读取\", \"评审输出\"],\n  \"updatedAt\": \"2026-06-22\",\n  \"maturity\": \"stable\",\n  \"tags\": [\"prd\", \"review\", \"planning\"],\n  \"entry\": \"SKILL.md\"\n}\n"
+    }
+  ]
+}

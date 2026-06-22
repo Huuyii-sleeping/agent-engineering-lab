@@ -118,10 +118,25 @@ async function startMockAgent(): Promise<{ baseUrl: string; seen: SeenRequest[] 
   return { baseUrl: await listen(server), seen };
 }
 
-async function startBff(agentBaseUrl: string, options: { skillsRoot?: string } = {}): Promise<string> {
+async function startBff(
+  agentBaseUrl: string,
+  options: { skillsRoot?: string; skillDataRoot?: string; remoteRegistryUrl?: string } = {},
+): Promise<string> {
   const tempDir = await mkdtemp(join(tmpdir(), "agent-bff-test-"));
   tempDirs.push(tempDir);
-  return listen(await createBffHttpServer({ agentBaseUrl, filePath: join(tempDir, "state.json"), skillsRoot: options.skillsRoot }));
+  const remoteRegistryUrl = options.remoteRegistryUrl ?? join(tempDir, "empty-registry.json");
+  if (!options.remoteRegistryUrl) {
+    await writeFile(remoteRegistryUrl, JSON.stringify({ skills: [] }), "utf8");
+  }
+  return listen(
+    await createBffHttpServer({
+      agentBaseUrl,
+      filePath: join(tempDir, "state.json"),
+      skillsRoot: options.skillsRoot,
+      skillDataRoot: options.skillDataRoot ?? join(tempDir, "skills-data"),
+      remoteRegistryUrl,
+    }),
+  );
 }
 
 async function writeSkillManifest(
@@ -393,14 +408,15 @@ describe("bff server", () => {
     });
     const bffBaseUrl = await startBff(agent.baseUrl, { skillsRoot });
 
-    await expect(requestJson(`${bffBaseUrl}/api/skills`)).resolves.toMatchObject({
+    const initialSkills = await requestJson(`${bffBaseUrl}/api/skills`);
+    expect(initialSkills).toMatchObject({
       status: 200,
       body: {
         ok: true,
-        skills: [
-          { id: "code-workspace", name: "代码工作区", installed: true },
-          { id: "quality-gate", name: "质量闸门", installed: false },
-        ],
+        skills: expect.arrayContaining([
+          expect.objectContaining({ id: "code-workspace", name: "代码工作区", installed: true }),
+          expect.objectContaining({ id: "quality-gate", name: "质量闸门", installed: false, sourceType: "builtin", status: "downloaded" }),
+        ]),
       },
     });
     await expect(requestJson(`${bffBaseUrl}/api/skills/quality-gate/install`, { method: "POST" })).resolves.toMatchObject({
@@ -411,10 +427,10 @@ describe("bff server", () => {
       status: 200,
       body: {
         ok: true,
-        skills: [
-          { id: "code-workspace", installed: true },
-          { id: "quality-gate", installed: true },
-        ],
+        skills: expect.arrayContaining([
+          expect.objectContaining({ id: "code-workspace", installed: true }),
+          expect.objectContaining({ id: "quality-gate", installed: true }),
+        ]),
       },
     });
     await expect(requestJson(`${bffBaseUrl}/api/skills/code-workspace/uninstall`, { method: "POST" })).resolves.toMatchObject({
@@ -424,6 +440,121 @@ describe("bff server", () => {
     await expect(requestJson(`${bffBaseUrl}/api/skills/missing/install`, { method: "POST" })).resolves.toMatchObject({
       status: 404,
       body: { ok: false, error: { code: "SKILL_NOT_FOUND" } },
+    });
+  });
+
+  it("downloads remote skills and uploads validated custom packages", async () => {
+    const agent = await startMockAgent();
+    const tempDir = await mkdtemp(join(tmpdir(), "agent-bff-skillhub-"));
+    tempDirs.push(tempDir);
+    const skillsRoot = join(tempDir, "builtin");
+    const packagePath = join(tempDir, "remote.package.json");
+    const registryPath = join(tempDir, "registry.json");
+    await mkdir(skillsRoot, { recursive: true });
+    await writeFile(
+      packagePath,
+      JSON.stringify({
+        files: [
+          {
+            path: "SKILL.md",
+            content:
+              "---\nname: remote-test\ndescription: Use when testing a remote skill package.\n---\n\n# Remote Test\n",
+          },
+          {
+            path: "skill.json",
+            content: JSON.stringify({
+              id: "remote-test",
+              name: "远端测试",
+              summary: "远端测试 skill。",
+              category: "远端",
+              provider: "Registry",
+              version: "1.0.0",
+              runtime: "Skill runtime",
+              permissions: ["测试"],
+              updatedAt: "2026-06-22",
+              maturity: "stable",
+              tags: ["remote"],
+              entry: "SKILL.md",
+            }),
+          },
+        ],
+      }),
+      "utf8",
+    );
+    await writeFile(
+      registryPath,
+      JSON.stringify({
+        skills: [
+          {
+            id: "remote-test",
+            version: "1.0.0",
+            packageUrl: packagePath,
+            metadata: { name: "远端测试", summary: "远端测试 skill。", category: "远端" },
+          },
+        ],
+      }),
+      "utf8",
+    );
+    const bffBaseUrl = await startBff(agent.baseUrl, { skillsRoot, remoteRegistryUrl: registryPath });
+
+    await expect(requestJson(`${bffBaseUrl}/api/skills`)).resolves.toMatchObject({
+      status: 200,
+      body: { ok: true, skills: [{ id: "remote-test", sourceType: "remote", status: "available" }] },
+    });
+    await expect(requestJson(`${bffBaseUrl}/api/skills/remote-test/download`, { method: "POST" })).resolves.toMatchObject({
+      status: 200,
+      body: { ok: true, skill: { id: "remote-test", sourceType: "remote", status: "downloaded" } },
+    });
+    await expect(requestJson(`${bffBaseUrl}/api/skills/remote-test/install`, { method: "POST" })).resolves.toMatchObject({
+      status: 200,
+      body: { ok: true, skill: { id: "remote-test", installed: true, status: "installed" } },
+    });
+
+    const customPackage = {
+      files: [
+        {
+          path: "SKILL.md",
+          content:
+            "---\nname: custom-review\ndescription: Use when testing a custom uploaded skill package.\n---\n\n# Custom Review\n",
+        },
+        {
+          path: "skill.json",
+          content: JSON.stringify({
+            id: "custom-review",
+            name: "自定义评审",
+            summary: "上传的自定义 skill。",
+            category: "自定义",
+            provider: "User",
+            version: "0.1.0",
+            runtime: "Skill runtime",
+            permissions: ["本地存储"],
+            updatedAt: "2026-06-22",
+            maturity: "beta",
+            tags: ["custom"],
+            entry: "SKILL.md",
+          }),
+        },
+      ],
+    };
+    await expect(
+      requestJson(`${bffBaseUrl}/api/skills/upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(customPackage),
+      }),
+    ).resolves.toMatchObject({
+      status: 201,
+      body: { ok: true, skill: { id: "custom-review", sourceType: "custom", status: "downloaded" } },
+    });
+    await expect(
+      requestJson(`${bffBaseUrl}/api/skills/upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ files: [{ path: "../bad", content: "" }] }),
+      }),
+    ).resolves.toMatchObject({
+      status: 400,
+      body: { ok: false, error: { code: "SKILL_PACKAGE_INVALID" } },
     });
   });
 

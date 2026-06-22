@@ -1,6 +1,6 @@
 import { ArrowLeft, BrainCircuit, Check, MessageSquare, Plus, Trash2, X } from "lucide-react";
-import { agentSkillCatalog, toggleAgentBuilderId } from "../../../agent-builder";
-import type { AgentProfile, AgentProfileInput } from "../../../api";
+import { toggleAgentBuilderId } from "../../../agent-builder";
+import type { AgentProfile, AgentProfileInput, SkillRegistryItem } from "../../../api";
 import { AgentAvatar } from "../components/AgentAvatar";
 import { agentAvatarOptions } from "../lib/agent-avatar";
 
@@ -10,6 +10,7 @@ export function AgentConfigPage({
   error,
   isNewDraft,
   saving,
+  installedSkills,
   onBack,
   onDeleteAgent,
   onDiscardDraft,
@@ -22,6 +23,7 @@ export function AgentConfigPage({
   error: string | null;
   isNewDraft: boolean;
   saving: boolean;
+  installedSkills: SkillRegistryItem[];
   onBack: () => void;
   onDeleteAgent: (agent: AgentProfile) => void;
   onDiscardDraft: () => void;
@@ -30,6 +32,7 @@ export function AgentConfigPage({
   onTestAgent: (agent: AgentProfile) => void;
 }) {
   const selectedSkillSet = new Set(draft.skillIds);
+  const selectedInstalledSkillCount = installedSkills.filter((skill) => selectedSkillSet.has(skill.id)).length;
 
   function toggleSkill(skillId: string): void {
     onDraftChange({
@@ -37,7 +40,7 @@ export function AgentConfigPage({
       skillIds: toggleAgentBuilderId(
         draft.skillIds,
         skillId,
-        agentSkillCatalog.map((skill) => skill.id),
+        installedSkills.map((skill) => skill.id),
       ),
     });
   }
@@ -183,10 +186,13 @@ export function AgentConfigPage({
           <aside className="agent-config-side" aria-label="Agent 能力配置">
             <div className="agent-config-panel-heading">
               <span>Skills</span>
-              <strong>{draft.skillIds.length} 已选</strong>
+              <strong>{selectedInstalledSkillCount} 已选</strong>
             </div>
             <div className="agent-skill-list">
-              {agentSkillCatalog.map((skill) => {
+              {installedSkills.length === 0 ? (
+                <span className="agent-muted-text">没有已安装的 Skill。请先到 Skill Hub 下载并安装。</span>
+              ) : null}
+              {installedSkills.map((skill) => {
                 const selected = selectedSkillSet.has(skill.id);
                 return (
                   <button

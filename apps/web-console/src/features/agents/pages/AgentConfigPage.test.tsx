@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { defaultAgentProfileInput, type AgentProfile } from "../../../api";
+import { defaultAgentProfileInput, type AgentProfile, type SkillRegistryItem } from "../../../api";
 import { AgentConfigPage } from "./AgentConfigPage";
 
 const savedAgent: AgentProfile = {
@@ -11,6 +11,28 @@ const savedAgent: AgentProfile = {
   updatedAt: 2,
 };
 
+const installedSkills: SkillRegistryItem[] = [
+  {
+    id: "code-workspace",
+    name: "代码工作区",
+    description: "Use when editing code.",
+    summary: "读取仓库、修改文件、运行验证命令。",
+    category: "执行",
+    provider: "Workspace",
+    version: "1.2.0",
+    runtime: "Local workspace",
+    permissions: ["文件读写", "命令执行"],
+    updatedAt: "2026-06-18",
+    maturity: "stable",
+    tags: ["code"],
+    entry: "SKILL.md",
+    sourceType: "builtin",
+    status: "installed",
+    installed: true,
+    validationErrors: [],
+  },
+];
+
 describe("AgentConfigPage", () => {
   it("shows discard copy for unsaved drafts and exposes operation errors", () => {
     const html = renderToStaticMarkup(
@@ -20,6 +42,7 @@ describe("AgentConfigPage", () => {
         error="Failed to fetch"
         isNewDraft={true}
         saving={false}
+        installedSkills={installedSkills}
         onBack={vi.fn()}
         onDeleteAgent={vi.fn()}
         onDiscardDraft={vi.fn()}
@@ -43,6 +66,7 @@ describe("AgentConfigPage", () => {
         error={null}
         isNewDraft={false}
         saving={false}
+        installedSkills={installedSkills}
         onBack={vi.fn()}
         onDeleteAgent={vi.fn()}
         onDiscardDraft={vi.fn()}

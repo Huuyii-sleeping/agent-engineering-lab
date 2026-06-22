@@ -1,4 +1,4 @@
-import type { AgentProfile, AgentProfileInput } from "../../../api";
+import type { AgentProfile, AgentProfileInput, SkillRegistryItem } from "../../../api";
 import { AgentConfigPage } from "./AgentConfigPage";
 import { AgentDraftsPage } from "./AgentDraftsPage";
 
@@ -10,6 +10,7 @@ export function AgentManagerPage({
   isNewDraft,
   loading,
   saving,
+  installedSkills,
   mode,
   onBackToDrafts,
   onCreateAgent,
@@ -28,6 +29,7 @@ export function AgentManagerPage({
   isNewDraft: boolean;
   loading: boolean;
   saving: boolean;
+  installedSkills: SkillRegistryItem[];
   mode: "drafts" | "config";
   onBackToDrafts: () => void;
   onCreateAgent: () => void;
@@ -47,6 +49,7 @@ export function AgentManagerPage({
         error={error}
         isNewDraft={isNewDraft}
         saving={saving}
+        installedSkills={installedSkills}
         onBack={onBackToDrafts}
         onDeleteAgent={onDeleteAgent}
         onDiscardDraft={onDiscardDraft}

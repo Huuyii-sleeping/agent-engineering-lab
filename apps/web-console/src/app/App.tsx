@@ -9,6 +9,7 @@ import {
   createAgentEventStream,
   createSession,
   deleteAgentProfile,
+  downloadSkill,
   fetchAgents,
   fetchHealth,
   fetchProfile,
@@ -20,6 +21,7 @@ import {
   sendSessionMessageStream,
   uninstallSkill,
   updateProfile,
+  uploadSkillPackage,
   defaultAgentProfileInput,
   defaultUserProfile,
   type AgentProfile,
@@ -29,6 +31,7 @@ import {
   type SessionDetail,
   type SessionSummary,
   type SkillRegistryItem,
+  type SkillPackageInput,
   type UserProfile,
 } from "../api";
 import { shouldReloadSessionFromAgentEvent } from "../chat-stream-state";
@@ -115,6 +118,7 @@ export function App() {
     () => skillRegistry.filter((skill) => skill.installed).length,
     [skillRegistry],
   );
+  const installedSkills = useMemo(() => skillRegistry.filter((skill) => skill.installed), [skillRegistry]);
   const visibleSessions = useMemo(
     () => sortSessionsForSidebar(sessions, sessionMetadata).filter((session) => !isSessionHidden(session.id, sessionMetadata)),
     [sessionMetadata, sessions],
@@ -379,18 +383,43 @@ export function App() {
     writeAgentBuilderConfig(window.localStorage, config);
   }
 
-  async function toggleSkillInstallation(skillId: string): Promise<void> {
-    const currentSkill = skillRegistry.find((skill) => skill.id === skillId);
-    if (!currentSkill) {
-      return;
-    }
+  async function handleSkillAction(skill: SkillRegistryItem): Promise<void> {
     try {
-      const nextSkill = currentSkill.installed ? await uninstallSkill(skillId) : await installSkill(skillId);
-      setSkillRegistry((current) => current.map((skill) => (skill.id === skillId ? nextSkill : skill)));
+      const nextSkill =
+        skill.status === "available"
+          ? await downloadSkill(skill.id)
+          : skill.installed
+            ? await uninstallSkill(skill.id)
+            : await installSkill(skill.id);
+      setSkillRegistry((current) => current.map((item) => (item.id === skill.id ? nextSkill : item)));
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
+  }
+
+  async function handleUploadSkillPackage(input: SkillPackageInput): Promise<void> {
+    try {
+      const nextSkill = await uploadSkillPackage(input);
+      setSkillRegistry((current) => {
+        const exists = current.some((skill) => skill.id === nextSkill.id);
+        return exists ? current.map((skill) => (skill.id === nextSkill.id ? nextSkill : skill)) : [...current, nextSkill];
+      });
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  function normalizedAgentDraftForSave(): AgentProfileInput {
+    if (skillRegistry.length === 0) {
+      return agentDraft;
+    }
+    const installedSkillIds = new Set(installedSkills.map((skill) => skill.id));
+    return {
+      ...agentDraft,
+      skillIds: agentDraft.skillIds.filter((skillId) => installedSkillIds.has(skillId)),
+    };
   }
 
   function toggleProfileEdit(): void {
@@ -443,9 +472,10 @@ export function App() {
     }
     setAgentSaving(true);
     try {
+      const draftToSave = normalizedAgentDraftForSave();
       const agent = activeAgent
-        ? await updateAgentProfile(activeAgent.id, agentDraft)
-        : await createAgentProfile(agentDraft);
+        ? await updateAgentProfile(activeAgent.id, draftToSave)
+        : await createAgentProfile(draftToSave);
       setAgents((current) =>
         activeAgent ? current.map((item) => (item.id === agent.id ? agent : item)) : [agent, ...current],
       );
@@ -812,12 +842,17 @@ export function App() {
                 onOpenAgent={openAgentConfig}
                 onRefresh={() => void refreshAgentsSafely(true)}
                 onSaveAgent={() => void handleSaveAgent()}
+                installedSkills={installedSkills}
                 onTestAgent={handleTestAgent}
               />
             ) : isBuilderView ? (
               <AgentBuilderPage config={builderConfig} onConfigChange={updateBuilderConfig} />
             ) : (
-              <SkillHubPage skills={skillRegistry} onToggleSkill={(skillId) => void toggleSkillInstallation(skillId)} />
+              <SkillHubPage
+                skills={skillRegistry}
+                onSkillAction={(skill) => void handleSkillAction(skill)}
+                onUploadPackage={(input) => void handleUploadSkillPackage(input)}
+              />
             )}
           </section>
         </main>

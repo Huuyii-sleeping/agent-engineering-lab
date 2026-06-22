@@ -20,8 +20,11 @@ describe("SkillHubPage", () => {
             updatedAt: "2026-06-18",
             maturity: "stable",
             tags: ["code", "test", "repo"],
-            entry: "README.md",
+            entry: "SKILL.md",
+            sourceType: "builtin",
+            status: "installed",
             installed: true,
+            validationErrors: [],
           },
           {
             id: "quality-gate",
@@ -36,11 +39,15 @@ describe("SkillHubPage", () => {
             updatedAt: "2026-06-17",
             maturity: "stable",
             tags: ["build", "release"],
-            entry: "README.md",
+            entry: "SKILL.md",
+            sourceType: "remote",
+            status: "available",
             installed: false,
+            validationErrors: [],
           },
         ]}
-        onToggleSkill={vi.fn()}
+        onSkillAction={vi.fn()}
+        onUploadPackage={vi.fn()}
       />,
     );
 
@@ -50,8 +57,9 @@ describe("SkillHubPage", () => {
     expect(html).toContain("搜索 skill、来源或标签");
     expect(html).toContain("Local workspace");
     expect(html).toContain("文件读写 / 命令执行");
-    expect(html).toContain("只看已加载");
-    expect(html).toContain("已加载");
-    expect(html).toContain("加载 Skill");
+    expect(html).toContain("只看已安装");
+    expect(html).toContain("已安装");
+    expect(html).toContain("下载");
+    expect(html).toContain("Custom upload");
   });
 });

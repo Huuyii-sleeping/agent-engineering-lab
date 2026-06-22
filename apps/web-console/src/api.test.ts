@@ -4,6 +4,7 @@ import {
   createSession,
   createAgentEventStream,
   deleteAgentProfile,
+  downloadSkill,
   fetchAgents,
   fetchHealth,
   fetchProfile,
@@ -14,6 +15,7 @@ import {
   sendSessionMessage,
   sendSessionMessageStream,
   uninstallSkill,
+  uploadSkillPackage,
   updateAgentProfile,
   updateProfile,
 } from "./api";
@@ -274,17 +276,26 @@ describe("web-console api client", () => {
               updatedAt: "2026-06-18",
               maturity: "stable",
               tags: [" code ", "test"],
-              entry: "README.md",
+              entry: "SKILL.md",
+              sourceType: "builtin",
+              status: "installed",
+              validationErrors: [],
               installed: true,
             },
           ],
         });
       }
       if (method === "POST" && url.pathname === "/api/skills/quality-gate/install") {
-        return jsonResponse({ ok: true, skill: { id: "quality-gate", name: "质量闸门", installed: true } });
+        return jsonResponse({ ok: true, skill: { id: "quality-gate", name: "质量闸门", status: "installed", installed: true } });
       }
       if (method === "POST" && url.pathname === "/api/skills/quality-gate/uninstall") {
-        return jsonResponse({ ok: true, skill: { id: "quality-gate", name: "质量闸门", installed: false } });
+        return jsonResponse({ ok: true, skill: { id: "quality-gate", name: "质量闸门", status: "downloaded", installed: false } });
+      }
+      if (method === "POST" && url.pathname === "/api/skills/remote-prd-review/download") {
+        return jsonResponse({ ok: true, skill: { id: "remote-prd-review", name: "远端 PRD 评审", sourceType: "remote", status: "downloaded" } });
+      }
+      if (method === "POST" && url.pathname === "/api/skills/upload") {
+        return jsonResponse({ ok: true, skill: { id: "custom-review", name: "自定义评审", sourceType: "custom", status: "downloaded" } }, 201);
       }
 
       return jsonResponse({ ok: false, error: { code: "NOT_FOUND", message: url.pathname } }, 404);
@@ -298,12 +309,28 @@ describe("web-console api client", () => {
         summary: "读取仓库",
         permissions: ["文件读写", "命令执行"],
         tags: ["code", "test"],
+        sourceType: "builtin",
+        status: "installed",
         installed: true,
       },
     ]);
+    await expect(downloadSkill("remote-prd-review")).resolves.toMatchObject({
+      id: "remote-prd-review",
+      sourceType: "remote",
+      status: "downloaded",
+    });
     await expect(installSkill("quality-gate")).resolves.toMatchObject({ id: "quality-gate", installed: true });
     await expect(uninstallSkill("quality-gate")).resolves.toMatchObject({ id: "quality-gate", installed: false });
-    expect(fetchMock).toHaveBeenLastCalledWith("/api/skills/quality-gate/uninstall", { method: "POST" });
+    await expect(uploadSkillPackage({ files: [] })).resolves.toMatchObject({
+      id: "custom-review",
+      sourceType: "custom",
+      status: "downloaded",
+    });
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/skills/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ files: [] }),
+    });
   });
 
 
