@@ -2365,6 +2365,7 @@ p {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(306px, 1fr));
   align-content: start;
+  align-items: stretch;
   gap: 12px;
   min-height: 0;
   overflow-y: auto;
@@ -2377,10 +2378,10 @@ p {
   position: relative;
   display: grid;
   min-width: 0;
-  min-height: 288px;
+  min-height: 344px;
   grid-template-rows: auto auto auto auto minmax(28px, auto) auto auto;
   gap: 11px;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid color-mix(in srgb, var(--skillhub-line) 86%, transparent);
   border-radius: 8px;
   background:
@@ -2444,9 +2445,14 @@ p {
 }
 
 .skillhub-card p {
+  display: -webkit-box;
+  min-height: 44px;
+  overflow: hidden;
   color: var(--text-soft);
   font-size: 14px;
   line-height: 1.58;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .skillhub-card-spec {
@@ -2462,6 +2468,7 @@ p {
   color: var(--text-soft);
   font-size: 12px;
   font-weight: 780;
+  overflow-wrap: anywhere;
 }
 
 .skillhub-card-spec svg {
