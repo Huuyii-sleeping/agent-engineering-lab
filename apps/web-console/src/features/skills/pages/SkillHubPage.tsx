@@ -1,32 +1,32 @@
 import { Check, Download, Layers3, PackageCheck, Search, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { useMemo, useState } from "react";
-import { agentSkillCatalog } from "../../../agent-builder";
+import type { SkillRegistryItem } from "../../../api";
 
 const allCategories = "全部";
 
 /** Render the local registry of skills that can be loaded into agents. */
 export function SkillHubPage({
-  downloadedSkillIds,
+  skills,
   onToggleSkill,
 }: {
-  downloadedSkillIds: string[];
+  skills: SkillRegistryItem[];
   onToggleSkill: (skillId: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState(allCategories);
   const [showLoadedOnly, setShowLoadedOnly] = useState(false);
-  const downloadedCount = downloadedSkillIds.length;
-  const categories = useMemo(() => [allCategories, ...new Set(agentSkillCatalog.map((skill) => skill.category))], []);
-  const filteredSkills = agentSkillCatalog.filter((skill) => {
+  const downloadedCount = skills.filter((skill) => skill.installed).length;
+  const categories = useMemo(() => [allCategories, ...new Set(skills.map((skill) => skill.category))], [skills]);
+  const filteredSkills = skills.filter((skill) => {
     const keyword = query.trim().toLowerCase();
     const matchesKeyword =
       !keyword ||
       `${skill.name} ${skill.summary} ${skill.provider} ${skill.runtime} ${skill.tags.join(" ")}`.toLowerCase().includes(keyword);
     const matchesCategory = activeCategory === allCategories || skill.category === activeCategory;
-    const matchesLoaded = !showLoadedOnly || downloadedSkillIds.includes(skill.id);
+    const matchesLoaded = !showLoadedOnly || skill.installed;
     return matchesKeyword && matchesCategory && matchesLoaded;
   });
-  const stableCount = agentSkillCatalog.filter((skill) => skill.maturity === "stable").length;
+  const stableCount = skills.filter((skill) => skill.maturity === "stable").length;
 
   return (
     <main className="skillhub-shell">
@@ -38,7 +38,7 @@ export function SkillHubPage({
         </div>
         <div className="skillhub-meter" aria-label="Skill Hub 状态">
           <span>
-            <strong>{agentSkillCatalog.length}</strong>
+            <strong>{skills.length}</strong>
             <small>可用 Skill</small>
           </span>
           <span>
@@ -74,8 +74,8 @@ export function SkillHubPage({
                 <span>{category}</span>
                 <small>
                   {category === allCategories
-                    ? agentSkillCatalog.length
-                    : agentSkillCatalog.filter((skill) => skill.category === category).length}
+                    ? skills.length
+                    : skills.filter((skill) => skill.category === category).length}
                 </small>
               </button>
             ))}
@@ -99,7 +99,7 @@ export function SkillHubPage({
 
           <div className="skillhub-grid">
             {filteredSkills.map((skill) => {
-              const downloaded = downloadedSkillIds.includes(skill.id);
+              const downloaded = skill.installed;
               return (
                 <article className={`skillhub-card ${downloaded ? "skillhub-card--downloaded" : ""}`} key={skill.id}>
                   <div className="skillhub-card-top">

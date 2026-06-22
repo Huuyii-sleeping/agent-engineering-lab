@@ -1,0 +1,14 @@
+{
+  "id": "memory-context",
+  "name": "长期记忆",
+  "summary": "复用偏好、项目背景和历史结论。",
+  "category": "上下文",
+  "provider": "Local",
+  "version": "0.8.0",
+  "runtime": "Local memory",
+  "permissions": ["本地存储"],
+  "updatedAt": "2026-06-10",
+  "maturity": "beta",
+  "tags": ["context", "profile", "history"],
+  "entry": "README.md"
+}

@@ -1,0 +1,14 @@
+{
+  "id": "browser-research",
+  "name": "网页研究",
+  "summary": "检索、阅读页面并提取可信信息。",
+  "category": "输入",
+  "provider": "Browser",
+  "version": "1.0.0",
+  "runtime": "Browser connector",
+  "permissions": ["网络访问", "页面读取"],
+  "updatedAt": "2026-06-14",
+  "maturity": "stable",
+  "tags": ["research", "web", "citation"],
+  "entry": "README.md"
+}

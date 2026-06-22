@@ -7,10 +7,13 @@ import {
   fetchAgents,
   fetchHealth,
   fetchProfile,
+  fetchSkills,
   fetchSession,
   fetchSessions,
+  installSkill,
   sendSessionMessage,
   sendSessionMessageStream,
+  uninstallSkill,
   updateAgentProfile,
   updateProfile,
 } from "./api";
@@ -248,6 +251,59 @@ describe("web-console api client", () => {
     await expect(deleteAgentProfile("a1")).resolves.toBeUndefined();
 
     expect(fetchMock).toHaveBeenLastCalledWith("/api/agents/a1", { method: "DELETE" });
+  });
+
+  it("calls BFF skill registry APIs", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(String(input), "http://localhost");
+      const method = init?.method ?? "GET";
+
+      if (method === "GET" && url.pathname === "/api/skills") {
+        return jsonResponse({
+          ok: true,
+          skills: [
+            {
+              id: "code-workspace",
+              name: "  代码工作区  ",
+              summary: "  读取仓库  ",
+              category: "执行",
+              provider: "Workspace",
+              version: "1.2.0",
+              runtime: "Local workspace",
+              permissions: [" 文件读写 ", "命令执行"],
+              updatedAt: "2026-06-18",
+              maturity: "stable",
+              tags: [" code ", "test"],
+              entry: "README.md",
+              installed: true,
+            },
+          ],
+        });
+      }
+      if (method === "POST" && url.pathname === "/api/skills/quality-gate/install") {
+        return jsonResponse({ ok: true, skill: { id: "quality-gate", name: "质量闸门", installed: true } });
+      }
+      if (method === "POST" && url.pathname === "/api/skills/quality-gate/uninstall") {
+        return jsonResponse({ ok: true, skill: { id: "quality-gate", name: "质量闸门", installed: false } });
+      }
+
+      return jsonResponse({ ok: false, error: { code: "NOT_FOUND", message: url.pathname } }, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchSkills()).resolves.toMatchObject([
+      {
+        id: "code-workspace",
+        name: "代码工作区",
+        summary: "读取仓库",
+        permissions: ["文件读写", "命令执行"],
+        tags: ["code", "test"],
+        installed: true,
+      },
+    ]);
+    await expect(installSkill("quality-gate")).resolves.toMatchObject({ id: "quality-gate", installed: true });
+    await expect(uninstallSkill("quality-gate")).resolves.toMatchObject({ id: "quality-gate", installed: false });
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/skills/quality-gate/uninstall", { method: "POST" });
   });
 
 

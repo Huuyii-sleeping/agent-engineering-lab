@@ -1,0 +1,14 @@
+{
+  "id": "code-workspace",
+  "name": "代码工作区",
+  "summary": "读取仓库、修改文件、运行验证命令。",
+  "category": "执行",
+  "provider": "Workspace",
+  "version": "1.2.0",
+  "runtime": "Local workspace",
+  "permissions": ["文件读写", "命令执行"],
+  "updatedAt": "2026-06-18",
+  "maturity": "stable",
+  "tags": ["code", "test", "repo"],
+  "entry": "README.md"
+}

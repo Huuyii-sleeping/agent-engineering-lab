@@ -1,0 +1,14 @@
+{
+  "id": "document-pipeline",
+  "name": "文档流水线",
+  "summary": "整理 PRD、方案、报告和交付说明。",
+  "category": "产出",
+  "provider": "Documents",
+  "version": "0.6.0",
+  "runtime": "Document runtime",
+  "permissions": ["文档生成", "文件读写"],
+  "updatedAt": "2026-06-12",
+  "maturity": "beta",
+  "tags": ["prd", "report", "handoff"],
+  "entry": "README.md"
+}

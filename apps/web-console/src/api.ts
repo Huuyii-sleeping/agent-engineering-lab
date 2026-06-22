@@ -58,6 +58,23 @@ export type AgentProfileInput = Pick<
   "avatarId" | "name" | "description" | "scenario" | "skillIds" | "actions" | "systemPrompt"
 >;
 
+/** Local skill registry item returned by the BFF Skill Hub APIs. */
+export type SkillRegistryItem = {
+  id: string;
+  name: string;
+  summary: string;
+  category: string;
+  provider: string;
+  version: string;
+  runtime: string;
+  permissions: string[];
+  updatedAt: string;
+  maturity: "stable" | "beta";
+  tags: string[];
+  entry: string;
+  installed: boolean;
+};
+
 /** Result returned after sending a user message to the active session. */
 export type SendMessageResult = {
   ok: boolean;
@@ -190,6 +207,27 @@ export function normalizeAgentProfileInput(value: unknown): AgentProfileInput {
     skillIds: agent.skillIds,
     actions: agent.actions,
     systemPrompt: agent.systemPrompt,
+  };
+}
+
+/** Normalize a Skill Hub registry item before it is displayed in the Web console. */
+export function normalizeSkillRegistryItem(value: unknown): SkillRegistryItem {
+  const record = asObject(value);
+  const id = cleanText(record.id, "").slice(0, 80);
+  return {
+    id,
+    name: cleanText(record.name, id || "未命名 Skill").slice(0, 80),
+    summary: cleanOptionalText(record.summary, 220) || "暂无简介",
+    category: cleanText(record.category, "未分类").slice(0, 40),
+    provider: cleanText(record.provider, "Local").slice(0, 80),
+    version: cleanText(record.version, "0.0.0").slice(0, 40),
+    runtime: cleanText(record.runtime, "Local runtime").slice(0, 80),
+    permissions: cleanStringList(record.permissions, 16, 40),
+    updatedAt: cleanOptionalText(record.updatedAt, 32),
+    maturity: record.maturity === "beta" ? "beta" : "stable",
+    tags: cleanStringList(record.tags, 16, 40),
+    entry: cleanText(record.entry, "README.md").slice(0, 120),
+    installed: asBoolean(record.installed),
   };
 }
 
@@ -423,6 +461,29 @@ export async function updateAgentProfile(agentId: string, input: AgentProfileInp
 /** Deletes a locally persisted agent profile through the BFF business API. */
 export async function deleteAgentProfile(agentId: string): Promise<void> {
   await requestJson<JsonObject>(`/api/agents/${encodeURIComponent(agentId)}`, { method: "DELETE" });
+}
+
+/** Fetches local skill registry items through the BFF business API. */
+export async function fetchSkills(): Promise<SkillRegistryItem[]> {
+  const response = await requestJson<JsonObject>("/api/skills");
+  const skills = Array.isArray(response.skills) ? response.skills : [];
+  return skills.map(normalizeSkillRegistryItem).filter((skill) => skill.id);
+}
+
+/** Installs one local skill through the BFF business API. */
+export async function installSkill(skillId: string): Promise<SkillRegistryItem> {
+  const response = await requestJson<JsonObject>(`/api/skills/${encodeURIComponent(skillId)}/install`, {
+    method: "POST",
+  });
+  return normalizeSkillRegistryItem(response.skill);
+}
+
+/** Uninstalls one local skill through the BFF business API. */
+export async function uninstallSkill(skillId: string): Promise<SkillRegistryItem> {
+  const response = await requestJson<JsonObject>(`/api/skills/${encodeURIComponent(skillId)}/uninstall`, {
+    method: "POST",
+  });
+  return normalizeSkillRegistryItem(response.skill);
 }
 
 /** Fetches the current session list through the BFF. */

@@ -1,9 +1,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
-  readDownloadedSkillIds,
   readAgentBuilderConfig,
-  toggleAgentBuilderId,
-  writeDownloadedSkillIds,
   writeAgentBuilderConfig,
   type AgentBuilderConfig,
 } from "../agent-builder";
@@ -15,10 +12,13 @@ import {
   fetchAgents,
   fetchHealth,
   fetchProfile,
+  fetchSkills,
   fetchSession,
   fetchSessions,
+  installSkill,
   updateAgentProfile,
   sendSessionMessageStream,
+  uninstallSkill,
   updateProfile,
   defaultAgentProfileInput,
   defaultUserProfile,
@@ -28,6 +28,7 @@ import {
   type HealthStatus,
   type SessionDetail,
   type SessionSummary,
+  type SkillRegistryItem,
   type UserProfile,
 } from "../api";
 import { shouldReloadSessionFromAgentEvent } from "../chat-stream-state";
@@ -75,9 +76,7 @@ export function App() {
   const [builderConfig, setBuilderConfig] = useState<AgentBuilderConfig>(() =>
     typeof window === "undefined" ? readAgentBuilderConfig(null) : readAgentBuilderConfig(window.localStorage),
   );
-  const [downloadedSkillIds, setDownloadedSkillIds] = useState<string[]>(() =>
-    typeof window === "undefined" ? readDownloadedSkillIds(null) : readDownloadedSkillIds(window.localStorage),
-  );
+  const [skillRegistry, setSkillRegistry] = useState<SkillRegistryItem[]>([]);
   const [agents, setAgents] = useState<AgentProfile[]>([]);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [agentDraft, setAgentDraft] = useState<AgentProfileInput>(defaultAgentProfileInput);
@@ -112,6 +111,10 @@ export function App() {
     [activeSessionId, sessions],
   );
   const activeAgent = useMemo(() => agents.find((agent) => agent.id === activeAgentId) ?? null, [activeAgentId, agents]);
+  const installedSkillCount = useMemo(
+    () => skillRegistry.filter((skill) => skill.installed).length,
+    [skillRegistry],
+  );
   const visibleSessions = useMemo(
     () => sortSessionsForSidebar(sessions, sessionMetadata).filter((session) => !isSessionHidden(session.id, sessionMetadata)),
     [sessionMetadata, sessions],
@@ -190,6 +193,10 @@ export function App() {
     }
   }
 
+  async function refreshSkills(): Promise<void> {
+    setSkillRegistry(await fetchSkills());
+  }
+
   async function loadSession(sessionId: string, options: { silent?: boolean } = {}): Promise<void> {
     if (!options.silent) {
       setLoadState("loading");
@@ -215,8 +222,9 @@ export function App() {
     setLoadState("loading");
     const profileResult = refreshProfile();
     const agentResult = refreshAgentsSafely(true);
+    const skillsResult = refreshSkills();
     const runtimeResultsPromise = Promise.allSettled([refreshHealth(), refreshSessions(true)]);
-    const businessResultsPromise = Promise.allSettled([profileResult, agentResult]);
+    const businessResultsPromise = Promise.allSettled([profileResult, agentResult, skillsResult]);
     const [runtimeResults, businessResults] = await Promise.all([runtimeResultsPromise, businessResultsPromise]);
     const failedRuntime = runtimeResults.find((result) => result.status === "rejected");
     const failedBusiness = businessResults.find((result) => result.status === "rejected");
@@ -371,16 +379,18 @@ export function App() {
     writeAgentBuilderConfig(window.localStorage, config);
   }
 
-  function toggleDownloadedSkill(skillId: string): void {
-    setDownloadedSkillIds((current) => {
-      const next = toggleAgentBuilderId(
-        current,
-        skillId,
-        agentSkillCatalog.map((skill) => skill.id),
-      );
-      writeDownloadedSkillIds(window.localStorage, next);
-      return next;
-    });
+  async function toggleSkillInstallation(skillId: string): Promise<void> {
+    const currentSkill = skillRegistry.find((skill) => skill.id === skillId);
+    if (!currentSkill) {
+      return;
+    }
+    try {
+      const nextSkill = currentSkill.installed ? await uninstallSkill(skillId) : await installSkill(skillId);
+      setSkillRegistry((current) => current.map((skill) => (skill.id === skillId ? nextSkill : skill)));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
   }
 
   function toggleProfileEdit(): void {
@@ -773,7 +783,7 @@ export function App() {
             activeAgentId={activeAgentId}
             activeView={view}
             agents={agents}
-            downloadedSkillCount={downloadedSkillIds.length}
+            downloadedSkillCount={installedSkillCount}
             saving={agentSaving}
             onCreateAgent={() => void handleCreateAgent()}
             onOpenAgent={openAgentConfig}
@@ -807,7 +817,7 @@ export function App() {
             ) : isBuilderView ? (
               <AgentBuilderPage config={builderConfig} onConfigChange={updateBuilderConfig} />
             ) : (
-              <SkillHubPage downloadedSkillIds={downloadedSkillIds} onToggleSkill={toggleDownloadedSkill} />
+              <SkillHubPage skills={skillRegistry} onToggleSkill={(skillId) => void toggleSkillInstallation(skillId)} />
             )}
           </section>
         </main>

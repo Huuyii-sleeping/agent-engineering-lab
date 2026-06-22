@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -118,10 +118,20 @@ async function startMockAgent(): Promise<{ baseUrl: string; seen: SeenRequest[] 
   return { baseUrl: await listen(server), seen };
 }
 
-async function startBff(agentBaseUrl: string): Promise<string> {
+async function startBff(agentBaseUrl: string, options: { skillsRoot?: string } = {}): Promise<string> {
   const tempDir = await mkdtemp(join(tmpdir(), "agent-bff-test-"));
   tempDirs.push(tempDir);
-  return listen(await createBffHttpServer({ agentBaseUrl, filePath: join(tempDir, "state.json") }));
+  return listen(await createBffHttpServer({ agentBaseUrl, filePath: join(tempDir, "state.json"), skillsRoot: options.skillsRoot }));
+}
+
+async function writeSkillManifest(
+  skillsRoot: string,
+  skillId: string,
+  manifest: Record<string, unknown>,
+): Promise<void> {
+  const skillRoot = join(skillsRoot, skillId);
+  await mkdir(skillRoot, { recursive: true });
+  await writeFile(join(skillRoot, "skill.json"), JSON.stringify({ id: skillId, ...manifest }, null, 2), "utf8");
 }
 
 async function requestJson(input: string, init?: RequestInit): Promise<{ status: number; body: Record<string, unknown> }> {
@@ -333,6 +343,72 @@ describe("bff server", () => {
     await expect(requestJson(`${bffBaseUrl}/api/agents/${createdAgent.id}`, { method: "DELETE" })).resolves.toMatchObject({
       status: 404,
       body: { ok: false, error: { code: "AGENT_NOT_FOUND" } },
+    });
+  });
+
+  it("serves local skill registry APIs and persists install state", async () => {
+    const agent = await startMockAgent();
+    const skillsRoot = await mkdtemp(join(tmpdir(), "agent-bff-skills-"));
+    tempDirs.push(skillsRoot);
+    await writeSkillManifest(skillsRoot, "code-workspace", {
+      name: "代码工作区",
+      summary: "读取仓库、修改文件、运行验证命令。",
+      category: "执行",
+      provider: "Workspace",
+      version: "1.2.0",
+      runtime: "Local workspace",
+      permissions: ["文件读写", "命令执行"],
+      updatedAt: "2026-06-18",
+      maturity: "stable",
+      tags: ["code", "test"],
+      entry: "README.md",
+    });
+    await writeSkillManifest(skillsRoot, "quality-gate", {
+      name: "质量闸门",
+      summary: "执行测试、构建、回归与发布前检查。",
+      category: "验证",
+      provider: "Release",
+      version: "0.9.0",
+      runtime: "Validation runner",
+      permissions: ["命令执行", "日志读取"],
+      updatedAt: "2026-06-17",
+      maturity: "stable",
+      tags: ["build", "release"],
+      entry: "README.md",
+    });
+    const bffBaseUrl = await startBff(agent.baseUrl, { skillsRoot });
+
+    await expect(requestJson(`${bffBaseUrl}/api/skills`)).resolves.toMatchObject({
+      status: 200,
+      body: {
+        ok: true,
+        skills: [
+          { id: "code-workspace", name: "代码工作区", installed: true },
+          { id: "quality-gate", name: "质量闸门", installed: false },
+        ],
+      },
+    });
+    await expect(requestJson(`${bffBaseUrl}/api/skills/quality-gate/install`, { method: "POST" })).resolves.toMatchObject({
+      status: 200,
+      body: { ok: true, skill: { id: "quality-gate", installed: true } },
+    });
+    await expect(requestJson(`${bffBaseUrl}/api/skills`)).resolves.toMatchObject({
+      status: 200,
+      body: {
+        ok: true,
+        skills: [
+          { id: "code-workspace", installed: true },
+          { id: "quality-gate", installed: true },
+        ],
+      },
+    });
+    await expect(requestJson(`${bffBaseUrl}/api/skills/code-workspace/uninstall`, { method: "POST" })).resolves.toMatchObject({
+      status: 200,
+      body: { ok: true, skill: { id: "code-workspace", installed: false } },
+    });
+    await expect(requestJson(`${bffBaseUrl}/api/skills/missing/install`, { method: "POST" })).resolves.toMatchObject({
+      status: 404,
+      body: { ok: false, error: { code: "SKILL_NOT_FOUND" } },
     });
   });
 
