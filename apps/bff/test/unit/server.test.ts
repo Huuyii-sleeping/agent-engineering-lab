@@ -131,6 +131,21 @@ async function writeSkillManifest(
 ): Promise<void> {
   const skillRoot = join(skillsRoot, skillId);
   await mkdir(skillRoot, { recursive: true });
+  await writeFile(
+    join(skillRoot, "SKILL.md"),
+    [
+      "---",
+      `name: ${skillId}`,
+      `description: Use ${skillId} during local BFF registry tests.`,
+      "---",
+      "",
+      `# ${skillId}`,
+      "",
+      "Use this test skill to verify local registry loading.",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
   await writeFile(join(skillRoot, "skill.json"), JSON.stringify({ id: skillId, ...manifest }, null, 2), "utf8");
 }
 

@@ -10,5 +10,5 @@
   "updatedAt": "2026-06-17",
   "maturity": "stable",
   "tags": ["build", "regression", "release"],
-  "entry": "README.md"
+  "entry": "SKILL.md"
 }

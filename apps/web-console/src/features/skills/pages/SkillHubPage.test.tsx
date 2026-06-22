@@ -10,6 +10,7 @@ describe("SkillHubPage", () => {
           {
             id: "code-workspace",
             name: "代码工作区",
+            description: "Use when an agent needs to inspect a repository and edit code.",
             summary: "读取仓库、修改文件、运行验证命令。",
             category: "执行",
             provider: "Workspace",
@@ -25,6 +26,7 @@ describe("SkillHubPage", () => {
           {
             id: "quality-gate",
             name: "质量闸门",
+            description: "Use when an agent needs to verify changes with tests and builds.",
             summary: "执行测试、构建、回归与发布前检查。",
             category: "验证",
             provider: "Release",

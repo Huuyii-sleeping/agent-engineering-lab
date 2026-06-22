@@ -62,6 +62,7 @@ export type AgentProfileInput = Pick<
 export type SkillRegistryItem = {
   id: string;
   name: string;
+  description: string;
   summary: string;
   category: string;
   provider: string;
@@ -217,6 +218,7 @@ export function normalizeSkillRegistryItem(value: unknown): SkillRegistryItem {
   return {
     id,
     name: cleanText(record.name, id || "未命名 Skill").slice(0, 80),
+    description: cleanOptionalText(record.description, 1200),
     summary: cleanOptionalText(record.summary, 220) || "暂无简介",
     category: cleanText(record.category, "未分类").slice(0, 40),
     provider: cleanText(record.provider, "Local").slice(0, 80),

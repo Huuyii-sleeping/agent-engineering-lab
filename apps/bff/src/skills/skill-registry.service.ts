@@ -11,10 +11,11 @@ export type SkillRegistryOptions = {
 /** Skill maturity state exposed by local skill manifests. */
 export type SkillMaturity = "stable" | "beta";
 
-/** Normalized local skill manifest loaded from a skill.json file. */
+/** Normalized local skill package loaded from SKILL.md plus Hub metadata. */
 export type SkillManifest = {
   id: string;
   name: string;
+  description: string;
   summary: string;
   category: string;
   provider: string;
@@ -70,13 +71,43 @@ function normalizeMaturity(value: unknown): SkillMaturity {
   return value === "beta" ? "beta" : "stable";
 }
 
-function normalizeSkillManifest(value: unknown, fallbackId: string): SkillManifest {
+function parseSkillDefinition(raw: string, fallbackId: string): { id: string; description: string } {
+  const normalized = raw.replace(/\r\n/g, "\n");
+  if (!normalized.startsWith("---\n")) {
+    return { id: fallbackId, description: "" };
+  }
+  const frontmatterEnd = normalized.indexOf("\n---", 4);
+  if (frontmatterEnd === -1) {
+    return { id: fallbackId, description: "" };
+  }
+  const frontmatter = normalized.slice(4, frontmatterEnd);
+  const fields = new Map<string, string>();
+  for (const line of frontmatter.split("\n")) {
+    const delimiterIndex = line.indexOf(":");
+    if (delimiterIndex === -1) {
+      continue;
+    }
+    const key = line.slice(0, delimiterIndex).trim();
+    const value = line.slice(delimiterIndex + 1).trim().replace(/^["']|["']$/g, "");
+    if (key) {
+      fields.set(key, value);
+    }
+  }
+  return {
+    id: cleanText(fields.get("name"), fallbackId, 80),
+    description: cleanText(fields.get("description"), "", 1200),
+  };
+}
+
+function normalizeSkillManifest(value: unknown, definition: { id: string; description: string }): SkillManifest {
   const record = asObject(value);
-  const id = cleanText(record.id, fallbackId, 80);
+  const id = cleanText(record.id, definition.id, 80);
+  const description = definition.description;
   return {
     id,
     name: cleanText(record.name, id, 80),
-    summary: cleanText(record.summary, "暂无简介", 220),
+    description,
+    summary: cleanText(record.summary, description || "暂无简介", 220),
     category: cleanText(record.category, "未分类", 40),
     provider: cleanText(record.provider, "Local", 80),
     version: cleanText(record.version, "0.0.0", 40),
@@ -85,7 +116,7 @@ function normalizeSkillManifest(value: unknown, fallbackId: string): SkillManife
     updatedAt: cleanText(record.updatedAt, "", 32),
     maturity: normalizeMaturity(record.maturity),
     tags: cleanStringList(record.tags, 16, 40),
-    entry: cleanText(record.entry, "README.md", 120),
+    entry: cleanText(record.entry, "SKILL.md", 120),
   };
 }
 
@@ -154,8 +185,14 @@ export class SkillRegistryService {
       entries
         .filter((entry) => entry.isDirectory())
         .map(async (entry) => {
-          const raw = await readFile(join(this.skillsRoot, entry.name, "skill.json"), "utf8");
-          return normalizeSkillManifest(JSON.parse(raw) as unknown, entry.name);
+          const [skillDefinition, hubMetadata] = await Promise.all([
+            readFile(join(this.skillsRoot, entry.name, "SKILL.md"), "utf8"),
+            readFile(join(this.skillsRoot, entry.name, "skill.json"), "utf8"),
+          ]);
+          return normalizeSkillManifest(
+            JSON.parse(hubMetadata) as unknown,
+            parseSkillDefinition(skillDefinition, entry.name),
+          );
         }),
     );
     return manifests.sort((left, right) => left.id.localeCompare(right.id));
