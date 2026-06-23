@@ -108,11 +108,20 @@ type SkillRegistryItem = {
 
 ```text
 GET  /api/skills
+GET  /api/skills/registry
+PUT  /api/skills/registry
+POST /api/skills/registry/sync
 POST /api/skills/:skillId/download
 POST /api/skills/:skillId/install
 POST /api/skills/:skillId/uninstall
 POST /api/skills/upload
 ```
+
+`GET /api/skills/registry` 返回当前远端 registry 配置、最后同步时间、同步错误和缓存条目数。
+
+`PUT /api/skills/registry` 持久化远端 registry URL。URL 支持 HTTP(S) endpoint，也支持本地文件路径用于开发和测试。保存后不会隐式下载 package，必须由同步或下载流程触发。
+
+`POST /api/skills/registry/sync` 主动读取当前远端 registry index，校验 index 格式并写入本地缓存。Skill Hub 列表优先使用缓存的远端 index，让页面和远端服务之间形成明确同步边界。
 
 `POST /api/skills/upload` 第一阶段接受 JSON：
 

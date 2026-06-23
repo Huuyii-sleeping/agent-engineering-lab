@@ -1,6 +1,10 @@
 import { Injectable } from "@nestjs/common";
+import { LocalStoreService } from "../local-store.service.js";
 import type {
+  RemoteRegistrySettings,
+  RemoteRegistryState,
   RemoteSkillIndexItem,
+  RemoteSkillRegistry,
   SkillManifest,
   SkillPackageInput,
   SkillRegistryItem,
@@ -11,6 +15,8 @@ import { SkillInstallerService } from "./skill-installer.service.js";
 import { SkillStoreService, type StoredSkillPackage, type SkillStoreOptions } from "./skill-store.service.js";
 
 export type SkillRegistryOptions = SkillStoreOptions;
+
+const remoteRegistryStoreKey = "skillRemoteRegistry";
 
 function compareVersion(left: string, right: string): number {
   const leftParts = left.split(".").map((part) => Number(part) || 0);
@@ -67,21 +73,90 @@ function registryItemFromRemote(entry: RemoteSkillIndexItem, status: SkillStatus
   };
 }
 
+function remoteRegistrySettings(state: RemoteRegistryState): RemoteRegistrySettings {
+  return {
+    url: state.url,
+    lastSyncedAt: state.lastSyncedAt,
+    lastSyncError: state.lastSyncError,
+    skillCount: state.cachedRegistry.skills.length || state.skillCount,
+  };
+}
+
+function normalizeRemoteRegistryState(value: unknown, fallbackUrl: string): RemoteRegistryState {
+  const record = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  const cached = record.cachedRegistry && typeof record.cachedRegistry === "object" && !Array.isArray(record.cachedRegistry)
+    ? (record.cachedRegistry as Partial<RemoteSkillRegistry>)
+    : {};
+  const skills = Array.isArray(cached.skills) ? cached.skills.filter((item): item is RemoteSkillIndexItem => Boolean(item)) : [];
+  return {
+    url: typeof record.url === "string" && record.url.trim() ? record.url.trim() : fallbackUrl,
+    lastSyncedAt: typeof record.lastSyncedAt === "number" && Number.isFinite(record.lastSyncedAt) ? record.lastSyncedAt : null,
+    lastSyncError: typeof record.lastSyncError === "string" ? record.lastSyncError : "",
+    skillCount: typeof record.skillCount === "number" && Number.isFinite(record.skillCount) ? record.skillCount : skills.length,
+    cachedRegistry: { skills },
+  };
+}
+
 /** Aggregates builtin, remote, custom, and lifecycle state for Skill Hub. */
 @Injectable()
 export class SkillRegistryService {
   constructor(
+    private readonly localStore: LocalStoreService,
     private readonly skillStore: SkillStoreService,
     private readonly installer: SkillInstallerService,
   ) {}
 
+  /** Reads the current remote registry settings without exposing cached payloads. */
+  async getRemoteRegistrySettings(): Promise<RemoteRegistrySettings> {
+    return remoteRegistrySettings(await this.readRemoteRegistryState());
+  }
+
+  /** Saves a remote registry URL and resets the cached index until the next sync. */
+  async updateRemoteRegistryUrl(url: string): Promise<RemoteRegistrySettings> {
+    const trimmed = url.trim();
+    const nextState: RemoteRegistryState = {
+      url: trimmed || this.skillStore.getDefaultRemoteRegistryUrl(),
+      lastSyncedAt: null,
+      lastSyncError: "",
+      skillCount: 0,
+      cachedRegistry: { skills: [] },
+    };
+    await this.writeRemoteRegistryState(nextState);
+    return remoteRegistrySettings(nextState);
+  }
+
+  /** Fetches the configured remote registry and stores the latest index cache. */
+  async syncRemoteRegistry(): Promise<RemoteRegistrySettings> {
+    const state = await this.readRemoteRegistryState();
+    try {
+      const registry = await this.skillStore.readRemoteRegistry(state.url);
+      const nextState: RemoteRegistryState = {
+        url: state.url,
+        lastSyncedAt: Date.now(),
+        lastSyncError: "",
+        skillCount: registry.skills.length,
+        cachedRegistry: registry,
+      };
+      await this.writeRemoteRegistryState(nextState);
+      return remoteRegistrySettings(nextState);
+    } catch (error) {
+      const nextState: RemoteRegistryState = {
+        ...state,
+        lastSyncError: error instanceof Error ? error.message : String(error),
+      };
+      await this.writeRemoteRegistryState(nextState);
+      throw error;
+    }
+  }
+
   /** Lists all known skills with source and lifecycle state. */
   async listSkills(): Promise<SkillRegistryItem[]> {
+    const remoteRegistryState = await this.readRemoteRegistryState();
     const [builtin, downloaded, custom, remoteRegistry, state] = await Promise.all([
       this.skillStore.listBuiltinPackages(),
       this.skillStore.listDownloadedPackages(),
       this.skillStore.listCustomPackages(),
-      this.skillStore.readRemoteRegistry(),
+      this.resolveRemoteRegistry(remoteRegistryState),
       this.installer.readState(),
     ]);
     const installedIds = new Set(state.installedSkillIds);
@@ -117,7 +192,9 @@ export class SkillRegistryService {
 
   /** Downloads a remote skill package and returns its registry item. */
   async downloadSkill(skillId: string): Promise<SkillRegistryItem | null> {
-    const result = await this.installer.downloadSkill(skillId);
+    const remoteRegistryState = await this.readRemoteRegistryState();
+    const registry = await this.resolveRemoteRegistry(remoteRegistryState);
+    const result = await this.installer.downloadSkill(skillId, registry, remoteRegistryState.url);
     if (!result.ok) {
       return null;
     }
@@ -149,5 +226,25 @@ export class SkillRegistryService {
 
   private async findSkill(skillId: string): Promise<SkillRegistryItem | null> {
     return (await this.listSkills()).find((skill) => skill.id === skillId) ?? null;
+  }
+
+  private async readRemoteRegistryState(): Promise<RemoteRegistryState> {
+    const fallbackUrl = this.skillStore.getDefaultRemoteRegistryUrl();
+    return normalizeRemoteRegistryState(await this.localStore.readSection(remoteRegistryStoreKey, {}), fallbackUrl);
+  }
+
+  private async writeRemoteRegistryState(state: RemoteRegistryState): Promise<RemoteRegistryState> {
+    return this.localStore.writeSection(remoteRegistryStoreKey, state);
+  }
+
+  private async resolveRemoteRegistry(state: RemoteRegistryState): Promise<RemoteSkillRegistry> {
+    if (state.cachedRegistry.skills.length > 0 || state.lastSyncedAt !== null) {
+      return state.cachedRegistry;
+    }
+    try {
+      return await this.skillStore.readRemoteRegistry(state.url);
+    } catch {
+      return { skills: [] };
+    }
   }
 }

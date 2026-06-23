@@ -67,6 +67,17 @@ export type RemoteSkillRegistry = {
   skills: RemoteSkillIndexItem[];
 };
 
+export type RemoteRegistrySettings = {
+  url: string;
+  lastSyncedAt: number | null;
+  lastSyncError: string;
+  skillCount: number;
+};
+
+export type RemoteRegistryState = RemoteRegistrySettings & {
+  cachedRegistry: RemoteSkillRegistry;
+};
+
 export type SkillStoreState = {
   installedSkillIds: string[];
   downloadedSkillIds: string[];

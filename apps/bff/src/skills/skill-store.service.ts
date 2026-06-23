@@ -87,9 +87,9 @@ export class SkillStoreService {
   }
 
   /** Reads the configured remote registry index. */
-  async readRemoteRegistry(): Promise<RemoteSkillRegistry> {
+  async readRemoteRegistry(remoteRegistryUrl = this.remoteRegistryUrl): Promise<RemoteSkillRegistry> {
     try {
-      const raw = await this.readText(this.remoteRegistryUrl);
+      const raw = await this.readText(remoteRegistryUrl);
       const parsed = asObject(JSON.parse(raw) as unknown);
       const skills = Array.isArray(parsed.skills) ? parsed.skills : [];
       return {
@@ -106,10 +106,15 @@ export class SkillStoreService {
   }
 
   /** Reads a remote package JSON referenced by a registry index entry. */
-  async readRemotePackage(entry: RemoteSkillIndexItem): Promise<SkillPackageInput> {
-    const raw = await this.readText(this.resolvePackageUrl(entry.packageUrl));
+  async readRemotePackage(entry: RemoteSkillIndexItem, remoteRegistryUrl = this.remoteRegistryUrl): Promise<SkillPackageInput> {
+    const raw = await this.readText(this.resolvePackageUrl(entry.packageUrl, remoteRegistryUrl));
     const parsed = asObject(JSON.parse(raw) as unknown);
     return { files: Array.isArray(parsed.files) ? (parsed.files as SkillPackageFile[]) : [] };
+  }
+
+  /** Returns the built-in default remote registry URL for local development. */
+  getDefaultRemoteRegistryUrl(): string {
+    return this.remoteRegistryUrl;
   }
 
   /** Writes a validated package to the local downloaded/custom store. */
@@ -192,14 +197,14 @@ export class SkillStoreService {
     return readFile(location, "utf8");
   }
 
-  private resolvePackageUrl(packageUrl: string): string {
+  private resolvePackageUrl(packageUrl: string, remoteRegistryUrl: string): string {
     if (isHttpUrl(packageUrl) || packageUrl.startsWith("/")) {
       return packageUrl;
     }
-    if (isHttpUrl(this.remoteRegistryUrl)) {
-      return new URL(packageUrl, this.remoteRegistryUrl).toString();
+    if (isHttpUrl(remoteRegistryUrl)) {
+      return new URL(packageUrl, remoteRegistryUrl).toString();
     }
-    return normalize(join(dirname(this.remoteRegistryUrl), packageUrl));
+    return normalize(join(dirname(remoteRegistryUrl), packageUrl));
   }
 
   private normalizeRemoteIndexItem(value: unknown): RemoteSkillIndexItem | null {

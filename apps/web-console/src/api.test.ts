@@ -8,13 +8,16 @@ import {
   fetchAgents,
   fetchHealth,
   fetchProfile,
+  fetchSkillRegistrySettings,
   fetchSkills,
   fetchSession,
   fetchSessions,
   installSkill,
   sendSessionMessage,
   sendSessionMessageStream,
+  syncSkillRegistry,
   uninstallSkill,
+  updateSkillRegistryUrl,
   uploadSkillPackage,
   updateAgentProfile,
   updateProfile,
@@ -285,6 +288,39 @@ describe("web-console api client", () => {
           ],
         });
       }
+      if (method === "GET" && url.pathname === "/api/skills/registry") {
+        return jsonResponse({
+          ok: true,
+          registry: {
+            url: "  https://registry.example.com/index.json  ",
+            lastSyncedAt: 1782147600000,
+            lastSyncError: "",
+            skillCount: 4,
+          },
+        });
+      }
+      if (method === "PUT" && url.pathname === "/api/skills/registry") {
+        return jsonResponse({
+          ok: true,
+          registry: {
+            url: "https://registry.example.com/next.json",
+            lastSyncedAt: null,
+            lastSyncError: "",
+            skillCount: 0,
+          },
+        });
+      }
+      if (method === "POST" && url.pathname === "/api/skills/registry/sync") {
+        return jsonResponse({
+          ok: true,
+          registry: {
+            url: "https://registry.example.com/next.json",
+            lastSyncedAt: 1782147900000,
+            lastSyncError: "",
+            skillCount: 6,
+          },
+        });
+      }
       if (method === "POST" && url.pathname === "/api/skills/quality-gate/install") {
         return jsonResponse({ ok: true, skill: { id: "quality-gate", name: "质量闸门", status: "installed", installed: true } });
       }
@@ -314,6 +350,20 @@ describe("web-console api client", () => {
         installed: true,
       },
     ]);
+    await expect(fetchSkillRegistrySettings()).resolves.toEqual({
+      url: "https://registry.example.com/index.json",
+      lastSyncedAt: 1782147600000,
+      lastSyncError: "",
+      skillCount: 4,
+    });
+    await expect(updateSkillRegistryUrl("https://registry.example.com/next.json")).resolves.toMatchObject({
+      url: "https://registry.example.com/next.json",
+      skillCount: 0,
+    });
+    await expect(syncSkillRegistry()).resolves.toMatchObject({
+      lastSyncedAt: 1782147900000,
+      skillCount: 6,
+    });
     await expect(downloadSkill("remote-prd-review")).resolves.toMatchObject({
       id: "remote-prd-review",
       sourceType: "remote",
@@ -331,6 +381,12 @@ describe("web-console api client", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ files: [] }),
     });
+    expect(fetchMock).toHaveBeenCalledWith("/api/skills/registry", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "https://registry.example.com/next.json" }),
+    });
+    expect(fetchMock).toHaveBeenCalledWith("/api/skills/registry/sync", { method: "POST" });
   });
 
 

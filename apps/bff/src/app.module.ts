@@ -30,7 +30,7 @@ export class AppModule {
         { provide: SkillValidatorService, useValue: skillValidatorService },
         { provide: SkillStoreService, useValue: skillStoreService },
         { provide: SkillInstallerService, useValue: skillInstallerService },
-        { provide: SkillRegistryService, useValue: new SkillRegistryService(skillStoreService, skillInstallerService) },
+        { provide: SkillRegistryService, useValue: new SkillRegistryService(localStoreService, skillStoreService, skillInstallerService) },
         AgentProfileService,
         ProfileService,
         SettingsService,

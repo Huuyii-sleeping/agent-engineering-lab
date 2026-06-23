@@ -118,6 +118,66 @@ async function startMockAgent(): Promise<{ baseUrl: string; seen: SeenRequest[] 
   return { baseUrl: await listen(server), seen };
 }
 
+async function startMockSkillRegistry(): Promise<{ registryUrl: string }> {
+  const server = createServer((req, res) => {
+    const url = new URL(req.url ?? "/", "http://127.0.0.1");
+    if (url.pathname === "/registry.json") {
+      json(res, 200, {
+        skills: [
+          {
+            id: "remote-http",
+            version: "1.0.0",
+            packageUrl: "./remote-http.package.json",
+            metadata: {
+              name: "HTTP 远端 Skill",
+              summary: "来自 HTTP registry 的 skill。",
+              category: "远端",
+              provider: "HTTP Registry",
+              runtime: "Skill runtime",
+              permissions: ["网络读取"],
+              updatedAt: "2026-06-23",
+              maturity: "stable",
+              tags: ["remote", "http"],
+            },
+          },
+        ],
+      });
+      return;
+    }
+    if (url.pathname === "/remote-http.package.json") {
+      json(res, 200, {
+        files: [
+          {
+            path: "SKILL.md",
+            content:
+              "---\nname: remote-http\ndescription: Use when testing an HTTP backed remote registry skill.\n---\n\n# Remote HTTP\n",
+          },
+          {
+            path: "skill.json",
+            content: JSON.stringify({
+              id: "remote-http",
+              name: "HTTP 远端 Skill",
+              summary: "来自 HTTP registry 的 skill。",
+              category: "远端",
+              provider: "HTTP Registry",
+              version: "1.0.0",
+              runtime: "Skill runtime",
+              permissions: ["网络读取"],
+              updatedAt: "2026-06-23",
+              maturity: "stable",
+              tags: ["remote", "http"],
+              entry: "SKILL.md",
+            }),
+          },
+        ],
+      });
+      return;
+    }
+    json(res, 404, { ok: false, error: { code: "NOT_FOUND", message: url.pathname } });
+  });
+  return { registryUrl: `${await listen(server)}/registry.json` };
+}
+
 async function startBff(
   agentBaseUrl: string,
   options: { skillsRoot?: string; skillDataRoot?: string; remoteRegistryUrl?: string } = {},
@@ -555,6 +615,44 @@ describe("bff server", () => {
     ).resolves.toMatchObject({
       status: 400,
       body: { ok: false, error: { code: "SKILL_PACKAGE_INVALID" } },
+    });
+  });
+
+  it("configures and syncs an HTTP remote skill registry", async () => {
+    const agent = await startMockAgent();
+    const remote = await startMockSkillRegistry();
+    const tempDir = await mkdtemp(join(tmpdir(), "agent-bff-remote-sync-"));
+    tempDirs.push(tempDir);
+    const bffBaseUrl = await startBff(agent.baseUrl, { skillsRoot: join(tempDir, "empty-builtin") });
+
+    await expect(requestJson(`${bffBaseUrl}/api/skills/registry`)).resolves.toMatchObject({
+      status: 200,
+      body: { ok: true, registry: { lastSyncedAt: null } },
+    });
+    await expect(
+      requestJson(`${bffBaseUrl}/api/skills/registry`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: remote.registryUrl }),
+      }),
+    ).resolves.toMatchObject({
+      status: 200,
+      body: { ok: true, registry: { url: remote.registryUrl, skillCount: 0 } },
+    });
+    await expect(requestJson(`${bffBaseUrl}/api/skills/registry/sync`, { method: "POST" })).resolves.toMatchObject({
+      status: 200,
+      body: { ok: true, registry: { url: remote.registryUrl, lastSyncError: "", skillCount: 1 } },
+    });
+    await expect(requestJson(`${bffBaseUrl}/api/skills`)).resolves.toMatchObject({
+      status: 200,
+      body: {
+        ok: true,
+        skills: [expect.objectContaining({ id: "remote-http", sourceType: "remote", status: "available" })],
+      },
+    });
+    await expect(requestJson(`${bffBaseUrl}/api/skills/remote-http/download`, { method: "POST" })).resolves.toMatchObject({
+      status: 200,
+      body: { ok: true, skill: { id: "remote-http", sourceType: "remote", status: "downloaded" } },
     });
   });
 

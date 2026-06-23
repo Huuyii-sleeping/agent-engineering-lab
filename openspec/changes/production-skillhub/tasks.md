@@ -26,3 +26,10 @@
 - [x] 5.1 补 BFF/Web 单元测试
 - [x] 5.2 执行 build/test/页面验证
 - [x] 5.3 完成本地提交
+
+## 6. 远端 Registry 联合
+
+- [x] 6.1 BFF 持久化远端 registry URL、缓存 index 和同步状态
+- [x] 6.2 BFF 提供读取配置、更新配置、主动同步远端 registry API
+- [x] 6.3 Web Skill Hub 提供远端地址配置和同步入口
+- [x] 6.4 测试覆盖 HTTP 远端 registry 同步流程

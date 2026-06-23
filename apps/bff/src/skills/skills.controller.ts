@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Param, Post, Res } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Post, Put, Res } from "@nestjs/common";
 import type { ServerResponse } from "node:http";
 import { errorPayload, writeJson } from "../http-utils.js";
 import { SkillRegistryService } from "./skill-registry.service.js";
@@ -15,6 +15,36 @@ export class SkillsController {
   @Get()
   async skills(@Res() res: ServerResponse): Promise<void> {
     writeJson(res, 200, { ok: true, skills: await this.skillRegistryService.listSkills() });
+  }
+
+  /** Returns remote registry URL and sync status. */
+  @Get("registry")
+  async registry(@Res() res: ServerResponse): Promise<void> {
+    writeJson(res, 200, { ok: true, registry: await this.skillRegistryService.getRemoteRegistrySettings() });
+  }
+
+  /** Updates the remote registry URL used for future syncs and downloads. */
+  @Put("registry")
+  async updateRegistry(@Body() body: unknown, @Res() res: ServerResponse): Promise<void> {
+    const url =
+      body && typeof body === "object" && !Array.isArray(body) && typeof (body as { url?: unknown }).url === "string"
+        ? (body as { url: string }).url
+        : "";
+    writeJson(res, 200, { ok: true, registry: await this.skillRegistryService.updateRemoteRegistryUrl(url) });
+  }
+
+  /** Synchronizes the configured remote registry index into the local cache. */
+  @Post("registry/sync")
+  async syncRegistry(@Res() res: ServerResponse): Promise<void> {
+    try {
+      writeJson(res, 200, { ok: true, registry: await this.skillRegistryService.syncRemoteRegistry() });
+    } catch (error) {
+      writeJson(
+        res,
+        502,
+        errorPayload("REMOTE_REGISTRY_SYNC_FAILED", error instanceof Error ? error.message : String(error)),
+      );
+    }
   }
 
   /** Downloads one remote skill into the local skill store. */

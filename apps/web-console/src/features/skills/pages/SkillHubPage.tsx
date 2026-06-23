@@ -1,22 +1,41 @@
-import { Check, Download, Layers3, PackageCheck, Search, ShieldCheck, SlidersHorizontal, Upload } from "lucide-react";
-import { useMemo, useState } from "react";
-import type { SkillPackageInput, SkillRegistryItem } from "../../../api";
+import {
+  Check,
+  Cloud,
+  Download,
+  Layers3,
+  PackageCheck,
+  RefreshCw,
+  Save,
+  Search,
+  ShieldCheck,
+  SlidersHorizontal,
+  Upload,
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import type { RemoteRegistrySettings, SkillPackageInput, SkillRegistryItem } from "../../../api";
 
 const allCategories = "全部";
 
 /** Render the local registry of skills that can be loaded into agents. */
 export function SkillHubPage({
   skills,
+  remoteRegistry,
   onSkillAction,
+  onSyncRemoteRegistry,
+  onUpdateRemoteRegistryUrl,
   onUploadPackage,
 }: {
   skills: SkillRegistryItem[];
+  remoteRegistry: RemoteRegistrySettings | null;
   onSkillAction: (skill: SkillRegistryItem) => void;
+  onSyncRemoteRegistry: () => void;
+  onUpdateRemoteRegistryUrl: (url: string) => void;
   onUploadPackage: (input: SkillPackageInput) => void;
 }) {
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState(allCategories);
   const [showLoadedOnly, setShowLoadedOnly] = useState(false);
+  const [remoteRegistryUrl, setRemoteRegistryUrl] = useState(remoteRegistry?.url ?? "");
   const [customPackageText, setCustomPackageText] = useState("");
   const [customPackageError, setCustomPackageError] = useState<string | null>(null);
   const installedCount = skills.filter((skill) => skill.installed).length;
@@ -32,6 +51,19 @@ export function SkillHubPage({
     return matchesKeyword && matchesCategory && matchesLoaded;
   });
   const stableCount = skills.filter((skill) => skill.maturity === "stable").length;
+  const remoteCount = skills.filter((skill) => skill.sourceType === "remote").length;
+  const lastSyncedAt = remoteRegistry?.lastSyncedAt
+    ? new Intl.DateTimeFormat("zh-CN", {
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(remoteRegistry.lastSyncedAt)
+    : "未同步";
+
+  useEffect(() => {
+    setRemoteRegistryUrl(remoteRegistry?.url ?? "");
+  }, [remoteRegistry?.url]);
 
   function actionLabel(skill: SkillRegistryItem): string {
     if (skill.status === "available") {
@@ -122,8 +154,58 @@ export function SkillHubPage({
             <PackageCheck size={16} strokeWidth={2.3} aria-hidden="true" />
             <span>只看已安装</span>
           </button>
+          <div className="skillhub-remote-panel" aria-label="远端 Skill Registry">
+            <div className="skillhub-panel-title">
+              <Cloud size={15} strokeWidth={2.4} aria-hidden="true" />
+              <strong>Remote registry</strong>
+            </div>
+            <label>
+              <span>Registry URL</span>
+              <input
+                value={remoteRegistryUrl}
+                placeholder="https://example.com/skills/index.json"
+                onChange={(event) => setRemoteRegistryUrl(event.currentTarget.value)}
+              />
+            </label>
+            <div className="skillhub-remote-stats" aria-label="远端同步状态">
+              <span>
+                <strong>{remoteRegistry?.skillCount ?? remoteCount}</strong>
+                <small>远端索引</small>
+              </span>
+              <span>
+                <strong>{remoteCount}</strong>
+                <small>当前列表</small>
+              </span>
+              <span>
+                <strong>{lastSyncedAt}</strong>
+                <small>最近同步</small>
+              </span>
+            </div>
+            {remoteRegistry?.lastSyncError ? (
+              <small className="skillhub-remote-error" role="alert">
+                {remoteRegistry.lastSyncError}
+              </small>
+            ) : null}
+            <div className="skillhub-remote-actions">
+              <button
+                type="button"
+                disabled={remoteRegistryUrl.trim() === (remoteRegistry?.url ?? "")}
+                onClick={() => onUpdateRemoteRegistryUrl(remoteRegistryUrl)}
+              >
+                <Save size={14} strokeWidth={2.4} aria-hidden="true" />
+                <span>保存地址</span>
+              </button>
+              <button type="button" onClick={onSyncRemoteRegistry}>
+                <RefreshCw size={14} strokeWidth={2.4} aria-hidden="true" />
+                <span>同步索引</span>
+              </button>
+            </div>
+          </div>
           <div className="skillhub-upload-panel" aria-label="上传自定义 Skill">
-            <strong>Custom upload</strong>
+            <div className="skillhub-panel-title">
+              <Upload size={15} strokeWidth={2.4} aria-hidden="true" />
+              <strong>Custom upload</strong>
+            </div>
             <textarea
               value={customPackageText}
               rows={8}

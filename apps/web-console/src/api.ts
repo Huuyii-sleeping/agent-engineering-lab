@@ -87,6 +87,14 @@ export type SkillPackageInput = {
   files: Array<{ path: string; content: string }>;
 };
 
+/** Remote Skill Registry connection settings returned by BFF. */
+export type RemoteRegistrySettings = {
+  url: string;
+  lastSyncedAt: number | null;
+  lastSyncError: string;
+  skillCount: number;
+};
+
 /** Result returned after sending a user message to the active session. */
 export type SendMessageResult = {
   ok: boolean;
@@ -256,6 +264,17 @@ export function normalizeSkillRegistryItem(value: unknown): SkillRegistryItem {
           : "downloaded",
     installed: asBoolean(record.installed),
     validationErrors: cleanStringList(record.validationErrors, 12, 180),
+  };
+}
+
+/** Normalize remote registry settings before displaying them in Skill Hub. */
+export function normalizeRemoteRegistrySettings(value: unknown): RemoteRegistrySettings {
+  const record = asObject(value);
+  return {
+    url: cleanOptionalText(record.url, 400),
+    lastSyncedAt: asNumber(record.lastSyncedAt),
+    lastSyncError: cleanOptionalText(record.lastSyncError, 400),
+    skillCount: Number(record.skillCount ?? 0),
   };
 }
 
@@ -496,6 +515,28 @@ export async function fetchSkills(): Promise<SkillRegistryItem[]> {
   const response = await requestJson<JsonObject>("/api/skills");
   const skills = Array.isArray(response.skills) ? response.skills : [];
   return skills.map(normalizeSkillRegistryItem).filter((skill) => skill.id);
+}
+
+/** Fetches the configured remote skill registry connection. */
+export async function fetchSkillRegistrySettings(): Promise<RemoteRegistrySettings> {
+  const response = await requestJson<JsonObject>("/api/skills/registry");
+  return normalizeRemoteRegistrySettings(response.registry);
+}
+
+/** Updates the configured remote skill registry URL. */
+export async function updateSkillRegistryUrl(url: string): Promise<RemoteRegistrySettings> {
+  const response = await requestJson<JsonObject>("/api/skills/registry", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  return normalizeRemoteRegistrySettings(response.registry);
+}
+
+/** Synchronizes the configured remote skill registry index. */
+export async function syncSkillRegistry(): Promise<RemoteRegistrySettings> {
+  const response = await requestJson<JsonObject>("/api/skills/registry/sync", { method: "POST" });
+  return normalizeRemoteRegistrySettings(response.registry);
 }
 
 /** Installs one local skill through the BFF business API. */

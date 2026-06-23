@@ -1,6 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { LocalStoreService } from "../local-store.service.js";
 import type {
+  RemoteSkillRegistry,
   SkillPackageInput,
   SkillRegistryItem,
   SkillStoreState,
@@ -72,13 +73,17 @@ export class SkillInstallerService {
   }
 
   /** Downloads a remote skill package into the local remote store. */
-  async downloadSkill(skillId: string): Promise<{ ok: true } | { ok: false; code: string; message: string }> {
-    const registry = await this.skillStore.readRemoteRegistry();
-    const entry = registry.skills.find((item) => item.id === skillId);
+  async downloadSkill(
+    skillId: string,
+    registry?: RemoteSkillRegistry,
+    remoteRegistryUrl?: string,
+  ): Promise<{ ok: true } | { ok: false; code: string; message: string }> {
+    const targetRegistry = registry ?? (await this.skillStore.readRemoteRegistry(remoteRegistryUrl));
+    const entry = targetRegistry.skills.find((item) => item.id === skillId);
     if (!entry) {
       return { ok: false, code: "SKILL_NOT_FOUND", message: `skill ${skillId} was not found` };
     }
-    const remotePackage = await this.skillStore.readRemotePackage(entry);
+    const remotePackage = await this.skillStore.readRemotePackage(entry, remoteRegistryUrl);
     const validated = this.validator.validatePackage(remotePackage);
     if (!validated.ok) {
       return { ok: false, code: "SKILL_PACKAGE_INVALID", message: validated.errors.join("; ") };

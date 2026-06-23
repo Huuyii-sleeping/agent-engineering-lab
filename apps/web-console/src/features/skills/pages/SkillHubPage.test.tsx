@@ -46,7 +46,15 @@ describe("SkillHubPage", () => {
             validationErrors: [],
           },
         ]}
+        remoteRegistry={{
+          url: "https://registry.example.com/index.json",
+          lastSyncedAt: 1782147600000,
+          lastSyncError: "",
+          skillCount: 7,
+        }}
         onSkillAction={vi.fn()}
+        onSyncRemoteRegistry={vi.fn()}
+        onUpdateRemoteRegistryUrl={vi.fn()}
         onUploadPackage={vi.fn()}
       />,
     );
@@ -58,6 +66,9 @@ describe("SkillHubPage", () => {
     expect(html).toContain("Local workspace");
     expect(html).toContain("文件读写 / 命令执行");
     expect(html).toContain("只看已安装");
+    expect(html).toContain("Remote registry");
+    expect(html).toContain("https://registry.example.com/index.json");
+    expect(html).toContain("同步索引");
     expect(html).toContain("已安装");
     expect(html).toContain("下载");
     expect(html).toContain("Custom upload");
