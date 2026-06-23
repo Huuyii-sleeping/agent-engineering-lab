@@ -22,3 +22,9 @@ export function resolveAgentServiceBaseUrl(env: NodeJS.ProcessEnv = process.env)
   const raw = env.AGENT_SERVICE_BASE_URL?.trim() || DEFAULT_AGENT_SERVICE_BASE_URL;
   return trimTrailingSlash(raw);
 }
+
+/** Resolve an optional standalone Skill Registry service base URL. */
+export function resolveSkillRegistryServiceUrl(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const raw = env.SKILL_REGISTRY_SERVICE_URL?.trim();
+  return raw ? trimTrailingSlash(raw) : undefined;
+}

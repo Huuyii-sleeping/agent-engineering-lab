@@ -14,6 +14,10 @@
     "dev:bff": "pnpm --filter agent-bff dev",
     "build:bff": "pnpm --filter agent-bff build",
     "test:bff": "pnpm --filter agent-bff test",
+    "dev:skill-registry": "pnpm --filter skill-registry dev",
+    "build:skill-registry": "pnpm --filter skill-registry build",
+    "test:skill-registry": "pnpm --filter skill-registry test",
+    "docker:skill-registry": "docker compose -f compose.skill-registry.yaml up --build",
     "dev:web": "pnpm --filter agent-web-console dev",
     "build:web": "pnpm --filter agent-web-console build"
   }

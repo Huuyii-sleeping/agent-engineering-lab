@@ -19,6 +19,7 @@ export type SkillStoreOptions = {
   skillsRoot?: string;
   skillDataRoot?: string;
   remoteRegistryUrl?: string;
+  registryServiceUrl?: string;
 };
 
 export type StoredSkillPackage = ValidatedSkillPackage & {
@@ -92,6 +93,7 @@ export class SkillStoreService {
   private readonly skillsRoot: string;
   private readonly skillDataRoot: string;
   private readonly remoteRegistryUrl: string;
+  private readonly registryServiceUrl?: string;
 
   constructor(
     private readonly validator: SkillValidatorService,
@@ -99,7 +101,8 @@ export class SkillStoreService {
   ) {
     this.skillsRoot = options.skillsRoot ?? defaultSkillsRoot();
     this.skillDataRoot = options.skillDataRoot ?? defaultSkillDataRoot();
-    this.remoteRegistryUrl = options.remoteRegistryUrl ?? defaultRemoteRegistryUrl();
+    this.registryServiceUrl = options.registryServiceUrl?.replace(/\/+$/, "");
+    this.remoteRegistryUrl = options.remoteRegistryUrl ?? (this.registryServiceUrl ? `${this.registryServiceUrl}/skills` : defaultRemoteRegistryUrl());
   }
 
   /** Lists bundled skill packages from the repository skills directory. */
@@ -138,7 +141,8 @@ export class SkillStoreService {
 
   /** Reads a remote package JSON referenced by a registry index entry. */
   async readRemotePackage(entry: RemoteSkillIndexItem, remoteRegistryUrl = this.remoteRegistryUrl): Promise<SkillPackageInput> {
-    const raw = await this.readText(this.resolvePackageUrl(entry.packageUrl, remoteRegistryUrl));
+    const packageUrl = this.resolvePackageUrl(entry.packageUrl, remoteRegistryUrl);
+    const raw = await this.readText(packageUrl, this.shouldPostPackageDownload(packageUrl) ? "POST" : "GET");
     const actualSha256 = sha256Hex(raw);
     if (entry.packageSha256 && entry.packageSha256 !== actualSha256) {
       throw new Error(`skill package hash mismatch for ${entry.id}: expected ${entry.packageSha256}, got ${actualSha256}`);
@@ -221,9 +225,9 @@ export class SkillStoreService {
     }
   }
 
-  private async readText(location: string): Promise<string> {
+  private async readText(location: string, method = "GET"): Promise<string> {
     if (isHttpUrl(location)) {
-      const response = await fetch(location);
+      const response = await fetch(location, { method });
       if (!response.ok) {
         throw new Error(`failed to fetch ${location}: ${response.status}`);
       }
@@ -240,6 +244,17 @@ export class SkillStoreService {
       return new URL(packageUrl, remoteRegistryUrl).toString();
     }
     return normalize(join(dirname(remoteRegistryUrl), packageUrl));
+  }
+
+  private shouldPostPackageDownload(packageUrl: string): boolean {
+    if (!this.registryServiceUrl || !packageUrl.startsWith(this.registryServiceUrl)) {
+      return false;
+    }
+    try {
+      return new URL(packageUrl).pathname.endsWith("/download");
+    } catch {
+      return false;
+    }
   }
 
   private normalizeRemoteIndexItem(value: unknown): RemoteSkillIndexItem | null {

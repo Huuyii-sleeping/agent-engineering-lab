@@ -1,0 +1,15 @@
+services:
+  skill-registry:
+    build:
+      context: .
+      dockerfile: apps/skill-registry/Dockerfile
+    ports:
+      - "3190:3190"
+    volumes:
+      - ./runtime/skill-registry:/data
+    environment:
+      SKILL_REGISTRY_DATA_ROOT: /data
+      SKILL_REGISTRY_DB: /data/registry.sqlite
+      SKILL_PACKAGE_ROOT: /data/packages
+      SKILL_REGISTRY_PORT: "3190"
+      SKILL_REGISTRY_SEED: /app/registries/default-skill-registry.json

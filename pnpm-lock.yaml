@@ -88,6 +88,21 @@ importers:
         specifier: ^2.0.5
         version: 2.1.9(@types/node@24.12.3)(lightningcss@1.32.0)
 
+  apps/skill-registry:
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.12.3
+      tsx:
+        specifier: ^4.20.0
+        version: 4.21.0
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.0.5
+        version: 2.1.9(@types/node@24.12.3)(lightningcss@1.32.0)
+
   apps/web-console:
     dependencies:
       lucide-react:

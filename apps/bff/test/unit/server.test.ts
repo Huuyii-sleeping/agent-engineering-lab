@@ -193,14 +193,87 @@ async function startMockSkillRegistry(): Promise<{ registryUrl: string }> {
   return { registryUrl: `${await listen(server)}/registry.json` };
 }
 
+async function startMockSkillRegistryService(): Promise<{ baseUrl: string; downloads: string[] }> {
+  const downloads: string[] = [];
+  const servicePackage = {
+    files: [
+      {
+        path: "SKILL.md",
+        content:
+          "---\nname: registry-service-skill\ndescription: Use when testing the standalone registry service provider.\n---\n\n# Registry Service Skill\n",
+      },
+      {
+        path: "skill.json",
+        content: JSON.stringify({
+          id: "registry-service-skill",
+          name: "Registry Service Skill",
+          summary: "来自独立 registry service。",
+          category: "远端服务",
+          provider: "Skill Registry Service",
+          version: "1.0.0",
+          runtime: "Skill runtime",
+          permissions: ["服务读取"],
+          updatedAt: "2026-06-23",
+          maturity: "stable",
+          tags: ["registry-service"],
+          entry: "SKILL.md",
+        }),
+      },
+    ],
+  };
+  const packageRaw = JSON.stringify(servicePackage);
+  const server = createServer((req, res) => {
+    const url = new URL(req.url ?? "/", "http://127.0.0.1");
+    const baseUrl = `http://${req.headers.host}`;
+    if (req.method === "GET" && url.pathname === "/skills") {
+      json(res, 200, {
+        skills: [
+          {
+            id: "registry-service-skill",
+            version: "1.0.0",
+            packageUrl: `${baseUrl}/skills/registry-service-skill/download?version=1.0.0`,
+            packageSha256: sha256Hex(packageRaw),
+            source: "official",
+            publisher: { id: "registry-service", name: "Registry Service", verified: true },
+            downloads: downloads.length,
+            rating: 4.9,
+            deprecated: false,
+            metadata: {
+              name: "Registry Service Skill",
+              summary: "来自独立 registry service。",
+              category: "远端服务",
+              provider: "Skill Registry Service",
+              runtime: "Skill runtime",
+              permissions: ["服务读取"],
+              updatedAt: "2026-06-23",
+              maturity: "stable",
+              tags: ["registry-service"],
+            },
+          },
+        ],
+      });
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/skills/registry-service-skill/download") {
+      downloads.push(url.searchParams.get("version") ?? "");
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.end(packageRaw);
+      return;
+    }
+    json(res, 404, { ok: false, error: { code: "NOT_FOUND", message: url.pathname } });
+  });
+  return { baseUrl: await listen(server), downloads };
+}
+
 async function startBff(
   agentBaseUrl: string,
-  options: { skillsRoot?: string; skillDataRoot?: string; remoteRegistryUrl?: string } = {},
+  options: { skillsRoot?: string; skillDataRoot?: string; remoteRegistryUrl?: string; registryServiceUrl?: string } = {},
 ): Promise<string> {
   const tempDir = await mkdtemp(join(tmpdir(), "agent-bff-test-"));
   tempDirs.push(tempDir);
-  const remoteRegistryUrl = options.remoteRegistryUrl ?? join(tempDir, "empty-registry.json");
-  if (!options.remoteRegistryUrl) {
+  const remoteRegistryUrl = options.remoteRegistryUrl ?? (options.registryServiceUrl ? undefined : join(tempDir, "empty-registry.json"));
+  if (remoteRegistryUrl && !options.remoteRegistryUrl) {
     await writeFile(remoteRegistryUrl, JSON.stringify({ skills: [] }), "utf8");
   }
   return listen(
@@ -210,6 +283,7 @@ async function startBff(
       skillsRoot: options.skillsRoot,
       skillDataRoot: options.skillDataRoot ?? join(tempDir, "skills-data"),
       remoteRegistryUrl,
+      registryServiceUrl: options.registryServiceUrl,
     }),
   );
 }
@@ -762,6 +836,47 @@ describe("bff server", () => {
       status: 200,
       body: { ok: true, skill: { id: "remote-http", sourceType: "remote", status: "downloaded" } },
     });
+  });
+
+  it("uses the standalone registry service provider when configured", async () => {
+    const agent = await startMockAgent();
+    const registryService = await startMockSkillRegistryService();
+    const tempDir = await mkdtemp(join(tmpdir(), "agent-bff-registry-service-"));
+    tempDirs.push(tempDir);
+    const bffBaseUrl = await startBff(agent.baseUrl, {
+      skillsRoot: join(tempDir, "empty-builtin"),
+      registryServiceUrl: registryService.baseUrl,
+    });
+
+    await expect(requestJson(`${bffBaseUrl}/api/skills/registry`)).resolves.toMatchObject({
+      status: 200,
+      body: { ok: true, registry: { url: `${registryService.baseUrl}/skills` } },
+    });
+    await expect(requestJson(`${bffBaseUrl}/api/skills`)).resolves.toMatchObject({
+      status: 200,
+      body: {
+        ok: true,
+        skills: [
+          expect.objectContaining({
+            id: "registry-service-skill",
+            sourceType: "remote",
+            registrySource: "official",
+            publisher: { id: "registry-service", name: "Registry Service", verified: true },
+            status: "available",
+          }),
+        ],
+      },
+    });
+    await expect(
+      requestJson(`${bffBaseUrl}/api/skills/registry-service-skill/download`, { method: "POST" }),
+    ).resolves.toMatchObject({
+      status: 200,
+      body: {
+        ok: true,
+        skill: { id: "registry-service-skill", sourceType: "remote", status: "downloaded" },
+      },
+    });
+    expect(registryService.downloads).toEqual(["1.0.0"]);
   });
 
   it("proxies agent service SSE events", async () => {
