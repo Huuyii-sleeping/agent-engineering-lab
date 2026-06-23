@@ -50,3 +50,15 @@ export type RegistrySkillVersion = {
 export type RegistryIndex = {
   skills: RegistrySkillVersion[];
 };
+
+export type PublishSkillInput = {
+  package: SkillPackageInput;
+  source?: SkillRegistrySource;
+  publisher?: SkillPublisher;
+  rating?: number | null;
+  deprecated?: boolean;
+};
+
+export type SkillValidationResult =
+  | { ok: true; manifest: SkillManifest; files: SkillPackageFile[] }
+  | { ok: false; errors: string[] };

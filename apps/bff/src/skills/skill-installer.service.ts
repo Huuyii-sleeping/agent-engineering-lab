@@ -100,11 +100,16 @@ export class SkillInstallerService {
   /** Stores a validated custom skill package. */
   async uploadCustomSkill(input: SkillPackageInput): Promise<
     | { ok: true; skillPackage: ValidatedSkillPackage }
+    | { ok: true; skillPackage: ValidatedSkillPackage; publishedToRegistry: true }
     | { ok: false; code: string; message: string; errors: string[] }
   > {
     const validated = this.validator.validatePackage(input);
     if (!validated.ok) {
       return { ok: false, code: "SKILL_PACKAGE_INVALID", message: "skill package is invalid", errors: validated.errors };
+    }
+    const published = await this.skillStore.publishPackageToRegistry(input);
+    if (published) {
+      return { ok: true, skillPackage: validated.package, publishedToRegistry: true };
     }
     await this.skillStore.writePackage("custom", validated.package);
     const state = await this.readState();

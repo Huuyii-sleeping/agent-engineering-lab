@@ -47,3 +47,6 @@ apps/agent-cli/.team/
 apps/agent-cli/.transcripts/
 apps/agent-cli/.worktrees/
 apps/agent-cli/.sessions/
+
+# BFF runtime state
+apps/bff/.data/

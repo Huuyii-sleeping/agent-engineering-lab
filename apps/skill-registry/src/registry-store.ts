@@ -2,13 +2,16 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, normalize } from "node:path";
 import { packageDirectory, packageStoragePath, sha256Hex } from "./package-utils.js";
+import { validateSkillPackage } from "./package-validator.js";
 import type {
+  PublishSkillInput,
   RegistryIndex,
   RegistrySkillVersion,
   SkillManifest,
   SkillPackageInput,
   SkillPublisher,
   SkillRegistrySource,
+  SkillValidationResult,
 } from "./types.js";
 
 type RegistryStoreOptions = {
@@ -214,6 +217,31 @@ export class RegistryStore {
       .run(now, row.package_path);
     this.db.prepare("INSERT INTO download_events(skill_id, version, created_at) VALUES (?, ?, ?)").run(skillId, version ?? "", now);
     return readFileSync(row.package_path, "utf8");
+  }
+
+  publishPackage(input: PublishSkillInput, baseUrl: string): SkillValidationResult | { ok: true; skill: RegistrySkillVersion } {
+    const validated = validateSkillPackage(input.package);
+    if (!validated.ok) {
+      return validated;
+    }
+    const packageRaw = JSON.stringify({ files: validated.files });
+    const source = cleanSource(input.source ?? "private");
+    const publisher = cleanPublisher(input.publisher ?? { id: "local-user", name: "Local User", verified: false });
+    this.upsertPackage({
+      manifest: validated.manifest,
+      packageRaw,
+      source,
+      publisher,
+      packageSha256: sha256Hex(packageRaw),
+      deprecated: input.deprecated === true,
+      rating: cleanRating(input.rating),
+      downloads: 0,
+    });
+    const skill = this.getSkill(validated.manifest.id, baseUrl);
+    if (!skill) {
+      return { ok: false, errors: ["published skill was not found after storing"] };
+    }
+    return { ok: true, skill };
   }
 
   seedFromRegistry(registryUrl: string): void {

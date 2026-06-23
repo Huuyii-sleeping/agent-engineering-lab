@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { RegistryStore } from "./registry-store.js";
+import type { PublishSkillInput } from "./types.js";
 
 export type SkillRegistryServerOptions = {
   dbPath: string;
@@ -22,10 +23,19 @@ function routePath(req: IncomingMessage): URL {
   return new URL(req.url ?? "/", "http://127.0.0.1");
 }
 
+async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+  }
+  const raw = Buffer.concat(chunks).toString("utf8").trim();
+  return raw ? (JSON.parse(raw) as unknown) : {};
+}
+
 /** Create the standalone Skill Registry HTTP server. */
 export function createSkillRegistryHttpServer(options: SkillRegistryServerOptions): Server {
   const store = new RegistryStore(options);
-  const server = createServer((req, res) => {
+  const server = createServer(async (req, res) => {
     const url = routePath(req);
     const method = req.method ?? "GET";
 
@@ -62,6 +72,23 @@ export function createSkillRegistryHttpServer(options: SkillRegistryServerOption
         return;
       }
       writeJson(res, 200, { skill });
+      return;
+    }
+    if (method === "POST" && url.pathname === "/admin/publish") {
+      try {
+        const result = store.publishPackage((await readJsonBody(req)) as PublishSkillInput, baseUrl(req));
+        if (!result.ok) {
+          writeJson(res, 400, { ok: false, error: { code: "SKILL_PACKAGE_INVALID", message: "skill package is invalid", errors: result.errors } });
+          return;
+        }
+        if (!("skill" in result)) {
+          writeJson(res, 500, { ok: false, error: { code: "PUBLISH_FAILED", message: "published skill was not returned" } });
+          return;
+        }
+        writeJson(res, 201, { ok: true, skill: result.skill });
+      } catch (error) {
+        writeJson(res, 400, { ok: false, error: { code: "PUBLISH_FAILED", message: error instanceof Error ? error.message : String(error) } });
+      }
       return;
     }
 

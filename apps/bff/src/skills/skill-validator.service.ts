@@ -132,7 +132,18 @@ export class SkillValidatorService {
     } catch {
       errors.push("skill.json must be valid JSON");
     }
-    const metadataId = cleanText(metadata.id, id, 80);
+    const metadataId = cleanText(metadata.id, "", 80);
+    const name = cleanText(metadata.name, "", 80);
+    const version = cleanText(metadata.version, "", 40);
+    if (!metadataId) {
+      errors.push("skill.json id is required");
+    }
+    if (!name) {
+      errors.push("skill.json name is required");
+    }
+    if (!version) {
+      errors.push("skill.json version is required");
+    }
     if (metadataId !== id) {
       errors.push("skill.json id must match SKILL.md frontmatter name");
     }
@@ -142,12 +153,12 @@ export class SkillValidatorService {
 
     const manifest: SkillManifest = {
       id,
-      name: cleanText(metadata.name, id, 80),
+      name,
       description,
       summary: cleanText(metadata.summary, description, 220),
       category: cleanText(metadata.category, "未分类", 40),
       provider: cleanText(metadata.provider, "Local", 80),
-      version: cleanText(metadata.version, "0.0.0", 40),
+      version,
       runtime: cleanText(metadata.runtime, "Local runtime", 80),
       permissions: cleanStringList(metadata.permissions, 16, 40),
       updatedAt: cleanText(metadata.updatedAt, "", 32),

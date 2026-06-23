@@ -114,4 +114,97 @@ describe("skill registry service", () => {
     expect(nextIndex.skills[0].downloads).toBe(43);
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
+
+  it("publishes validated packages into the registry store", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "skill-registry-publish-test-"));
+    tempDirs.push(tempDir);
+    const server = createSkillRegistryHttpServer({
+      dbPath: join(tempDir, "registry.sqlite"),
+      packageRoot: join(tempDir, "packages"),
+    });
+    const baseUrl = await listen(server);
+    const skillPackage = {
+      files: [
+        {
+          path: "SKILL.md",
+          content: "---\nname: published-review\ndescription: Use when testing registry publishing.\n---\n\n# Published Review\n",
+        },
+        {
+          path: "skill.json",
+          content: JSON.stringify({
+            id: "published-review",
+            name: "发布评审",
+            summary: "通过 publish API 写入 registry。",
+            category: "发布",
+            provider: "Local Publisher",
+            version: "0.1.0",
+            runtime: "Skill runtime",
+            permissions: ["文档读取"],
+            updatedAt: "2026-06-23",
+            maturity: "beta",
+            tags: ["publish"],
+            entry: "SKILL.md",
+          }),
+        },
+      ],
+    };
+
+    const publishResponse = await fetch(`${baseUrl}/admin/publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        package: skillPackage,
+        source: "private",
+        publisher: { id: "local-user", name: "Local User", verified: false },
+      }),
+    });
+    await expect(publishResponse.json()).resolves.toMatchObject({
+      ok: true,
+      skill: {
+        id: "published-review",
+        source: "private",
+        publisher: { id: "local-user", name: "Local User", verified: false },
+        metadata: { name: "发布评审" },
+      },
+    });
+
+    const index = await fetch(`${baseUrl}/skills`).then((response) => response.json());
+    expect(index.skills.map((skill: { id: string }) => skill.id)).toContain("published-review");
+    const packageResponse = await fetch(`${baseUrl}/skills/published-review/download?version=0.1.0`, { method: "POST" });
+    await expect(packageResponse.json()).resolves.toEqual(skillPackage);
+
+    const invalidResponse = await fetch(`${baseUrl}/admin/publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        package: { files: [{ path: "scripts/run.sh", content: "echo nope" }] },
+      }),
+    });
+    expect(invalidResponse.status).toBe(400);
+    await expect(invalidResponse.json()).resolves.toMatchObject({
+      ok: false,
+      error: { code: "SKILL_PACKAGE_INVALID" },
+    });
+    const incompleteResponse = await fetch(`${baseUrl}/admin/publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        package: {
+          files: [
+            {
+              path: "SKILL.md",
+              content: "---\nname: incomplete-skill\ndescription: Use when testing incomplete metadata rejection.\n---\n",
+            },
+            { path: "skill.json", content: JSON.stringify({ id: "incomplete-skill" }) },
+          ],
+        },
+      }),
+    });
+    expect(incompleteResponse.status).toBe(400);
+    await expect(incompleteResponse.json()).resolves.toMatchObject({
+      ok: false,
+      error: { errors: expect.arrayContaining(["skill.json name is required", "skill.json version is required"]) },
+    });
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
 });

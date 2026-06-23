@@ -272,6 +272,9 @@ export class SkillRegistryService {
     if (!result.ok) {
       return { errors: result.errors };
     }
+    if ("publishedToRegistry" in result) {
+      await this.syncRemoteRegistry();
+    }
     const skill = await this.findSkill(result.skillPackage.manifest.id);
     return skill ?? { errors: ["uploaded skill was not found after storing"] };
   }

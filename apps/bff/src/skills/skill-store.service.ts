@@ -156,6 +156,29 @@ export class SkillStoreService {
     return this.remoteRegistryUrl;
   }
 
+  /** Publishes a custom package to the standalone registry service when configured. */
+  async publishPackageToRegistry(input: SkillPackageInput): Promise<RemoteSkillIndexItem | null> {
+    if (!this.registryServiceUrl) {
+      return null;
+    }
+    const response = await fetch(`${this.registryServiceUrl}/admin/publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        package: input,
+        source: "private",
+        publisher: { id: "local-user", name: "Local User", verified: false },
+      }),
+    });
+    const raw = await response.text();
+    const parsed = raw.trim() ? asObject(JSON.parse(raw) as unknown) : {};
+    if (!response.ok || parsed.ok === false) {
+      const error = asObject(parsed.error);
+      throw new Error(typeof error.message === "string" ? error.message : `failed to publish skill package: ${response.status}`);
+    }
+    return this.normalizeRemoteIndexItem(parsed.skill);
+  }
+
   /** Writes a validated package to the local downloaded/custom store. */
   async writePackage(sourceType: "remote" | "custom", skillPackage: ValidatedSkillPackage): Promise<void> {
     const packageRoot = join(this.skillDataRoot, sourceType, skillPackage.manifest.id, skillPackage.manifest.version);

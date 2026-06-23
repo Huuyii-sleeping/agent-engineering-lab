@@ -20,6 +20,10 @@ function sha256Hex(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
 
+function asObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
 function json(res: ServerResponse, statusCode: number, payload: unknown): void {
   res.statusCode = statusCode;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -195,6 +199,7 @@ async function startMockSkillRegistry(): Promise<{ registryUrl: string }> {
 
 async function startMockSkillRegistryService(): Promise<{ baseUrl: string; downloads: string[] }> {
   const downloads: string[] = [];
+  const published = new Map<string, { raw: string; skill: Record<string, unknown> }>();
   const servicePackage = {
     files: [
       {
@@ -222,7 +227,7 @@ async function startMockSkillRegistryService(): Promise<{ baseUrl: string; downl
     ],
   };
   const packageRaw = JSON.stringify(servicePackage);
-  const server = createServer((req, res) => {
+  const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
     const baseUrl = `http://${req.headers.host}`;
     if (req.method === "GET" && url.pathname === "/skills") {
@@ -250,8 +255,48 @@ async function startMockSkillRegistryService(): Promise<{ baseUrl: string; downl
               tags: ["registry-service"],
             },
           },
+          ...[...published.values()].map((item) => item.skill),
         ],
       });
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/admin/publish") {
+      const body = asObject(await readBody(req));
+      const skillPackage = asObject(body.package);
+      const files = Array.isArray(skillPackage.files) ? skillPackage.files : [];
+      const metadataFile = files.find((file) => asObject(file).path === "skill.json");
+      if (!metadataFile) {
+        json(res, 400, { ok: false, error: { code: "SKILL_PACKAGE_INVALID", message: "skill package is invalid" } });
+        return;
+      }
+      const metadata = JSON.parse(String(asObject(metadataFile).content)) as Record<string, unknown>;
+      const skillId = String(metadata.id);
+      const version = String(metadata.version);
+      const raw = JSON.stringify({ files });
+      const skill = {
+        id: skillId,
+        version,
+        packageUrl: `${baseUrl}/skills/${skillId}/download?version=${version}`,
+        packageSha256: sha256Hex(raw),
+        source: "private",
+        publisher: { id: "local-user", name: "Local User", verified: false },
+        downloads: 0,
+        rating: null,
+        deprecated: false,
+        metadata: {
+          name: metadata.name,
+          summary: metadata.summary,
+          category: metadata.category,
+          provider: metadata.provider,
+          runtime: metadata.runtime,
+          permissions: metadata.permissions,
+          updatedAt: metadata.updatedAt,
+          maturity: metadata.maturity,
+          tags: metadata.tags,
+        },
+      };
+      published.set(skillId, { raw, skill });
+      json(res, 201, { ok: true, skill });
       return;
     }
     if (req.method === "POST" && url.pathname === "/skills/registry-service-skill/download") {
@@ -259,6 +304,18 @@ async function startMockSkillRegistryService(): Promise<{ baseUrl: string; downl
       res.statusCode = 200;
       res.setHeader("Content-Type", "application/json; charset=utf-8");
       res.end(packageRaw);
+      return;
+    }
+    const publishedDownloadMatch = /^\/skills\/([^/]+)\/download$/.exec(url.pathname);
+    if (req.method === "POST" && publishedDownloadMatch) {
+      const item = published.get(decodeURIComponent(publishedDownloadMatch[1] ?? ""));
+      if (!item) {
+        json(res, 404, { ok: false, error: { code: "NOT_FOUND", message: url.pathname } });
+        return;
+      }
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.end(item.raw);
       return;
     }
     json(res, 404, { ok: false, error: { code: "NOT_FOUND", message: url.pathname } });
@@ -730,6 +787,27 @@ describe("bff server", () => {
       status: 400,
       body: { ok: false, error: { code: "SKILL_PACKAGE_INVALID" } },
     });
+    await expect(
+      requestJson(`${bffBaseUrl}/api/skills/upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          files: [
+            {
+              path: "SKILL.md",
+              content: "---\nname: incomplete-custom\ndescription: Use when testing incomplete custom metadata rejection.\n---\n",
+            },
+            { path: "skill.json", content: JSON.stringify({ id: "incomplete-custom" }) },
+          ],
+        }),
+      }),
+    ).resolves.toMatchObject({
+      status: 400,
+      body: {
+        ok: false,
+        error: { code: "SKILL_PACKAGE_INVALID", errors: expect.arrayContaining(["skill.json name is required", "skill.json version is required"]) },
+      },
+    });
   });
 
   it("rejects remote skill packages when packageSha256 does not match", async () => {
@@ -877,6 +955,72 @@ describe("bff server", () => {
       },
     });
     expect(registryService.downloads).toEqual(["1.0.0"]);
+  });
+
+  it("publishes custom uploads to the standalone registry service when configured", async () => {
+    const agent = await startMockAgent();
+    const registryService = await startMockSkillRegistryService();
+    const tempDir = await mkdtemp(join(tmpdir(), "agent-bff-registry-publish-"));
+    tempDirs.push(tempDir);
+    const bffBaseUrl = await startBff(agent.baseUrl, {
+      skillsRoot: join(tempDir, "empty-builtin"),
+      registryServiceUrl: registryService.baseUrl,
+    });
+    const skillPackage = {
+      files: [
+        {
+          path: "SKILL.md",
+          content:
+            "---\nname: published-bff-skill\ndescription: Use when testing BFF publishing to the registry service.\n---\n\n# Published BFF Skill\n",
+        },
+        {
+          path: "skill.json",
+          content: JSON.stringify({
+            id: "published-bff-skill",
+            name: "BFF 发布 Skill",
+            summary: "通过 BFF 上传并发布到 registry service。",
+            category: "发布",
+            provider: "BFF",
+            version: "0.1.0",
+            runtime: "Skill runtime",
+            permissions: ["服务读取"],
+            updatedAt: "2026-06-23",
+            maturity: "beta",
+            tags: ["publish"],
+            entry: "SKILL.md",
+          }),
+        },
+      ],
+    };
+
+    await expect(
+      requestJson(`${bffBaseUrl}/api/skills/upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(skillPackage),
+      }),
+    ).resolves.toMatchObject({
+      status: 201,
+      body: {
+        ok: true,
+        skill: {
+          id: "published-bff-skill",
+          sourceType: "remote",
+          registrySource: "private",
+          publisher: { id: "local-user", name: "Local User", verified: false },
+          status: "available",
+        },
+      },
+    });
+    await expect(requestJson(`${bffBaseUrl}/api/skills`)).resolves.toMatchObject({
+      status: 200,
+      body: {
+        ok: true,
+        skills: expect.arrayContaining([
+          expect.objectContaining({ id: "published-bff-skill", sourceType: "remote", status: "available" }),
+        ]),
+      },
+    });
   });
 
   it("proxies agent service SSE events", async () => {
