@@ -7,6 +7,8 @@ import type {
   RemoteSkillRegistry,
   SkillManifest,
   SkillPackageInput,
+  SkillPublisher,
+  SkillRegistrySource,
   SkillRegistryItem,
   SkillSourceType,
   SkillStatus,
@@ -17,6 +19,11 @@ import { SkillStoreService, type StoredSkillPackage, type SkillStoreOptions } fr
 export type SkillRegistryOptions = SkillStoreOptions;
 
 const remoteRegistryStoreKey = "skillRemoteRegistry";
+const localPublisher: SkillPublisher = {
+  id: "local-workspace",
+  name: "Local Workspace",
+  verified: true,
+};
 
 function compareVersion(left: string, right: string): number {
   const leftParts = left.split(".").map((part) => Number(part) || 0);
@@ -57,6 +64,12 @@ function registryItemFromPackage(
   return {
     ...skillPackage.manifest,
     sourceType: skillPackage.sourceType,
+    registrySource: "local",
+    publisher: localPublisher,
+    downloads: 0,
+    rating: null,
+    packageSha256: "",
+    deprecated: false,
     status: installedIds.has(skillPackage.manifest.id) ? "installed" : status,
     installed: installedIds.has(skillPackage.manifest.id),
     validationErrors,
@@ -67,10 +80,25 @@ function registryItemFromRemote(entry: RemoteSkillIndexItem, status: SkillStatus
   return {
     ...remoteManifest(entry),
     sourceType: "remote",
+    registrySource: entry.source,
+    publisher: entry.publisher,
+    downloads: entry.downloads,
+    rating: entry.rating,
+    packageSha256: entry.packageSha256,
+    deprecated: entry.deprecated,
     status,
     installed: false,
     validationErrors: [],
   };
+}
+
+function applyRemoteRegistryMetadata(local: SkillRegistryItem, entry: RemoteSkillIndexItem): void {
+  local.registrySource = entry.source;
+  local.publisher = entry.publisher;
+  local.downloads = entry.downloads;
+  local.rating = entry.rating;
+  local.packageSha256 = entry.packageSha256;
+  local.deprecated = entry.deprecated;
 }
 
 function remoteRegistrySettings(state: RemoteRegistryState): RemoteRegistrySettings {
@@ -87,7 +115,19 @@ function normalizeRemoteRegistryState(value: unknown, fallbackUrl: string): Remo
   const cached = record.cachedRegistry && typeof record.cachedRegistry === "object" && !Array.isArray(record.cachedRegistry)
     ? (record.cachedRegistry as Partial<RemoteSkillRegistry>)
     : {};
-  const skills = Array.isArray(cached.skills) ? cached.skills.filter((item): item is RemoteSkillIndexItem => Boolean(item)) : [];
+  const skills = Array.isArray(cached.skills)
+    ? cached.skills
+        .filter((item): item is RemoteSkillIndexItem => Boolean(item))
+        .map((item) => ({
+          ...item,
+          packageSha256: item.packageSha256 ?? "",
+          source: normalizeRegistrySource(item.source),
+          publisher: normalizePublisher(item.publisher),
+          downloads: normalizeDownloads(item.downloads),
+          rating: normalizeRating(item.rating),
+          deprecated: item.deprecated === true,
+        }))
+    : [];
   return {
     url: typeof record.url === "string" && record.url.trim() ? record.url.trim() : fallbackUrl,
     lastSyncedAt: typeof record.lastSyncedAt === "number" && Number.isFinite(record.lastSyncedAt) ? record.lastSyncedAt : null,
@@ -95,6 +135,30 @@ function normalizeRemoteRegistryState(value: unknown, fallbackUrl: string): Remo
     skillCount: typeof record.skillCount === "number" && Number.isFinite(record.skillCount) ? record.skillCount : skills.length,
     cachedRegistry: { skills },
   };
+}
+
+function normalizeRegistrySource(value: unknown): SkillRegistrySource {
+  return value === "official" || value === "verified" || value === "community" || value === "private" || value === "local"
+    ? value
+    : "community";
+}
+
+function normalizePublisher(value: unknown): SkillPublisher {
+  const record = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  const id = typeof record.id === "string" && record.id.trim() ? record.id.trim() : "unknown";
+  return {
+    id,
+    name: typeof record.name === "string" && record.name.trim() ? record.name.trim() : id,
+    verified: record.verified === true,
+  };
+}
+
+function normalizeDownloads(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+function normalizeRating(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? Math.min(5, Math.max(0, value)) : null;
 }
 
 /** Aggregates builtin, remote, custom, and lifecycle state for Skill Hub. */
@@ -179,6 +243,7 @@ export class SkillRegistryService {
       if (!local || local.sourceType !== "remote") {
         continue;
       }
+      applyRemoteRegistryMetadata(local, entry);
       if (compareVersion(entry.version, local.version) > 0 && local.status === "installed") {
         local.status = "updateAvailable";
       }

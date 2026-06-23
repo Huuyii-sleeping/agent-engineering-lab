@@ -33,3 +33,10 @@
 - [x] 6.2 BFF 提供读取配置、更新配置、主动同步远端 registry API
 - [x] 6.3 Web Skill Hub 提供远端地址配置和同步入口
 - [x] 6.4 测试覆盖 HTTP 远端 registry 同步流程
+
+## 7. Registry 市场元数据协议
+
+- [x] 7.1 Registry entry 支持 publisher、source、downloads、rating、deprecated、packageSha256 字段
+- [x] 7.2 BFF 下载远端 package 时校验 packageSha256
+- [x] 7.3 Web Skill Hub 展示发布者、可信来源、下载量、评分和 hash 状态
+- [x] 7.4 更新默认 registry 示例与单元测试

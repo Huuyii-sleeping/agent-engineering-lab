@@ -50,12 +50,16 @@ export class SkillsController {
   /** Downloads one remote skill into the local skill store. */
   @Post(":skillId/download")
   async downloadSkill(@Param("skillId") skillId: string, @Res() res: ServerResponse): Promise<void> {
-    const skill = await this.skillRegistryService.downloadSkill(skillId);
-    if (!skill) {
-      writeJson(res, 404, errorPayload("SKILL_NOT_FOUND", `skill ${skillId} was not found or could not be downloaded`));
-      return;
+    try {
+      const skill = await this.skillRegistryService.downloadSkill(skillId);
+      if (!skill) {
+        writeJson(res, 404, errorPayload("SKILL_NOT_FOUND", `skill ${skillId} was not found or could not be downloaded`));
+        return;
+      }
+      writeJson(res, 200, { ok: true, skill });
+    } catch (error) {
+      writeJson(res, 400, errorPayload("SKILL_DOWNLOAD_FAILED", error instanceof Error ? error.message : String(error)));
     }
-    writeJson(res, 200, { ok: true, skill });
   }
 
   /** Uploads a custom skill package after validation. */

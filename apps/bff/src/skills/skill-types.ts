@@ -4,6 +4,9 @@ export type SkillMaturity = "stable" | "beta";
 /** Where a skill entered the local Skill Hub from. */
 export type SkillSourceType = "builtin" | "remote" | "custom";
 
+/** Trust channel claimed by a registry entry or assigned by the local hub. */
+export type SkillRegistrySource = "official" | "verified" | "community" | "private" | "local";
+
 /** Lifecycle state for a skill package in the Skill Hub. */
 export type SkillStatus = "available" | "downloaded" | "installed" | "updateAvailable" | "invalid";
 
@@ -27,9 +30,22 @@ export type SkillManifest = {
 /** Skill registry item returned to the Web console. */
 export type SkillRegistryItem = SkillManifest & {
   sourceType: SkillSourceType;
+  registrySource: SkillRegistrySource;
+  publisher: SkillPublisher;
+  downloads: number;
+  rating: number | null;
+  packageSha256: string;
+  deprecated: boolean;
   status: SkillStatus;
   installed: boolean;
   validationErrors: string[];
+};
+
+/** Registry publisher identity displayed by Skill Hub. */
+export type SkillPublisher = {
+  id: string;
+  name: string;
+  verified: boolean;
 };
 
 /** One file inside a portable skill package. */
@@ -58,6 +74,12 @@ export type RemoteSkillIndexItem = {
   id: string;
   version: string;
   packageUrl: string;
+  packageSha256: string;
+  source: SkillRegistrySource;
+  publisher: SkillPublisher;
+  downloads: number;
+  rating: number | null;
+  deprecated: boolean;
   metadata: Partial<Omit<SkillManifest, "id" | "version" | "entry">> & {
     entry?: string;
   };

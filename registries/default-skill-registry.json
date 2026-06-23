@@ -4,6 +4,16 @@
       "id": "remote-prd-review",
       "version": "1.0.0",
       "packageUrl": "./remote-prd-review.package.json",
+      "packageSha256": "cc89a584d93f4294e1cf6f19914d728c5bc5616397542c246adf90660e43ce98",
+      "source": "official",
+      "publisher": {
+        "id": "agent-lab",
+        "name": "Agent Lab",
+        "verified": true
+      },
+      "downloads": 12830,
+      "rating": 4.8,
+      "deprecated": false,
       "metadata": {
         "name": "远端 PRD 评审",
         "description": "Use when an agent needs to review product requirement documents for completeness, ambiguity, risk, and implementation readiness.",

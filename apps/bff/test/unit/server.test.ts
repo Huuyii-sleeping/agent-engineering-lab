@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -14,6 +15,10 @@ type SeenRequest = {
 
 const servers: Server[] = [];
 const tempDirs: string[] = [];
+
+function sha256Hex(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
 
 function json(res: ServerResponse, statusCode: number, payload: unknown): void {
   res.statusCode = statusCode;
@@ -119,6 +124,33 @@ async function startMockAgent(): Promise<{ baseUrl: string; seen: SeenRequest[] 
 }
 
 async function startMockSkillRegistry(): Promise<{ registryUrl: string }> {
+  const remoteHttpPackage = {
+    files: [
+      {
+        path: "SKILL.md",
+        content:
+          "---\nname: remote-http\ndescription: Use when testing an HTTP backed remote registry skill.\n---\n\n# Remote HTTP\n",
+      },
+      {
+        path: "skill.json",
+        content: JSON.stringify({
+          id: "remote-http",
+          name: "HTTP 远端 Skill",
+          summary: "来自 HTTP registry 的 skill。",
+          category: "远端",
+          provider: "HTTP Registry",
+          version: "1.0.0",
+          runtime: "Skill runtime",
+          permissions: ["网络读取"],
+          updatedAt: "2026-06-23",
+          maturity: "stable",
+          tags: ["remote", "http"],
+          entry: "SKILL.md",
+        }),
+      },
+    ],
+  };
+  const remoteHttpPackageRaw = JSON.stringify(remoteHttpPackage);
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
     if (url.pathname === "/registry.json") {
@@ -128,6 +160,12 @@ async function startMockSkillRegistry(): Promise<{ registryUrl: string }> {
             id: "remote-http",
             version: "1.0.0",
             packageUrl: "./remote-http.package.json",
+            packageSha256: sha256Hex(remoteHttpPackageRaw),
+            source: "verified",
+            publisher: { id: "http-registry", name: "HTTP Registry", verified: true },
+            downloads: 2400,
+            rating: 4.6,
+            deprecated: false,
             metadata: {
               name: "HTTP 远端 Skill",
               summary: "来自 HTTP registry 的 skill。",
@@ -145,32 +183,9 @@ async function startMockSkillRegistry(): Promise<{ registryUrl: string }> {
       return;
     }
     if (url.pathname === "/remote-http.package.json") {
-      json(res, 200, {
-        files: [
-          {
-            path: "SKILL.md",
-            content:
-              "---\nname: remote-http\ndescription: Use when testing an HTTP backed remote registry skill.\n---\n\n# Remote HTTP\n",
-          },
-          {
-            path: "skill.json",
-            content: JSON.stringify({
-              id: "remote-http",
-              name: "HTTP 远端 Skill",
-              summary: "来自 HTTP registry 的 skill。",
-              category: "远端",
-              provider: "HTTP Registry",
-              version: "1.0.0",
-              runtime: "Skill runtime",
-              permissions: ["网络读取"],
-              updatedAt: "2026-06-23",
-              maturity: "stable",
-              tags: ["remote", "http"],
-              entry: "SKILL.md",
-            }),
-          },
-        ],
-      });
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.end(remoteHttpPackageRaw);
       return;
     }
     json(res, 404, { ok: false, error: { code: "NOT_FOUND", message: url.pathname } });
@@ -511,36 +526,33 @@ describe("bff server", () => {
     const packagePath = join(tempDir, "remote.package.json");
     const registryPath = join(tempDir, "registry.json");
     await mkdir(skillsRoot, { recursive: true });
-    await writeFile(
-      packagePath,
-      JSON.stringify({
-        files: [
-          {
-            path: "SKILL.md",
-            content:
-              "---\nname: remote-test\ndescription: Use when testing a remote skill package.\n---\n\n# Remote Test\n",
-          },
-          {
-            path: "skill.json",
-            content: JSON.stringify({
-              id: "remote-test",
-              name: "远端测试",
-              summary: "远端测试 skill。",
-              category: "远端",
-              provider: "Registry",
-              version: "1.0.0",
-              runtime: "Skill runtime",
-              permissions: ["测试"],
-              updatedAt: "2026-06-22",
-              maturity: "stable",
-              tags: ["remote"],
-              entry: "SKILL.md",
-            }),
-          },
-        ],
-      }),
-      "utf8",
-    );
+    const remotePackageRaw = JSON.stringify({
+      files: [
+        {
+          path: "SKILL.md",
+          content:
+            "---\nname: remote-test\ndescription: Use when testing a remote skill package.\n---\n\n# Remote Test\n",
+        },
+        {
+          path: "skill.json",
+          content: JSON.stringify({
+            id: "remote-test",
+            name: "远端测试",
+            summary: "远端测试 skill。",
+            category: "远端",
+            provider: "Registry",
+            version: "1.0.0",
+            runtime: "Skill runtime",
+            permissions: ["测试"],
+            updatedAt: "2026-06-22",
+            maturity: "stable",
+            tags: ["remote"],
+            entry: "SKILL.md",
+          }),
+        },
+      ],
+    });
+    await writeFile(packagePath, remotePackageRaw, "utf8");
     await writeFile(
       registryPath,
       JSON.stringify({
@@ -549,6 +561,11 @@ describe("bff server", () => {
             id: "remote-test",
             version: "1.0.0",
             packageUrl: packagePath,
+            packageSha256: sha256Hex(remotePackageRaw),
+            source: "official",
+            publisher: { id: "registry", name: "Registry", verified: true },
+            downloads: 1200,
+            rating: 4.7,
             metadata: { name: "远端测试", summary: "远端测试 skill。", category: "远端" },
           },
         ],
@@ -559,11 +576,34 @@ describe("bff server", () => {
 
     await expect(requestJson(`${bffBaseUrl}/api/skills`)).resolves.toMatchObject({
       status: 200,
-      body: { ok: true, skills: [{ id: "remote-test", sourceType: "remote", status: "available" }] },
+      body: {
+        ok: true,
+        skills: [
+          {
+            id: "remote-test",
+            sourceType: "remote",
+            registrySource: "official",
+            publisher: { id: "registry", name: "Registry", verified: true },
+            downloads: 1200,
+            rating: 4.7,
+            packageSha256: sha256Hex(remotePackageRaw),
+            status: "available",
+          },
+        ],
+      },
     });
     await expect(requestJson(`${bffBaseUrl}/api/skills/remote-test/download`, { method: "POST" })).resolves.toMatchObject({
       status: 200,
-      body: { ok: true, skill: { id: "remote-test", sourceType: "remote", status: "downloaded" } },
+      body: {
+        ok: true,
+        skill: {
+          id: "remote-test",
+          sourceType: "remote",
+          registrySource: "official",
+          downloads: 1200,
+          status: "downloaded",
+        },
+      },
     });
     await expect(requestJson(`${bffBaseUrl}/api/skills/remote-test/install`, { method: "POST" })).resolves.toMatchObject({
       status: 200,
@@ -615,6 +655,74 @@ describe("bff server", () => {
     ).resolves.toMatchObject({
       status: 400,
       body: { ok: false, error: { code: "SKILL_PACKAGE_INVALID" } },
+    });
+  });
+
+  it("rejects remote skill packages when packageSha256 does not match", async () => {
+    const agent = await startMockAgent();
+    const tempDir = await mkdtemp(join(tmpdir(), "agent-bff-skillhub-hash-"));
+    tempDirs.push(tempDir);
+    const skillsRoot = join(tempDir, "builtin");
+    const packagePath = join(tempDir, "remote.package.json");
+    const registryPath = join(tempDir, "registry.json");
+    await mkdir(skillsRoot, { recursive: true });
+    await writeFile(
+      packagePath,
+      JSON.stringify({
+        files: [
+          {
+            path: "SKILL.md",
+            content: "---\nname: remote-tampered\ndescription: Use when testing hash validation.\n---\n\n# Remote Tampered\n",
+          },
+          {
+            path: "skill.json",
+            content: JSON.stringify({
+              id: "remote-tampered",
+              name: "被篡改测试",
+              summary: "hash 校验测试。",
+              category: "远端",
+              provider: "Registry",
+              version: "1.0.0",
+              runtime: "Skill runtime",
+              permissions: ["测试"],
+              updatedAt: "2026-06-23",
+              maturity: "stable",
+              tags: ["remote"],
+              entry: "SKILL.md",
+            }),
+          },
+        ],
+      }),
+      "utf8",
+    );
+    await writeFile(
+      registryPath,
+      JSON.stringify({
+        skills: [
+          {
+            id: "remote-tampered",
+            version: "1.0.0",
+            packageUrl: packagePath,
+            packageSha256: "0".repeat(64),
+            source: "community",
+            publisher: { id: "registry", name: "Registry", verified: false },
+            metadata: { name: "被篡改测试", summary: "hash 校验测试。", category: "远端" },
+          },
+        ],
+      }),
+      "utf8",
+    );
+    const bffBaseUrl = await startBff(agent.baseUrl, { skillsRoot, remoteRegistryUrl: registryPath });
+
+    await expect(requestJson(`${bffBaseUrl}/api/skills/remote-tampered/download`, { method: "POST" })).resolves.toMatchObject({
+      status: 400,
+      body: {
+        ok: false,
+        error: {
+          code: "SKILL_DOWNLOAD_FAILED",
+          message: expect.stringContaining("hash mismatch"),
+        },
+      },
     });
   });
 

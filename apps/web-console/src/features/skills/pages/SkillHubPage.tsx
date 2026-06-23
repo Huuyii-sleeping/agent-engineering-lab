@@ -1,7 +1,9 @@
 import {
+  BadgeCheck,
   Check,
   Cloud,
   Download,
+  Hash,
   Layers3,
   PackageCheck,
   RefreshCw,
@@ -9,6 +11,7 @@ import {
   Search,
   ShieldCheck,
   SlidersHorizontal,
+  Star,
   Upload,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -45,7 +48,9 @@ export function SkillHubPage({
     const keyword = query.trim().toLowerCase();
     const matchesKeyword =
       !keyword ||
-      `${skill.name} ${skill.summary} ${skill.provider} ${skill.runtime} ${skill.tags.join(" ")}`.toLowerCase().includes(keyword);
+      `${skill.name} ${skill.summary} ${skill.provider} ${skill.publisher.name} ${skill.registrySource} ${skill.runtime} ${skill.tags.join(" ")}`
+        .toLowerCase()
+        .includes(keyword);
     const matchesCategory = activeCategory === allCategories || skill.category === activeCategory;
     const matchesLoaded = !showLoadedOnly || skill.installed;
     return matchesKeyword && matchesCategory && matchesLoaded;
@@ -66,6 +71,9 @@ export function SkillHubPage({
   }, [remoteRegistry?.url]);
 
   function actionLabel(skill: SkillRegistryItem): string {
+    if (skill.deprecated && skill.status === "available") {
+      return "已下架";
+    }
     if (skill.status === "available") {
       return "下载";
     }
@@ -76,6 +84,21 @@ export function SkillHubPage({
       return "不可用";
     }
     return "安装";
+  }
+
+  function sourceLabel(source: SkillRegistryItem["registrySource"]): string {
+    const labels: Record<SkillRegistryItem["registrySource"], string> = {
+      official: "Official",
+      verified: "Verified",
+      community: "Community",
+      private: "Private",
+      local: "Local",
+    };
+    return labels[source];
+  }
+
+  function compactNumber(value: number): string {
+    return new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 }).format(value);
   }
 
   function handleUpload(): void {
@@ -236,14 +259,31 @@ export function SkillHubPage({
                     <strong>{skill.maturity === "stable" ? "Stable" : "Beta"}</strong>
                   </div>
                   <div className="skillhub-card-top skillhub-card-source">
-                    <span>{skill.sourceType}</span>
-                    <strong>{skill.status}</strong>
+                    <span>{sourceLabel(skill.registrySource)}</span>
+                    <strong>{skill.deprecated ? "deprecated" : skill.status}</strong>
                   </div>
                   <div className="skillhub-card-title">
                     <h2>{skill.name}</h2>
-                    <span>{skill.provider}</span>
+                    <span>
+                      {skill.publisher.verified ? <BadgeCheck size={14} strokeWidth={2.4} aria-hidden="true" /> : null}
+                      {skill.publisher.name}
+                    </span>
                   </div>
                   <p>{skill.summary}</p>
+                  <div className="skillhub-market-meta" aria-label={`${skill.name} 市场指标`}>
+                    <span>
+                      <Download size={14} strokeWidth={2.2} aria-hidden="true" />
+                      {compactNumber(skill.downloads)}
+                    </span>
+                    <span>
+                      <Star size={14} strokeWidth={2.2} aria-hidden="true" />
+                      {skill.rating === null ? "暂无评分" : skill.rating.toFixed(1)}
+                    </span>
+                    <span>
+                      <Hash size={14} strokeWidth={2.2} aria-hidden="true" />
+                      {skill.packageSha256 ? "Hash verified" : "No hash"}
+                    </span>
+                  </div>
                   <div className="skillhub-card-spec">
                     <span>
                       <Layers3 size={14} strokeWidth={2.2} aria-hidden="true" />
@@ -263,7 +303,12 @@ export function SkillHubPage({
                     <span>v{skill.version}</span>
                     <span>{skill.updatedAt}</span>
                   </div>
-                  <button className="skillhub-action" type="button" onClick={() => onSkillAction(skill)}>
+                  <button
+                    className="skillhub-action"
+                    type="button"
+                    disabled={skill.deprecated && skill.status === "available"}
+                    onClick={() => onSkillAction(skill)}
+                  >
                     {skill.status === "available" ? (
                       <>
                         <Download size={16} strokeWidth={2.4} aria-hidden="true" />

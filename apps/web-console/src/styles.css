@@ -2525,8 +2525,8 @@ p {
   position: relative;
   display: grid;
   min-width: 0;
-  min-height: 344px;
-  grid-template-rows: auto auto auto auto minmax(28px, auto) auto auto;
+  min-height: 382px;
+  grid-template-rows: auto auto auto auto auto minmax(28px, auto) auto auto;
   gap: 11px;
   overflow: visible;
   border: 1px solid color-mix(in srgb, var(--skillhub-line) 86%, transparent);
@@ -2594,9 +2594,18 @@ p {
 }
 
 .skillhub-card-title span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 820;
+}
+
+.skillhub-card-title span svg {
+  flex: 0 0 auto;
+  color: var(--accent);
 }
 
 .skillhub-card p {
@@ -2608,6 +2617,36 @@ p {
   line-height: 1.58;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.skillhub-market-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.skillhub-market-meta span {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--skillhub-line) 70%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel-bg) 62%, transparent);
+  color: var(--text-soft);
+  padding: 0 7px;
+  font-size: 11px;
+  font-weight: 820;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skillhub-market-meta svg {
+  flex: 0 0 auto;
+  color: var(--text-muted);
 }
 
 .skillhub-card-spec {
@@ -2665,6 +2704,11 @@ p {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border-subtle));
   background: var(--accent);
   color: #062218;
+}
+
+.skillhub-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
 }
 
 .skillhub-empty {

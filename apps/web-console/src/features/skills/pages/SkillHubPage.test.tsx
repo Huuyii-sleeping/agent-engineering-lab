@@ -22,6 +22,12 @@ describe("SkillHubPage", () => {
             tags: ["code", "test", "repo"],
             entry: "SKILL.md",
             sourceType: "builtin",
+            registrySource: "local",
+            publisher: { id: "workspace", name: "Workspace", verified: true },
+            downloads: 0,
+            rating: null,
+            packageSha256: "",
+            deprecated: false,
             status: "installed",
             installed: true,
             validationErrors: [],
@@ -41,6 +47,12 @@ describe("SkillHubPage", () => {
             tags: ["build", "release"],
             entry: "SKILL.md",
             sourceType: "remote",
+            registrySource: "official",
+            publisher: { id: "release", name: "Release Registry", verified: true },
+            downloads: 2400,
+            rating: 4.6,
+            packageSha256: "a".repeat(64),
+            deprecated: false,
             status: "available",
             installed: false,
             validationErrors: [],
@@ -64,6 +76,11 @@ describe("SkillHubPage", () => {
     expect(html).toContain("Registry filters");
     expect(html).toContain("搜索 skill、来源或标签");
     expect(html).toContain("Local workspace");
+    expect(html).toContain("Release Registry");
+    expect(html).toContain("Official");
+    expect(html).toContain("2400");
+    expect(html).toContain("4.6");
+    expect(html).toContain("Hash verified");
     expect(html).toContain("文件读写 / 命令执行");
     expect(html).toContain("只看已安装");
     expect(html).toContain("Remote registry");

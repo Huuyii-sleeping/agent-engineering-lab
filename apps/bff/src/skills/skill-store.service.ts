@@ -1,12 +1,15 @@
 import { Injectable } from "@nestjs/common";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, normalize, resolve } from "node:path";
 import type {
   RemoteSkillIndexItem,
   RemoteSkillRegistry,
+  SkillRegistrySource,
   SkillPackageFile,
   SkillPackageInput,
+  SkillPublisher,
   SkillSourceType,
   ValidatedSkillPackage,
 } from "./skill-types.js";
@@ -44,6 +47,34 @@ function asObject(value: unknown): Record<string, unknown> {
 
 function isHttpUrl(value: string): boolean {
   return value.startsWith("http://") || value.startsWith("https://");
+}
+
+function cleanString(value: unknown, fallback: string, limit = 120): string {
+  return typeof value === "string" && value.trim() ? value.trim().slice(0, limit) : fallback;
+}
+
+function cleanNumber(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function cleanRegistrySource(value: unknown): SkillRegistrySource {
+  return value === "official" || value === "verified" || value === "community" || value === "private"
+    ? value
+    : "community";
+}
+
+function cleanPublisher(value: unknown): SkillPublisher {
+  const record = asObject(value);
+  const id = cleanString(record.id, "unknown", 80);
+  return {
+    id,
+    name: cleanString(record.name, id, 120),
+    verified: record.verified === true,
+  };
+}
+
+function sha256Hex(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex");
 }
 
 function safePackagePath(root: string, file: SkillPackageFile): string {
@@ -108,6 +139,10 @@ export class SkillStoreService {
   /** Reads a remote package JSON referenced by a registry index entry. */
   async readRemotePackage(entry: RemoteSkillIndexItem, remoteRegistryUrl = this.remoteRegistryUrl): Promise<SkillPackageInput> {
     const raw = await this.readText(this.resolvePackageUrl(entry.packageUrl, remoteRegistryUrl));
+    const actualSha256 = sha256Hex(raw);
+    if (entry.packageSha256 && entry.packageSha256 !== actualSha256) {
+      throw new Error(`skill package hash mismatch for ${entry.id}: expected ${entry.packageSha256}, got ${actualSha256}`);
+    }
     const parsed = asObject(JSON.parse(raw) as unknown);
     return { files: Array.isArray(parsed.files) ? (parsed.files as SkillPackageFile[]) : [] };
   }
@@ -212,10 +247,17 @@ export class SkillStoreService {
     if (typeof record.id !== "string" || typeof record.version !== "string" || typeof record.packageUrl !== "string") {
       return null;
     }
+    const rating = cleanNumber(record.rating, Number.NaN);
     return {
       id: record.id.trim(),
       version: record.version.trim(),
       packageUrl: record.packageUrl.trim(),
+      packageSha256: cleanString(record.packageSha256, "", 128),
+      source: cleanRegistrySource(record.source),
+      publisher: cleanPublisher(record.publisher),
+      downloads: Math.max(0, Math.floor(cleanNumber(record.downloads, 0))),
+      rating: Number.isFinite(rating) ? Math.min(5, Math.max(0, rating)) : null,
+      deprecated: record.deprecated === true,
       metadata: asObject(record.metadata),
     };
   }

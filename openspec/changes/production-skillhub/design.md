@@ -45,6 +45,16 @@ type SkillRegistryItem = {
   tags: string[];
   entry: "SKILL.md";
   sourceType: SkillSourceType;
+  registrySource: "official" | "verified" | "community" | "private" | "local";
+  publisher: {
+    id: string;
+    name: string;
+    verified: boolean;
+  };
+  downloads: number;
+  rating: number | null;
+  packageSha256: string;
+  deprecated: boolean;
   status: SkillStatus;
   installed: boolean;
   validationErrors: string[];
@@ -62,6 +72,16 @@ type SkillRegistryItem = {
       "id": "remote-prd-review",
       "version": "1.0.0",
       "packageUrl": "https://registry.example/remote-prd-review-1.0.0.json",
+      "packageSha256": "hex encoded sha256",
+      "source": "official",
+      "publisher": {
+        "id": "agent-lab",
+        "name": "Agent Lab",
+        "verified": true
+      },
+      "downloads": 12830,
+      "rating": 4.8,
+      "deprecated": false,
       "metadata": {}
     }
   ]
@@ -80,6 +100,18 @@ type SkillRegistryItem = {
 ```
 
 这个格式不是最终市场包格式，但它为后续 zip、签名、hash 校验保留了明确边界。
+
+Registry index 中的 `source` 表示发布渠道可信等级，不等同于本地 `sourceType`：
+
+- `official`：项目或平台官方维护。
+- `verified`：已验证发布者维护。
+- `community`：社区贡献，未必经过官方审核。
+- `private`：团队内部 registry。
+- `local`：本地或自定义上传。
+
+`downloads`、`rating`、`publisher` 来自 registry 后端或静态 index；静态 GitHub raw registry 可以展示这些字段，但真实下载量必须由 registry 服务端在下载接口或日志聚合中统计。
+
+`packageSha256` 为 package JSON 原始内容的 SHA-256。远端 entry 提供该字段时，BFF 下载 package 后必须校验 hash，不匹配则拒绝写入本地 store。
 
 ## BFF Design
 

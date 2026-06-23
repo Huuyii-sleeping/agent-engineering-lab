@@ -60,7 +60,14 @@ export type AgentProfileInput = Pick<
 
 /** Local skill registry item returned by the BFF Skill Hub APIs. */
 export type SkillSourceType = "builtin" | "remote" | "custom";
+export type SkillRegistrySource = "official" | "verified" | "community" | "private" | "local";
 export type SkillStatus = "available" | "downloaded" | "installed" | "updateAvailable" | "invalid";
+
+export type SkillPublisher = {
+  id: string;
+  name: string;
+  verified: boolean;
+};
 
 export type SkillRegistryItem = {
   id: string;
@@ -77,6 +84,12 @@ export type SkillRegistryItem = {
   tags: string[];
   entry: string;
   sourceType: SkillSourceType;
+  registrySource: SkillRegistrySource;
+  publisher: SkillPublisher;
+  downloads: number;
+  rating: number | null;
+  packageSha256: string;
+  deprecated: boolean;
   status: SkillStatus;
   installed: boolean;
   validationErrors: string[];
@@ -190,6 +203,27 @@ function cleanStringList(value: unknown, limit: number, itemLimit: number): stri
   ].slice(0, limit);
 }
 
+function cleanNumber(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function normalizeRegistrySource(value: unknown, sourceType: SkillSourceType): SkillRegistrySource {
+  if (value === "official" || value === "verified" || value === "community" || value === "private" || value === "local") {
+    return value;
+  }
+  return sourceType === "remote" ? "community" : "local";
+}
+
+function normalizePublisher(value: unknown, fallback: string): SkillPublisher {
+  const record = asObject(value);
+  const id = cleanText(record.id, fallback || "unknown").slice(0, 80);
+  return {
+    id,
+    name: cleanText(record.name, id).slice(0, 120),
+    verified: record.verified === true,
+  };
+}
+
 /** Normalize a user profile before it is displayed in the Web console. */
 export function normalizeUserProfile(value: unknown): UserProfile {
   const record = asObject(value);
@@ -234,6 +268,11 @@ export function normalizeAgentProfileInput(value: unknown): AgentProfileInput {
 export function normalizeSkillRegistryItem(value: unknown): SkillRegistryItem {
   const record = asObject(value);
   const id = cleanText(record.id, "").slice(0, 80);
+  const sourceType: SkillSourceType =
+    record.sourceType === "remote" || record.sourceType === "custom" || record.sourceType === "builtin"
+      ? record.sourceType
+      : "builtin";
+  const rating = cleanNumber(record.rating, Number.NaN);
   return {
     id,
     name: cleanText(record.name, id || "未命名 Skill").slice(0, 80),
@@ -248,10 +287,13 @@ export function normalizeSkillRegistryItem(value: unknown): SkillRegistryItem {
     maturity: record.maturity === "beta" ? "beta" : "stable",
     tags: cleanStringList(record.tags, 16, 40),
     entry: cleanText(record.entry, "SKILL.md").slice(0, 120),
-    sourceType:
-      record.sourceType === "remote" || record.sourceType === "custom" || record.sourceType === "builtin"
-        ? record.sourceType
-        : "builtin",
+    sourceType,
+    registrySource: normalizeRegistrySource(record.registrySource, sourceType),
+    publisher: normalizePublisher(record.publisher, cleanText(record.provider, "Local")),
+    downloads: Math.max(0, Math.floor(cleanNumber(record.downloads, 0))),
+    rating: Number.isFinite(rating) ? Math.min(5, Math.max(0, rating)) : null,
+    packageSha256: cleanOptionalText(record.packageSha256, 128),
+    deprecated: record.deprecated === true,
     status:
       record.status === "available" ||
       record.status === "downloaded" ||
