@@ -22,7 +22,6 @@ import {
   sendSessionMessageStream,
   syncSkillRegistry,
   uninstallSkill,
-  updateSkillRegistryUrl,
   updateProfile,
   uploadSkillPackage,
   defaultAgentProfileInput,
@@ -415,17 +414,6 @@ export function App() {
         const exists = current.some((skill) => skill.id === nextSkill.id);
         return exists ? current.map((skill) => (skill.id === nextSkill.id ? nextSkill : skill)) : [...current, nextSkill];
       });
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }
-
-  async function handleUpdateRemoteRegistryUrl(url: string): Promise<void> {
-    try {
-      const nextSettings = await updateSkillRegistryUrl(url);
-      setRemoteRegistrySettings(nextSettings);
-      await refreshSkills();
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -886,7 +874,6 @@ export function App() {
                 remoteRegistry={remoteRegistrySettings}
                 onSkillAction={(skill) => void handleSkillAction(skill)}
                 onSyncRemoteRegistry={() => void handleSyncRemoteRegistry()}
-                onUpdateRemoteRegistryUrl={(url) => void handleUpdateRemoteRegistryUrl(url)}
                 onUploadPackage={(input) => void handleUploadSkillPackage(input)}
               />
             )}

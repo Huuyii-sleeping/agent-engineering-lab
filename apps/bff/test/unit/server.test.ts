@@ -928,7 +928,17 @@ describe("bff server", () => {
 
     await expect(requestJson(`${bffBaseUrl}/api/skills/registry`)).resolves.toMatchObject({
       status: 200,
-      body: { ok: true, registry: { url: `${registryService.baseUrl}/skills` } },
+      body: { ok: true, registry: { url: `${registryService.baseUrl}/skills`, managedByService: true } },
+    });
+    await expect(
+      requestJson(`${bffBaseUrl}/api/skills/registry`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: "https://external.example.com/skills.json" }),
+      }),
+    ).resolves.toMatchObject({
+      status: 200,
+      body: { ok: true, registry: { url: `${registryService.baseUrl}/skills`, managedByService: true } },
     });
     await expect(requestJson(`${bffBaseUrl}/api/skills`)).resolves.toMatchObject({
       status: 200,

@@ -103,6 +103,7 @@ export type SkillPackageInput = {
 /** Remote Skill Registry connection settings returned by BFF. */
 export type RemoteRegistrySettings = {
   url: string;
+  managedByService: boolean;
   lastSyncedAt: number | null;
   lastSyncError: string;
   skillCount: number;
@@ -314,6 +315,7 @@ export function normalizeRemoteRegistrySettings(value: unknown): RemoteRegistryS
   const record = asObject(value);
   return {
     url: cleanOptionalText(record.url, 400),
+    managedByService: asBoolean(record.managedByService),
     lastSyncedAt: asNumber(record.lastSyncedAt),
     lastSyncError: cleanOptionalText(record.lastSyncError, 400),
     skillCount: Number(record.skillCount ?? 0),
@@ -562,16 +564,6 @@ export async function fetchSkills(): Promise<SkillRegistryItem[]> {
 /** Fetches the configured remote skill registry connection. */
 export async function fetchSkillRegistrySettings(): Promise<RemoteRegistrySettings> {
   const response = await requestJson<JsonObject>("/api/skills/registry");
-  return normalizeRemoteRegistrySettings(response.registry);
-}
-
-/** Updates the configured remote skill registry URL. */
-export async function updateSkillRegistryUrl(url: string): Promise<RemoteRegistrySettings> {
-  const response = await requestJson<JsonObject>("/api/skills/registry", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url }),
-  });
   return normalizeRemoteRegistrySettings(response.registry);
 }
 

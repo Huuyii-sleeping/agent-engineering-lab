@@ -101,9 +101,10 @@ function applyRemoteRegistryMetadata(local: SkillRegistryItem, entry: RemoteSkil
   local.deprecated = entry.deprecated;
 }
 
-function remoteRegistrySettings(state: RemoteRegistryState): RemoteRegistrySettings {
+function remoteRegistrySettings(state: RemoteRegistryState, managedByService: boolean): RemoteRegistrySettings {
   return {
     url: state.url,
+    managedByService,
     lastSyncedAt: state.lastSyncedAt,
     lastSyncError: state.lastSyncError,
     skillCount: state.cachedRegistry.skills.length || state.skillCount,
@@ -172,11 +173,14 @@ export class SkillRegistryService {
 
   /** Reads the current remote registry settings without exposing cached payloads. */
   async getRemoteRegistrySettings(): Promise<RemoteRegistrySettings> {
-    return remoteRegistrySettings(await this.readRemoteRegistryState());
+    return remoteRegistrySettings(await this.readRemoteRegistryState(), this.skillStore.isRegistryServiceManaged());
   }
 
   /** Saves a remote registry URL and resets the cached index until the next sync. */
   async updateRemoteRegistryUrl(url: string): Promise<RemoteRegistrySettings> {
+    if (this.skillStore.isRegistryServiceManaged()) {
+      return this.getRemoteRegistrySettings();
+    }
     const trimmed = url.trim();
     const nextState: RemoteRegistryState = {
       url: trimmed || this.skillStore.getDefaultRemoteRegistryUrl(),
@@ -186,7 +190,7 @@ export class SkillRegistryService {
       cachedRegistry: { skills: [] },
     };
     await this.writeRemoteRegistryState(nextState);
-    return remoteRegistrySettings(nextState);
+    return remoteRegistrySettings(nextState, false);
   }
 
   /** Fetches the configured remote registry and stores the latest index cache. */
@@ -202,7 +206,7 @@ export class SkillRegistryService {
         cachedRegistry: registry,
       };
       await this.writeRemoteRegistryState(nextState);
-      return remoteRegistrySettings(nextState);
+      return remoteRegistrySettings(nextState, this.skillStore.isRegistryServiceManaged());
     } catch (error) {
       const nextState: RemoteRegistryState = {
         ...state,
@@ -298,7 +302,17 @@ export class SkillRegistryService {
 
   private async readRemoteRegistryState(): Promise<RemoteRegistryState> {
     const fallbackUrl = this.skillStore.getDefaultRemoteRegistryUrl();
-    return normalizeRemoteRegistryState(await this.localStore.readSection(remoteRegistryStoreKey, {}), fallbackUrl);
+    const state = normalizeRemoteRegistryState(await this.localStore.readSection(remoteRegistryStoreKey, {}), fallbackUrl);
+    if (!this.skillStore.isRegistryServiceManaged() || state.url === fallbackUrl) {
+      return state;
+    }
+    return {
+      url: fallbackUrl,
+      lastSyncedAt: null,
+      lastSyncError: "",
+      skillCount: 0,
+      cachedRegistry: { skills: [] },
+    };
   }
 
   private async writeRemoteRegistryState(state: RemoteRegistryState): Promise<RemoteRegistryState> {

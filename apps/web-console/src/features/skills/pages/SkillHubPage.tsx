@@ -7,14 +7,13 @@ import {
   Layers3,
   PackageCheck,
   RefreshCw,
-  Save,
   Search,
   ShieldCheck,
   SlidersHorizontal,
   Star,
   Upload,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { RemoteRegistrySettings, SkillPackageInput, SkillRegistryItem } from "../../../api";
 
 const allCategories = "全部";
@@ -25,20 +24,17 @@ export function SkillHubPage({
   remoteRegistry,
   onSkillAction,
   onSyncRemoteRegistry,
-  onUpdateRemoteRegistryUrl,
   onUploadPackage,
 }: {
   skills: SkillRegistryItem[];
   remoteRegistry: RemoteRegistrySettings | null;
   onSkillAction: (skill: SkillRegistryItem) => void;
   onSyncRemoteRegistry: () => void;
-  onUpdateRemoteRegistryUrl: (url: string) => void;
   onUploadPackage: (input: SkillPackageInput) => void;
 }) {
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState(allCategories);
   const [showLoadedOnly, setShowLoadedOnly] = useState(false);
-  const [remoteRegistryUrl, setRemoteRegistryUrl] = useState(remoteRegistry?.url ?? "");
   const [customPackageText, setCustomPackageText] = useState("");
   const [customPackageError, setCustomPackageError] = useState<string | null>(null);
   const installedCount = skills.filter((skill) => skill.installed).length;
@@ -65,10 +61,6 @@ export function SkillHubPage({
         minute: "2-digit",
       }).format(remoteRegistry.lastSyncedAt)
     : "未同步";
-
-  useEffect(() => {
-    setRemoteRegistryUrl(remoteRegistry?.url ?? "");
-  }, [remoteRegistry?.url]);
 
   function actionLabel(skill: SkillRegistryItem): string {
     if (skill.deprecated && skill.status === "available") {
@@ -177,19 +169,15 @@ export function SkillHubPage({
             <PackageCheck size={16} strokeWidth={2.3} aria-hidden="true" />
             <span>只看已安装</span>
           </button>
-          <div className="skillhub-remote-panel" aria-label="Skill Registry 来源">
+          <div className="skillhub-remote-panel" aria-label="Docker Skill Registry">
             <div className="skillhub-panel-title">
               <Cloud size={15} strokeWidth={2.4} aria-hidden="true" />
-              <strong>Registry source</strong>
+              <strong>Docker Registry</strong>
             </div>
-            <label>
-              <span>Index or service URL</span>
-              <input
-                value={remoteRegistryUrl}
-                placeholder="http://127.0.0.1:3190/skills"
-                onChange={(event) => setRemoteRegistryUrl(event.currentTarget.value)}
-              />
-            </label>
+            <div className="skillhub-source-lock">
+              <span>{remoteRegistry?.managedByService ? "由本机 Docker registry service 托管" : "使用当前本地 registry 来源"}</span>
+              <code>{remoteRegistry?.url || "http://127.0.0.1:3190/skills"}</code>
+            </div>
             <div className="skillhub-remote-stats" aria-label="Registry 同步状态">
               <span>
                 <strong>{remoteRegistry?.skillCount ?? marketplaceCount}</strong>
@@ -210,17 +198,9 @@ export function SkillHubPage({
               </small>
             ) : null}
             <div className="skillhub-remote-actions">
-              <button
-                type="button"
-                disabled={remoteRegistryUrl.trim() === (remoteRegistry?.url ?? "")}
-                onClick={() => onUpdateRemoteRegistryUrl(remoteRegistryUrl)}
-              >
-                <Save size={14} strokeWidth={2.4} aria-hidden="true" />
-                <span>保存来源</span>
-              </button>
               <button type="button" onClick={onSyncRemoteRegistry}>
                 <RefreshCw size={14} strokeWidth={2.4} aria-hidden="true" />
-                <span>同步 Registry</span>
+                <span>刷新 Docker Registry</span>
               </button>
             </div>
           </div>

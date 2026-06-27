@@ -91,12 +91,13 @@ export type RemoteSkillRegistry = {
 
 export type RemoteRegistrySettings = {
   url: string;
+  managedByService: boolean;
   lastSyncedAt: number | null;
   lastSyncError: string;
   skillCount: number;
 };
 
-export type RemoteRegistryState = RemoteRegistrySettings & {
+export type RemoteRegistryState = Omit<RemoteRegistrySettings, "managedByService"> & {
   cachedRegistry: RemoteSkillRegistry;
 };
 

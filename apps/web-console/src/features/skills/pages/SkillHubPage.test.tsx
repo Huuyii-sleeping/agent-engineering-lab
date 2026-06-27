@@ -59,14 +59,14 @@ describe("SkillHubPage", () => {
           },
         ]}
         remoteRegistry={{
-          url: "https://registry.example.com/index.json",
+          url: "http://127.0.0.1:3190/skills",
+          managedByService: true,
           lastSyncedAt: 1782147600000,
           lastSyncError: "",
           skillCount: 7,
         }}
         onSkillAction={vi.fn()}
         onSyncRemoteRegistry={vi.fn()}
-        onUpdateRemoteRegistryUrl={vi.fn()}
         onUploadPackage={vi.fn()}
       />,
     );
@@ -83,9 +83,11 @@ describe("SkillHubPage", () => {
     expect(html).toContain("Hash verified");
     expect(html).toContain("文件读写 / 命令执行");
     expect(html).toContain("只看已安装");
-    expect(html).toContain("Registry source");
-    expect(html).toContain("https://registry.example.com/index.json");
-    expect(html).toContain("同步 Registry");
+    expect(html).toContain("Docker Registry");
+    expect(html).toContain("由本机 Docker registry service 托管");
+    expect(html).toContain("http://127.0.0.1:3190/skills");
+    expect(html).toContain("刷新 Docker Registry");
+    expect(html).not.toContain("保存来源");
     expect(html).toContain("已安装");
     expect(html).toContain("下载");
     expect(html).toContain("Private publish");

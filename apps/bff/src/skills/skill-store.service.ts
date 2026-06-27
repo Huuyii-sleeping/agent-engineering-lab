@@ -156,6 +156,11 @@ export class SkillStoreService {
     return this.remoteRegistryUrl;
   }
 
+  /** Returns whether registry reads are pinned to the standalone Docker registry service. */
+  isRegistryServiceManaged(): boolean {
+    return Boolean(this.registryServiceUrl);
+  }
+
   /** Publishes a custom package to the standalone registry service when configured. */
   async publishPackageToRegistry(input: SkillPackageInput): Promise<RemoteSkillIndexItem | null> {
     if (!this.registryServiceUrl) {
