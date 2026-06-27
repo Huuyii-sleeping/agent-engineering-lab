@@ -44,8 +44,6 @@ export function SkillHubPage({
   const [showLoadedOnly, setShowLoadedOnly] = useState(false);
   const [customPackageText, setCustomPackageText] = useState("");
   const [customPackageError, setCustomPackageError] = useState<string | null>(null);
-  const installedCount = skills.filter((skill) => skill.installed).length;
-  const localCount = skills.filter((skill) => skill.status !== "available").length;
   const categories = useMemo(() => [allCategories, ...new Set(skills.map((skill) => skill.category))], [skills]);
   const filteredSkills = skills.filter((skill) => {
     const keyword = query.trim().toLowerCase();
@@ -58,7 +56,6 @@ export function SkillHubPage({
     const matchesLoaded = !showLoadedOnly || skill.installed;
     return matchesKeyword && matchesCategory && matchesLoaded;
   });
-  const stableCount = skills.filter((skill) => skill.maturity === "stable").length;
 
   function actionLabel(skill: SkillRegistryItem): string {
     if (skill.deprecated && skill.status === "available") {
@@ -109,24 +106,6 @@ export function SkillHubPage({
           <span>Production Skill Hub</span>
           <h1>Skill Hub</h1>
           <p>统一管理可被 Agent 安装和绑定的能力包，覆盖官方、验证、社区、私有发布和本地内置来源。</p>
-        </div>
-        <div className="skillhub-meter" aria-label="Skill Hub 状态">
-          <span>
-            <strong>{skills.length}</strong>
-            <small>可用 Skill</small>
-          </span>
-          <span>
-            <strong>{localCount}</strong>
-            <small>已下载</small>
-          </span>
-          <span>
-            <strong>{installedCount}</strong>
-            <small>已安装</small>
-          </span>
-          <span>
-            <strong>{stableCount}</strong>
-            <small>稳定版</small>
-          </span>
         </div>
       </section>
 

@@ -2165,7 +2165,7 @@ p {
 .skillhub-hero {
   display: grid;
   min-height: 126px;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.52fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: 20px;
   border: 1px solid color-mix(in srgb, var(--skillhub-line) 84%, transparent);
@@ -2201,39 +2201,6 @@ p {
   color: color-mix(in srgb, var(--text-soft) 86%, var(--text-main));
   font-size: 14px;
   line-height: 1.62;
-}
-
-.skillhub-meter {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1px;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--skillhub-line) 82%, transparent);
-  border-radius: 8px;
-  background: var(--skillhub-line);
-}
-
-.skillhub-meter > span {
-  display: grid;
-  min-height: 82px;
-  align-content: center;
-  justify-items: start;
-  gap: 5px;
-  background: color-mix(in srgb, var(--chat-bg) 62%, var(--panel-bg));
-  padding: 14px;
-}
-
-.skillhub-meter strong {
-  color: var(--skillhub-ink);
-  font-size: 28px;
-  font-weight: 950;
-  line-height: 1;
-}
-
-.skillhub-meter small {
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 780;
 }
 
 .skillhub-workbench {
@@ -4365,10 +4332,6 @@ button.settings-row:hover {
   .skillhub-hero {
     grid-template-columns: minmax(0, 1fr);
     padding: 16px;
-  }
-
-  .skillhub-meter {
-    grid-template-columns: minmax(0, 1fr);
   }
 
   .skillhub-workbench {

@@ -64,7 +64,6 @@ describe("SkillHubPage", () => {
     );
 
     expect(html).toContain("Production Skill Hub");
-    expect(html).toContain("Skill Hub 状态");
     expect(html).toContain("Skill filters");
     expect(html).toContain("搜索 skill、来源或标签");
     expect(html).toContain("Local workspace");
