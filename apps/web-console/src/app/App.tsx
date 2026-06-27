@@ -14,7 +14,6 @@ import {
   fetchHealth,
   fetchProfile,
   fetchSkills,
-  fetchSkillRegistrySettings,
   fetchSession,
   fetchSessions,
   installSkill,
@@ -34,7 +33,6 @@ import {
   type SessionSummary,
   type SkillRegistryItem,
   type SkillPackageInput,
-  type RemoteRegistrySettings,
   type UserProfile,
 } from "../api";
 import { shouldReloadSessionFromAgentEvent } from "../chat-stream-state";
@@ -83,7 +81,6 @@ export function App() {
     typeof window === "undefined" ? readAgentBuilderConfig(null) : readAgentBuilderConfig(window.localStorage),
   );
   const [skillRegistry, setSkillRegistry] = useState<SkillRegistryItem[]>([]);
-  const [remoteRegistrySettings, setRemoteRegistrySettings] = useState<RemoteRegistrySettings | null>(null);
   const [agents, setAgents] = useState<AgentProfile[]>([]);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [agentDraft, setAgentDraft] = useState<AgentProfileInput>(defaultAgentProfileInput);
@@ -202,11 +199,8 @@ export function App() {
   }
 
   async function refreshSkills(): Promise<void> {
+    await syncSkillRegistry();
     setSkillRegistry(await fetchSkills());
-  }
-
-  async function refreshSkillRegistrySettings(): Promise<void> {
-    setRemoteRegistrySettings(await fetchSkillRegistrySettings());
   }
 
   async function loadSession(sessionId: string, options: { silent?: boolean } = {}): Promise<void> {
@@ -235,9 +229,8 @@ export function App() {
     const profileResult = refreshProfile();
     const agentResult = refreshAgentsSafely(true);
     const skillsResult = refreshSkills();
-    const registryResult = refreshSkillRegistrySettings();
     const runtimeResultsPromise = Promise.allSettled([refreshHealth(), refreshSessions(true)]);
-    const businessResultsPromise = Promise.allSettled([profileResult, agentResult, skillsResult, registryResult]);
+    const businessResultsPromise = Promise.allSettled([profileResult, agentResult, skillsResult]);
     const [runtimeResults, businessResults] = await Promise.all([runtimeResultsPromise, businessResultsPromise]);
     const failedRuntime = runtimeResults.find((result) => result.status === "rejected");
     const failedBusiness = businessResults.find((result) => result.status === "rejected");
@@ -417,18 +410,6 @@ export function App() {
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
-    }
-  }
-
-  async function handleSyncRemoteRegistry(): Promise<void> {
-    try {
-      const nextSettings = await syncSkillRegistry();
-      setRemoteRegistrySettings(nextSettings);
-      await refreshSkills();
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      await refreshSkillRegistrySettings();
     }
   }
 
@@ -871,9 +852,7 @@ export function App() {
             ) : (
               <SkillHubPage
                 skills={skillRegistry}
-                remoteRegistry={remoteRegistrySettings}
                 onSkillAction={(skill) => void handleSkillAction(skill)}
-                onSyncRemoteRegistry={() => void handleSyncRemoteRegistry()}
                 onUploadPackage={(input) => void handleUploadSkillPackage(input)}
               />
             )}

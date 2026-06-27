@@ -1,12 +1,11 @@
 import {
   BadgeCheck,
   Check,
-  Cloud,
+  CircleHelp,
   Download,
   Hash,
   Layers3,
   PackageCheck,
-  RefreshCw,
   Search,
   ShieldCheck,
   SlidersHorizontal,
@@ -14,22 +13,30 @@ import {
   Upload,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import type { RemoteRegistrySettings, SkillPackageInput, SkillRegistryItem } from "../../../api";
+import type { SkillPackageInput, SkillRegistryItem } from "../../../api";
 
 const allCategories = "全部";
+const skillPackageExample = `{
+  "files": [
+    {
+      "path": "SKILL.md",
+      "content": "---\\nname: my-skill\\ndescription: Use when this skill should run.\\n---\\n\\n# My Skill\\n"
+    },
+    {
+      "path": "skill.json",
+      "content": "{\\"id\\":\\"my-skill\\",\\"name\\":\\"My Skill\\",\\"version\\":\\"0.1.0\\"}"
+    }
+  ]
+}`;
 
 /** Render the local registry of skills that can be loaded into agents. */
 export function SkillHubPage({
   skills,
-  remoteRegistry,
   onSkillAction,
-  onSyncRemoteRegistry,
   onUploadPackage,
 }: {
   skills: SkillRegistryItem[];
-  remoteRegistry: RemoteRegistrySettings | null;
   onSkillAction: (skill: SkillRegistryItem) => void;
-  onSyncRemoteRegistry: () => void;
   onUploadPackage: (input: SkillPackageInput) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -52,15 +59,6 @@ export function SkillHubPage({
     return matchesKeyword && matchesCategory && matchesLoaded;
   });
   const stableCount = skills.filter((skill) => skill.maturity === "stable").length;
-  const marketplaceCount = skills.filter((skill) => skill.sourceType === "remote").length;
-  const lastSyncedAt = remoteRegistry?.lastSyncedAt
-    ? new Intl.DateTimeFormat("zh-CN", {
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-      }).format(remoteRegistry.lastSyncedAt)
-    : "未同步";
 
   function actionLabel(skill: SkillRegistryItem): string {
     if (skill.deprecated && skill.status === "available") {
@@ -169,45 +167,23 @@ export function SkillHubPage({
             <PackageCheck size={16} strokeWidth={2.3} aria-hidden="true" />
             <span>只看已安装</span>
           </button>
-          <div className="skillhub-remote-panel" aria-label="Docker Skill Registry">
-            <div className="skillhub-panel-title">
-              <Cloud size={15} strokeWidth={2.4} aria-hidden="true" />
-              <strong>Docker Registry</strong>
-            </div>
-            <div className="skillhub-source-lock">
-              <span>{remoteRegistry?.managedByService ? "由本机 Docker registry service 托管" : "使用当前本地 registry 来源"}</span>
-              <code>{remoteRegistry?.url || "http://127.0.0.1:3190/skills"}</code>
-            </div>
-            <div className="skillhub-remote-stats" aria-label="Registry 同步状态">
-              <span>
-                <strong>{remoteRegistry?.skillCount ?? marketplaceCount}</strong>
-                <small>Registry 索引</small>
-              </span>
-              <span>
-                <strong>{marketplaceCount}</strong>
-                <small>市场来源</small>
-              </span>
-              <span>
-                <strong>{lastSyncedAt}</strong>
-                <small>最近同步</small>
-              </span>
-            </div>
-            {remoteRegistry?.lastSyncError ? (
-              <small className="skillhub-remote-error" role="alert">
-                {remoteRegistry.lastSyncError}
-              </small>
-            ) : null}
-            <div className="skillhub-remote-actions">
-              <button type="button" onClick={onSyncRemoteRegistry}>
-                <RefreshCw size={14} strokeWidth={2.4} aria-hidden="true" />
-                <span>刷新 Docker Registry</span>
-              </button>
-            </div>
-          </div>
           <div className="skillhub-upload-panel" aria-label="发布私有 Skill">
-            <div className="skillhub-panel-title">
-              <Upload size={15} strokeWidth={2.4} aria-hidden="true" />
-              <strong>Private publish</strong>
+            <div className="skillhub-panel-title skillhub-panel-title--with-tooltip">
+              <span>
+                <Upload size={15} strokeWidth={2.4} aria-hidden="true" />
+                <strong>Private publish</strong>
+              </span>
+              <button
+                className="skillhub-tooltip-trigger"
+                type="button"
+                aria-describedby="skillhub-upload-format"
+                aria-label="查看上传标准格式"
+              >
+                <CircleHelp size={15} strokeWidth={2.4} aria-hidden="true" />
+              </button>
+              <pre className="skillhub-format-tooltip" id="skillhub-upload-format" role="tooltip">
+                {skillPackageExample}
+              </pre>
             </div>
             <textarea
               value={customPackageText}
