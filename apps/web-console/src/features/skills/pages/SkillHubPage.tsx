@@ -42,6 +42,7 @@ export function SkillHubPage({
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState(allCategories);
   const [showLoadedOnly, setShowLoadedOnly] = useState(false);
+  const [showUploadForm, setShowUploadForm] = useState(false);
   const [customPackageText, setCustomPackageText] = useState("");
   const [customPackageError, setCustomPackageError] = useState<string | null>(null);
   const categories = useMemo(() => [allCategories, ...new Set(skills.map((skill) => skill.category))], [skills]);
@@ -111,13 +112,24 @@ export function SkillHubPage({
 
       <section className="skillhub-workbench" aria-label="Skill 注册表">
         <aside className="skillhub-filter-panel" aria-label="Skill 筛选">
-          <div className="skillhub-filter-heading">
-            <SlidersHorizontal size={16} strokeWidth={2.3} aria-hidden="true" />
-            <strong>Skill filters</strong>
-          </div>
-          <div className="skillhub-search">
-            <Search size={16} strokeWidth={2.2} aria-hidden="true" />
-            <input value={query} placeholder="搜索 skill、来源或标签" onChange={(event) => setQuery(event.currentTarget.value)} />
+          <div className="skillhub-filter-topline">
+            <div className="skillhub-filter-heading">
+              <SlidersHorizontal size={16} strokeWidth={2.3} aria-hidden="true" />
+              <strong>Skill filters</strong>
+            </div>
+            <div className="skillhub-search">
+              <Search size={16} strokeWidth={2.2} aria-hidden="true" />
+              <input value={query} placeholder="搜索 skill、来源或标签" onChange={(event) => setQuery(event.currentTarget.value)} />
+            </div>
+            <button
+              className={`skillhub-loaded-toggle ${showLoadedOnly ? "skillhub-loaded-toggle--active" : ""}`}
+              type="button"
+              aria-pressed={showLoadedOnly}
+              onClick={() => setShowLoadedOnly((current) => !current)}
+            >
+              <PackageCheck size={16} strokeWidth={2.3} aria-hidden="true" />
+              <span>只看已安装</span>
+            </button>
           </div>
           <div className="skillhub-category-list" aria-label="Skill 分类">
             {categories.map((category) => (
@@ -137,15 +149,6 @@ export function SkillHubPage({
               </button>
             ))}
           </div>
-          <button
-            className={`skillhub-loaded-toggle ${showLoadedOnly ? "skillhub-loaded-toggle--active" : ""}`}
-            type="button"
-            aria-pressed={showLoadedOnly}
-            onClick={() => setShowLoadedOnly((current) => !current)}
-          >
-            <PackageCheck size={16} strokeWidth={2.3} aria-hidden="true" />
-            <span>只看已安装</span>
-          </button>
           <div className="skillhub-upload-panel" aria-label="发布私有 Skill">
             <div className="skillhub-panel-title skillhub-panel-title--with-tooltip">
               <span>
@@ -164,17 +167,30 @@ export function SkillHubPage({
                 {skillPackageExample}
               </pre>
             </div>
-            <textarea
-              value={customPackageText}
-              rows={8}
-              placeholder='{"files":[{"path":"SKILL.md","content":"---\\nname: my-skill\\ndescription: ..."},{"path":"skill.json","content":"{\"id\":\"my-skill\",\"name\":\"My Skill\",\"version\":\"0.1.0\"}"}]}'
-              onChange={(event) => setCustomPackageText(event.currentTarget.value)}
-            />
-            {customPackageError ? <small role="alert">{customPackageError}</small> : null}
-            <button type="button" disabled={!customPackageText.trim()} onClick={handleUpload}>
+            <button
+              className="skillhub-upload-toggle"
+              type="button"
+              aria-expanded={showUploadForm}
+              onClick={() => setShowUploadForm((current) => !current)}
+            >
               <Upload size={15} strokeWidth={2.3} aria-hidden="true" />
-              <span>发布 Skill</span>
+              <span>{showUploadForm ? "收起发布" : "上传 Skill"}</span>
             </button>
+            {showUploadForm ? (
+              <div className="skillhub-upload-form">
+                <textarea
+                  value={customPackageText}
+                  rows={6}
+                  placeholder='{"files":[{"path":"SKILL.md","content":"---\\nname: my-skill\\ndescription: ..."},{"path":"skill.json","content":"{\"id\":\"my-skill\",\"name\":\"My Skill\",\"version\":\"0.1.0\"}"}]}'
+                  onChange={(event) => setCustomPackageText(event.currentTarget.value)}
+                />
+                {customPackageError ? <small role="alert">{customPackageError}</small> : null}
+                <button className="skillhub-upload-submit" type="button" disabled={!customPackageText.trim()} onClick={handleUpload}>
+                  <Upload size={15} strokeWidth={2.3} aria-hidden="true" />
+                  <span>发布 Skill</span>
+                </button>
+              </div>
+            ) : null}
           </div>
         </aside>
 

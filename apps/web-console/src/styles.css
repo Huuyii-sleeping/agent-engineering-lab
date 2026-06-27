@@ -2222,17 +2222,21 @@ p {
 }
 
 .skillhub-filter-panel {
-  display: flex;
+  display: grid;
   min-height: 0;
-  flex-wrap: wrap;
+  gap: 12px;
+  overflow: visible;
+  padding: 14px;
+}
+
+.skillhub-filter-topline {
+  display: grid;
+  grid-template-columns: auto minmax(280px, 1fr) auto;
   align-items: center;
   gap: 10px;
-  overflow: visible;
-  padding: 12px;
 }
 
 .skillhub-filter-heading {
-  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2243,7 +2247,6 @@ p {
 
 .skillhub-search {
   display: grid;
-  flex: 1 1 240px;
   min-height: 38px;
   grid-template-columns: 24px minmax(0, 1fr);
   align-items: center;
@@ -2267,12 +2270,10 @@ p {
 .skillhub-category-list {
   display: flex;
   min-width: min(100%, 280px);
-  flex: 999 1 420px;
+  flex-wrap: wrap;
   gap: 7px;
-  overflow-x: auto;
-  padding-bottom: 1px;
-  scrollbar-color: var(--scrollbar-thumb) transparent;
-  scrollbar-width: thin;
+  border-top: 1px solid color-mix(in srgb, var(--skillhub-line) 46%, transparent);
+  padding-top: 10px;
 }
 
 .skillhub-category,
@@ -2311,7 +2312,6 @@ p {
 }
 
 .skillhub-loaded-toggle {
-  flex: 0 0 auto;
   justify-content: flex-start;
   border-color: color-mix(in srgb, var(--skillhub-line) 78%, transparent);
   margin-top: 0;
@@ -2320,14 +2320,13 @@ p {
 .skillhub-upload-panel {
   position: relative;
   display: grid;
-  flex: 1 0 100%;
-  grid-template-columns: minmax(146px, auto) minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
-  border: 1px solid color-mix(in srgb, var(--skillhub-line) 78%, transparent);
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--skillhub-line) 62%, transparent);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--chat-bg) 58%, var(--panel-bg));
-  padding: 10px;
+  background: color-mix(in srgb, var(--chat-bg) 42%, transparent);
+  padding: 10px 12px;
 }
 
 .skillhub-panel-title {
@@ -2353,7 +2352,8 @@ p {
 }
 
 .skillhub-tooltip-trigger,
-.skillhub-upload-panel button {
+.skillhub-upload-toggle,
+.skillhub-upload-submit {
   display: inline-flex;
   min-height: 34px;
   min-width: 0;
@@ -2406,24 +2406,36 @@ p {
   display: block;
 }
 
-.skillhub-upload-panel button:disabled {
+.skillhub-upload-toggle:disabled,
+.skillhub-upload-submit:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
 
-.skillhub-upload-panel button span {
+.skillhub-upload-toggle span,
+.skillhub-upload-submit span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.skillhub-upload-form {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--skillhub-line) 46%, transparent);
+  padding-top: 10px;
+}
+
 .skillhub-upload-panel textarea {
   width: 100%;
-  height: 38px;
-  min-height: 38px;
+  height: 96px;
+  min-height: 96px;
   min-width: 0;
-  resize: none;
+  resize: vertical;
   border: 1px solid color-mix(in srgb, var(--skillhub-line) 74%, transparent);
   border-radius: 8px;
   outline: 0;
@@ -2436,7 +2448,7 @@ p {
 }
 
 .skillhub-upload-panel small {
-  grid-column: 2 / -1;
+  grid-column: 1 / -1;
   color: var(--danger);
   font-size: 11px;
   line-height: 1.4;
@@ -4144,8 +4156,12 @@ button.settings-row:hover {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .skillhub-filter-panel {
-    align-items: flex-start;
+  .skillhub-filter-topline {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .skillhub-filter-heading {
+    grid-column: 1 / -1;
   }
 
   .agent-drafts-hero,
@@ -4379,21 +4395,16 @@ button.settings-row:hover {
     min-height: auto;
   }
 
-  .skillhub-filter-panel {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .skillhub-filter-heading,
-  .skillhub-search,
-  .skillhub-category-list,
-  .skillhub-loaded-toggle,
-  .skillhub-upload-panel {
-    flex: 0 0 auto;
-  }
-
-  .skillhub-upload-panel {
+  .skillhub-filter-topline,
+  .skillhub-upload-panel,
+  .skillhub-upload-form {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .skillhub-loaded-toggle,
+  .skillhub-upload-toggle,
+  .skillhub-upload-submit {
+    width: 100%;
   }
 
   .skillhub-upload-panel small {
