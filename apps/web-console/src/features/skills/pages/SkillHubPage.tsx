@@ -56,7 +56,7 @@ export function SkillHubPage({
     return matchesKeyword && matchesCategory && matchesLoaded;
   });
   const stableCount = skills.filter((skill) => skill.maturity === "stable").length;
-  const remoteCount = skills.filter((skill) => skill.sourceType === "remote").length;
+  const marketplaceCount = skills.filter((skill) => skill.sourceType === "remote").length;
   const lastSyncedAt = remoteRegistry?.lastSyncedAt
     ? new Intl.DateTimeFormat("zh-CN", {
         month: "2-digit",
@@ -116,9 +116,9 @@ export function SkillHubPage({
     <main className="skillhub-shell">
       <section className="skillhub-hero">
         <div>
-          <span>Skill registry</span>
+          <span>Production Skill Hub</span>
           <h1>Skill Hub</h1>
-          <p>管理本地 Agent 可加载的能力包，查看运行域、权限范围、版本和加载状态。</p>
+          <p>统一管理可被 Agent 安装和绑定的能力包，覆盖官方、验证、社区、私有发布和本地内置来源。</p>
         </div>
         <div className="skillhub-meter" aria-label="Skill Hub 状态">
           <span>
@@ -144,7 +144,7 @@ export function SkillHubPage({
         <aside className="skillhub-filter-panel" aria-label="Skill 筛选">
           <div className="skillhub-filter-heading">
             <SlidersHorizontal size={16} strokeWidth={2.3} aria-hidden="true" />
-            <strong>Registry filters</strong>
+            <strong>Skill filters</strong>
           </div>
           <div className="skillhub-search">
             <Search size={16} strokeWidth={2.2} aria-hidden="true" />
@@ -177,27 +177,27 @@ export function SkillHubPage({
             <PackageCheck size={16} strokeWidth={2.3} aria-hidden="true" />
             <span>只看已安装</span>
           </button>
-          <div className="skillhub-remote-panel" aria-label="远端 Skill Registry">
+          <div className="skillhub-remote-panel" aria-label="Skill Registry 来源">
             <div className="skillhub-panel-title">
               <Cloud size={15} strokeWidth={2.4} aria-hidden="true" />
-              <strong>Remote registry</strong>
+              <strong>Registry source</strong>
             </div>
             <label>
-              <span>Registry URL</span>
+              <span>Index or service URL</span>
               <input
                 value={remoteRegistryUrl}
-                placeholder="https://example.com/skills/index.json"
+                placeholder="http://127.0.0.1:3190/skills"
                 onChange={(event) => setRemoteRegistryUrl(event.currentTarget.value)}
               />
             </label>
-            <div className="skillhub-remote-stats" aria-label="远端同步状态">
+            <div className="skillhub-remote-stats" aria-label="Registry 同步状态">
               <span>
-                <strong>{remoteRegistry?.skillCount ?? remoteCount}</strong>
-                <small>远端索引</small>
+                <strong>{remoteRegistry?.skillCount ?? marketplaceCount}</strong>
+                <small>Registry 索引</small>
               </span>
               <span>
-                <strong>{remoteCount}</strong>
-                <small>当前列表</small>
+                <strong>{marketplaceCount}</strong>
+                <small>市场来源</small>
               </span>
               <span>
                 <strong>{lastSyncedAt}</strong>
@@ -216,29 +216,29 @@ export function SkillHubPage({
                 onClick={() => onUpdateRemoteRegistryUrl(remoteRegistryUrl)}
               >
                 <Save size={14} strokeWidth={2.4} aria-hidden="true" />
-                <span>保存地址</span>
+                <span>保存来源</span>
               </button>
               <button type="button" onClick={onSyncRemoteRegistry}>
                 <RefreshCw size={14} strokeWidth={2.4} aria-hidden="true" />
-                <span>同步索引</span>
+                <span>同步 Registry</span>
               </button>
             </div>
           </div>
-          <div className="skillhub-upload-panel" aria-label="上传自定义 Skill">
+          <div className="skillhub-upload-panel" aria-label="发布私有 Skill">
             <div className="skillhub-panel-title">
               <Upload size={15} strokeWidth={2.4} aria-hidden="true" />
-              <strong>Custom upload</strong>
+              <strong>Private publish</strong>
             </div>
             <textarea
               value={customPackageText}
               rows={8}
-              placeholder='{"files":[{"path":"SKILL.md","content":"---\\nname: my-skill\\ndescription: ..."}]}'
+              placeholder='{"files":[{"path":"SKILL.md","content":"---\\nname: my-skill\\ndescription: ..."},{"path":"skill.json","content":"{\"id\":\"my-skill\",\"name\":\"My Skill\",\"version\":\"0.1.0\"}"}]}'
               onChange={(event) => setCustomPackageText(event.currentTarget.value)}
             />
             {customPackageError ? <small role="alert">{customPackageError}</small> : null}
             <button type="button" disabled={!customPackageText.trim()} onClick={handleUpload}>
               <Upload size={15} strokeWidth={2.3} aria-hidden="true" />
-              <span>上传 Skill</span>
+              <span>发布 Skill</span>
             </button>
           </div>
         </aside>
