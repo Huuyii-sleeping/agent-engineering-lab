@@ -2140,6 +2140,7 @@ p {
 .skillhub-shell {
   --skillhub-line: color-mix(in srgb, var(--border-subtle) 68%, var(--text-muted) 10%);
   --skillhub-panel: color-mix(in srgb, var(--panel-bg) 86%, var(--chat-bg));
+  --skillhub-tab-separator: color-mix(in srgb, var(--text-muted) 34%, transparent);
   --skillhub-ink: var(--text-main);
   display: grid;
   min-width: 0;
@@ -2269,12 +2270,20 @@ p {
 
 .skillhub-category-list {
   display: flex;
-  min-width: min(100%, 280px);
-  flex-wrap: wrap;
-  column-gap: 0;
-  row-gap: 8px;
-  border-top: 1px solid color-mix(in srgb, var(--skillhub-line) 46%, transparent);
-  padding-top: 10px;
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  border: 1px solid color-mix(in srgb, var(--skillhub-tab-separator) 58%, transparent);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--panel-bg) 62%, transparent), transparent),
+    color-mix(in srgb, var(--chat-bg) 54%, var(--skillhub-panel));
+  padding: 3px;
+  scrollbar-width: none;
+}
+
+.skillhub-category-list::-webkit-scrollbar {
+  display: none;
 }
 
 .skillhub-category,
@@ -2282,7 +2291,7 @@ p {
   display: flex;
   min-height: 36px;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 8px;
   border: 1px solid transparent;
   border-radius: 8px;
@@ -2296,25 +2305,45 @@ p {
 
 .skillhub-category {
   position: relative;
-  flex: 0 0 auto;
-  min-width: 74px;
-  margin-right: 14px;
+  flex: 1 0 86px;
+  min-width: 86px;
+  border-radius: 6px;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
 }
 
-.skillhub-category:not(:last-child)::after {
-  position: absolute;
-  top: 9px;
-  right: -8px;
-  bottom: 9px;
-  width: 1px;
-  background: color-mix(in srgb, var(--skillhub-line) 68%, transparent);
-  content: "";
+.skillhub-category + .skillhub-category {
+  box-shadow: inset 1px 0 0 var(--skillhub-tab-separator);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.skillhub-category:has(+ .skillhub-category) {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
 }
 
 .skillhub-category small {
+  display: inline-grid;
+  min-width: 20px;
+  height: 20px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--skillhub-tab-separator) 74%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel-bg-strong) 44%, transparent);
   color: var(--text-muted);
-  font-size: 12px;
+  padding: 0 6px;
+  font-size: 11px;
   font-weight: 850;
+  line-height: 1;
+}
+
+.skillhub-category:hover {
+  background: color-mix(in srgb, var(--surface-hover) 58%, transparent);
+  color: var(--text-main);
 }
 
 .skillhub-category--active,
@@ -2322,6 +2351,24 @@ p {
   border-color: color-mix(in srgb, var(--accent) 38%, var(--skillhub-line));
   background: color-mix(in srgb, var(--accent-soft) 72%, transparent);
   color: var(--text-main);
+}
+
+.skillhub-category--active {
+  z-index: 1;
+  border-left-color: color-mix(in srgb, var(--accent) 42%, var(--skillhub-tab-separator));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 76%, transparent), transparent),
+    color-mix(in srgb, var(--surface-active) 70%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 14%, transparent),
+    0 8px 18px color-mix(in srgb, #000000 8%, transparent),
+    inset 0 -2px 0 color-mix(in srgb, var(--accent) 86%, transparent);
+}
+
+.skillhub-category--active small {
+  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
+  background: color-mix(in srgb, var(--accent-soft) 88%, var(--panel-bg));
+  color: color-mix(in srgb, var(--accent) 84%, var(--text-main));
 }
 
 .skillhub-loaded-toggle {
