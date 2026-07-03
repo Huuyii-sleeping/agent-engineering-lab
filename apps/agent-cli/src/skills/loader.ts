@@ -6,7 +6,32 @@ export type SkillMetadataValue = string | string[];
 
 export type SkillMetadata = Record<string, SkillMetadataValue>;
 
-export type SkillSourceType = "local" | "project" | "user" | "mcp" | "remote";
+export type SkillSourceType = "local" | "project" | "user" | "mcp" | "remote" | "custom";
+
+export type AgentSkillBinding = {
+  skillId: string;
+  version: string;
+  sourceType: "builtin" | "remote" | "custom";
+  registrySource: "official" | "verified" | "community" | "private" | "local";
+};
+
+export type AgentRuntimeSkillContext = {
+  id: string;
+  name: string;
+  skills: AgentSkillBinding[];
+};
+
+export type BoundSkillLoadIssue = {
+  skillId: string;
+  version: string;
+  sourceType: AgentSkillBinding["sourceType"];
+  code: "SKILL_PACKAGE_NOT_FOUND" | "SKILL_VERSION_MISMATCH" | "SKILL_PACKAGE_INVALID";
+  message: string;
+};
+
+export type BoundSkillResolution =
+  | { ok: true; skills: SkillDefinition[] }
+  | { ok: false; issues: BoundSkillLoadIssue[] };
 
 export type SkillExpansionOptions = {
   sessionId?: string;
@@ -62,6 +87,7 @@ export type SkillLoaderOptions = {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   roots?: string[];
+  skillHubRoots?: string[];
 };
 
 function stripQuotes(value: string): string {
@@ -128,6 +154,10 @@ function parseSkillRootsEnv(raw: string): string[] {
     .filter(Boolean);
 }
 
+function parseSkillHubRootsEnv(raw: string): string[] {
+  return parseSkillRootsEnv(raw);
+}
+
 function collectAncestorSkillRoots(cwd: string): string[] {
   const roots: string[] = [];
   let current = path.resolve(cwd);
@@ -151,6 +181,15 @@ export function resolveSkillRoots(options: SkillLoaderOptions = {}): string[] {
   const env = options.env ?? process.env;
   const envRoots = parseSkillRootsEnv(env.AGENT_SKILL_ROOTS?.trim() ?? "");
   return uniquePaths([...collectAncestorSkillRoots(cwd), ...envRoots]);
+}
+
+/** Resolves local SkillHub package roots from explicit options or AGENT_SKILLHUB_ROOTS. */
+export function resolveSkillHubRoots(options: SkillLoaderOptions = {}): string[] {
+  if (options.skillHubRoots && options.skillHubRoots.length > 0) {
+    return uniquePaths(options.skillHubRoots);
+  }
+  const env = options.env ?? process.env;
+  return uniquePaths(parseSkillHubRootsEnv(env.AGENT_SKILLHUB_ROOTS?.trim() ?? ""));
 }
 
 function listSkillFiles(root: string): string[] {
@@ -235,7 +274,8 @@ function deriveSourceType(metadata: SkillMetadata, root: string, cwd: string): S
     explicit === "project" ||
     explicit === "user" ||
     explicit === "mcp" ||
-    explicit === "remote"
+    explicit === "remote" ||
+    explicit === "custom"
   ) {
     return explicit;
   }
@@ -323,6 +363,62 @@ function toLoadedSkillDefinition(filePath: string, root: string, cwd: string): L
   };
 }
 
+function readPackageVersion(packageRoot: string): string {
+  try {
+    const raw = fs.readFileSync(path.join(packageRoot, "skill.json"), "utf8");
+    const parsed = JSON.parse(raw) as { version?: unknown };
+    return typeof parsed.version === "string" ? parsed.version.trim() : "";
+  } catch {
+    return "";
+  }
+}
+
+function toBoundSkillDefinition(
+  binding: AgentSkillBinding,
+  filePath: string,
+  root: string,
+  cwd: string,
+): BoundSkillResolution {
+  try {
+    const loaded = toLoadedSkillDefinition(filePath, root, cwd);
+    const skill = {
+      ...loaded,
+      sourceType: binding.sourceType === "builtin" ? loaded.sourceType : binding.sourceType,
+    };
+    const packageVersion = readPackageVersion(path.dirname(filePath));
+    const metadataVersion = metadataValueToString(getMetadataValue(skill.metadata, "version")) ?? "";
+    const resolvedVersion = packageVersion || metadataVersion;
+    if (binding.version && resolvedVersion !== binding.version) {
+      return {
+        ok: false,
+        issues: [
+          {
+            skillId: binding.skillId,
+            version: binding.version,
+            sourceType: binding.sourceType,
+            code: "SKILL_VERSION_MISMATCH",
+            message: `skill ${binding.skillId} is ${resolvedVersion || "(unknown)"}, not ${binding.version}`,
+          },
+        ],
+      };
+    }
+    return { ok: true, skills: [skill] };
+  } catch (error) {
+    return {
+      ok: false,
+      issues: [
+        {
+          skillId: binding.skillId,
+          version: binding.version,
+          sourceType: binding.sourceType,
+          code: "SKILL_PACKAGE_INVALID",
+          message: error instanceof Error ? error.message : String(error),
+        },
+      ],
+    };
+  }
+}
+
 function uniqueSkillsByName<T extends SkillSummary>(skills: T[]): T[] {
   const seenNames = new Set<string>();
   const results: T[] = [];
@@ -372,6 +468,86 @@ export function loadSkill(name: string, options: SkillLoaderOptions = {}): Skill
     return null;
   }
   return listSkills(options).find((skill) => skill.name.toLowerCase() === normalized) ?? null;
+}
+
+function packagePathForBinding(root: string, binding: AgentSkillBinding): string {
+  return path.join(root, binding.sourceType, binding.skillId, binding.version, "SKILL.md");
+}
+
+function resolveRemoteOrCustomBinding(binding: AgentSkillBinding, options: SkillLoaderOptions): BoundSkillResolution {
+  for (const root of resolveSkillHubRoots(options)) {
+    const filePath = packagePathForBinding(root, binding);
+    if (fs.existsSync(filePath)) {
+      return toBoundSkillDefinition(binding, filePath, root, options.cwd ?? process.cwd());
+    }
+  }
+  return {
+    ok: false,
+    issues: [
+      {
+        skillId: binding.skillId,
+        version: binding.version,
+        sourceType: binding.sourceType,
+        code: "SKILL_PACKAGE_NOT_FOUND",
+        message: `skill package not found: ${binding.sourceType}/${binding.skillId}/${binding.version}`,
+      },
+    ],
+  };
+}
+
+function resolveBuiltinBinding(binding: AgentSkillBinding, options: SkillLoaderOptions): BoundSkillResolution {
+  const skill = loadSkill(binding.skillId, options);
+  if (!skill) {
+    return {
+      ok: false,
+      issues: [
+        {
+          skillId: binding.skillId,
+          version: binding.version,
+          sourceType: binding.sourceType,
+          code: "SKILL_PACKAGE_NOT_FOUND",
+          message: `builtin skill not found: ${binding.skillId}`,
+        },
+      ],
+    };
+  }
+  const version = metadataValueToString(getMetadataValue(skill.metadata, "version")) ?? "";
+  if (binding.version && version !== binding.version) {
+    return {
+      ok: false,
+      issues: [
+        {
+          skillId: binding.skillId,
+          version: binding.version,
+          sourceType: binding.sourceType,
+          code: "SKILL_VERSION_MISMATCH",
+          message: `builtin skill ${binding.skillId} is ${version || "(unknown)"}, not ${binding.version}`,
+        },
+      ],
+    };
+  }
+  return { ok: true, skills: [skill] };
+}
+
+export function resolveBoundSkills(
+  context: AgentRuntimeSkillContext,
+  options: SkillLoaderOptions = {},
+): BoundSkillResolution {
+  const skills: SkillDefinition[] = [];
+  const issues: BoundSkillLoadIssue[] = [];
+  const bindingsById = new Map(context.skills.map((binding) => [binding.skillId, binding] as const));
+  for (const binding of bindingsById.values()) {
+    const resolved =
+      binding.sourceType === "builtin"
+        ? resolveBuiltinBinding(binding, options)
+        : resolveRemoteOrCustomBinding(binding, options);
+    if (resolved.ok) {
+      skills.push(...resolved.skills);
+    } else {
+      issues.push(...resolved.issues);
+    }
+  }
+  return issues.length ? { ok: false, issues } : { ok: true, skills: uniqueSkillsByName(skills) };
 }
 
 export function parseConfiguredSkillNames(env: NodeJS.ProcessEnv = process.env): {

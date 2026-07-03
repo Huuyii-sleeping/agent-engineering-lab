@@ -12,6 +12,8 @@ import {
   listSkills,
   loadSkill,
   parseConfiguredSkillNames,
+  resolveBoundSkills,
+  resolveSkillHubRoots,
   selectSkillsForContext,
   skillMatchesPaths,
   toPromptSkillCatalogBlocks,
@@ -37,6 +39,29 @@ describe("skills/loader", () => {
     const skillDir = path.join(root, name);
     fs.mkdirSync(skillDir, { recursive: true });
     fs.writeFileSync(path.join(skillDir, "SKILL.md"), body);
+  }
+
+  function writeSkillHubPackage(root: string, sourceType: "remote" | "custom", id: string, version: string, body: string): void {
+    const packageDir = path.join(root, sourceType, id, version);
+    fs.mkdirSync(packageDir, { recursive: true });
+    fs.writeFileSync(path.join(packageDir, "SKILL.md"), body);
+    fs.writeFileSync(
+      path.join(packageDir, "skill.json"),
+      JSON.stringify({
+        id,
+        name: id,
+        summary: "Test skill.",
+        category: "test",
+        provider: "test",
+        version,
+        runtime: "local",
+        permissions: [],
+        updatedAt: "2026-07-03",
+        maturity: "stable",
+        tags: [],
+        entry: "SKILL.md",
+      }),
+    );
   }
 
   it("discovers skill files and parses frontmatter metadata", () => {
@@ -108,6 +133,58 @@ describe("skills/loader", () => {
     expect(configured.selected).toHaveLength(1);
     expect(loadSkill("review", { roots: [root] })?.content).toContain("Review the current code.");
     expect(toPromptSkillBlocks(configured.selected)[0]).toContain("### apply-change");
+  });
+
+  it("resolves version-bound SkillHub packages from configured roots", () => {
+    const root = createSkillRoot();
+    writeSkillHubPackage(
+      root,
+      "remote",
+      "remote-review",
+      "1.2.0",
+      ["---", "name: remote-review", "description: Review remotely.", "source: remote", "---", "Use exact remote version."].join("\n"),
+    );
+
+    const resolved = resolveBoundSkills(
+      {
+        id: "agent-1",
+        name: "Agent",
+        skills: [{ skillId: "remote-review", version: "1.2.0", sourceType: "remote", registrySource: "official" }],
+      },
+      { skillHubRoots: [root] },
+    );
+
+    expect(resolveSkillHubRoots({ env: { AGENT_SKILLHUB_ROOTS: root } })).toEqual([root]);
+    expect(resolved).toMatchObject({
+      ok: true,
+      skills: [{ name: "remote-review", sourceType: "remote", content: "Use exact remote version." }],
+    });
+  });
+
+  it("reports structured issues for missing bound SkillHub packages", () => {
+    const root = createSkillRoot();
+
+    const resolved = resolveBoundSkills(
+      {
+        id: "agent-1",
+        name: "Agent",
+        skills: [{ skillId: "missing-skill", version: "1.0.0", sourceType: "remote", registrySource: "official" }],
+      },
+      { skillHubRoots: [root] },
+    );
+
+    expect(resolved).toEqual({
+      ok: false,
+      issues: [
+        {
+          skillId: "missing-skill",
+          version: "1.0.0",
+          sourceType: "remote",
+          code: "SKILL_PACKAGE_NOT_FOUND",
+          message: "skill package not found: remote/missing-skill/1.0.0",
+        },
+      ],
+    });
   });
 
   it("tracks configured skill summaries without loading full content", () => {

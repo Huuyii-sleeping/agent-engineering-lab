@@ -74,7 +74,7 @@ export class QueryEngine {
         const modelResult = await requestQueryModel({
           client: this.client,
           model: this.model,
-          promptSource: this.promptSource,
+          promptSource: opts.promptSource ?? this.promptSource,
           tools,
           messages: opts.messages,
           runtimeState: opts.runtimeState,

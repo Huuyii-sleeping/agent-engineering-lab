@@ -1,5 +1,5 @@
 import type OpenAI from "openai";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
@@ -9,7 +9,7 @@ import { AgentService, createAgentHttpServer } from "../../src/service-api/index
 import { AgentHost } from "../../src/host/agent-host.js";
 import type { DeliveryServiceLike } from "../../src/services/delivery-service.js";
 import type { HookServiceLike } from "../../src/services/hook-service.js";
-import type { AgentRuntimeState } from "../../src/agent-loop.js";
+import type { QueryEngineRunInput } from "../../src/agent-loop.js";
 import type { MemoryServiceLike } from "../../src/services/memory-service.js";
 import type { ModelPolicyServiceLike } from "../../src/services/model-policy-service.js";
 import type { ObservabilityServiceLike } from "../../src/services/observability-service.js";
@@ -33,13 +33,11 @@ async function withAuditWorkspace(): Promise<void> {
   process.chdir(tempDir);
 }
 
-function createLoopRunner() {
+function createLoopRunner(onRun?: (input: QueryEngineRunInput) => void) {
   return {
-    run: async ({ messages, runtimeState, onAssistantDelta }: {
-      messages: ChatCompletionMessageParam[];
-      runtimeState: AgentRuntimeState;
-      onAssistantDelta?: (delta: string) => void | Promise<void>;
-    }): Promise<void> => {
+    run: async (input: QueryEngineRunInput): Promise<void> => {
+      onRun?.(input);
+      const { messages, runtimeState, onAssistantDelta } = input;
       const latestUser = [...messages].reverse().find((item) => item.role === "user");
       await onAssistantDelta?.("reply:");
       await onAssistantDelta?.(runtimeState.sessionId);
@@ -51,6 +49,35 @@ function createLoopRunner() {
       });
     },
   };
+}
+
+async function writeSkillHubPackage(
+  root: string,
+  sourceType: "remote" | "custom",
+  id: string,
+  version: string,
+  body: string,
+): Promise<void> {
+  const packageDir = path.join(root, sourceType, id, version);
+  await mkdir(packageDir, { recursive: true });
+  await writeFile(path.join(packageDir, "SKILL.md"), body);
+  await writeFile(
+    path.join(packageDir, "skill.json"),
+    JSON.stringify({
+      id,
+      name: id,
+      summary: "Test skill.",
+      category: "test",
+      provider: "test",
+      version,
+      runtime: "local",
+      permissions: [],
+      updatedAt: "2026-07-03",
+      maturity: "stable",
+      tags: [],
+      entry: "SKILL.md",
+    }),
+  );
 }
 
 function createToolService(overrides: Partial<ToolServiceLike> = {}): ToolServiceLike {
@@ -338,6 +365,7 @@ function openPostEventStream(
 
 afterEach(async () => {
   delete process.env.MODEL_ID;
+  delete process.env.AGENT_SKILLHUB_ROOTS;
   if (previousCwd) {
     process.chdir(previousCwd);
     previousCwd = "";
@@ -688,12 +716,12 @@ describe("agent service", () => {
     const firstAgent = {
       id: "agent-alpha",
       name: "Alpha Agent",
-      skills: [{ skillId: "code-workspace", version: "1.2.0", sourceType: "builtin", registrySource: "local" }],
+      skills: [],
     };
     const nextAgent = {
       id: "agent-beta",
       name: "Beta Agent",
-      skills: [{ skillId: "quality-gate", version: "0.9.0", sourceType: "builtin", registrySource: "local" }],
+      skills: [],
     };
 
     const created = await requestServer(server, "POST", "/sessions", { agent: firstAgent });
@@ -728,6 +756,117 @@ describe("agent service", () => {
       ok: true,
       session: { id: sessionId, agent: nextAgent },
     });
+  });
+
+  it("injects version-bound agent skills into the query prompt source", async () => {
+    const skillHubRoot = await mkdtemp(path.join(tmpdir(), "agent-service-skillhub-"));
+    tempDir = skillHubRoot;
+    process.env.AGENT_SKILLHUB_ROOTS = skillHubRoot;
+    await writeSkillHubPackage(
+      skillHubRoot,
+      "remote",
+      "remote-review",
+      "1.2.0",
+      [
+        "---",
+        "name: remote-review",
+        "description: Review remotely.",
+        "---",
+        "",
+        "Use exact remote version for ${SESSION_ID}.",
+      ].join("\n"),
+    );
+    const runInputs: QueryEngineRunInput[] = [];
+    const service = new AgentService({
+      client: {} as OpenAI,
+      model: "fake-model",
+      promptSource: { ...PROMPT_SOURCE, skills: ["global skill should be replaced"] },
+      toolService: createToolService(),
+      deliveryService: createDeliveryService(),
+      hookService: createHookService(),
+      memoryService: createMemoryService(),
+      modelPolicyService: createModelPolicyService(),
+      observabilityService: createObservabilityService(),
+      queryEngine: createLoopRunner((input) => runInputs.push(input)),
+    });
+    const session = service.createSession({
+      id: "agent-alpha",
+      name: "Alpha Agent",
+      skills: [{ skillId: "remote-review", version: "1.2.0", sourceType: "remote", registrySource: "official" }],
+    });
+
+    const result = await service.chat({ session_id: session.id, message: "use skill" });
+
+    expect(result.ok).toBe(true);
+    expect(runInputs).toHaveLength(1);
+    expect(runInputs[0]?.promptSource?.skills).toHaveLength(1);
+    expect(runInputs[0]?.promptSource?.skills[0]).toContain("### remote-review");
+    expect(runInputs[0]?.promptSource?.skills[0]).toContain(`Use exact remote version for ${session.id}.`);
+    expect(runInputs[0]?.promptSource?.skills[0]).not.toContain("global skill should be replaced");
+  });
+
+  it("returns a structured error and skips the query runtime when a bound skill is missing", async () => {
+    const runInputs: QueryEngineRunInput[] = [];
+    const service = new AgentService({
+      client: {} as OpenAI,
+      model: "fake-model",
+      promptSource: PROMPT_SOURCE,
+      toolService: createToolService(),
+      deliveryService: createDeliveryService(),
+      hookService: createHookService(),
+      memoryService: createMemoryService(),
+      modelPolicyService: createModelPolicyService(),
+      observabilityService: createObservabilityService(),
+      queryEngine: createLoopRunner((input) => runInputs.push(input)),
+    });
+    const session = service.createSession({
+      id: "agent-alpha",
+      name: "Alpha Agent",
+      skills: [{ skillId: "missing-skill", version: "1.0.0", sourceType: "remote", registrySource: "official" }],
+    });
+
+    const result = await service.chat({ session_id: session.id, message: "use missing skill" });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: "AGENT_SKILL_LOAD_FAILED",
+        details: [
+          {
+            skillId: "missing-skill",
+            version: "1.0.0",
+            sourceType: "remote",
+            code: "SKILL_PACKAGE_NOT_FOUND",
+          },
+        ],
+      },
+      session: { id: session.id },
+    });
+    expect(runInputs).toEqual([]);
+  });
+
+  it("keeps the global prompt source when chat has no agent context", async () => {
+    const runInputs: QueryEngineRunInput[] = [];
+    const promptSource = { ...PROMPT_SOURCE, skills: ["global skill stays active"] };
+    const service = new AgentService({
+      client: {} as OpenAI,
+      model: "fake-model",
+      promptSource,
+      toolService: createToolService(),
+      deliveryService: createDeliveryService(),
+      hookService: createHookService(),
+      memoryService: createMemoryService(),
+      modelPolicyService: createModelPolicyService(),
+      observabilityService: createObservabilityService(),
+      queryEngine: createLoopRunner((input) => runInputs.push(input)),
+    });
+    const session = service.createSession();
+
+    const result = await service.chat({ session_id: session.id, message: "no agent" });
+
+    expect(result.ok).toBe(true);
+    expect(runInputs).toHaveLength(1);
+    expect(runInputs[0]?.promptSource).toMatchObject({ skills: ["global skill stays active"] });
   });
 
   it("replays buffered events before continuing live /events delivery", async () => {

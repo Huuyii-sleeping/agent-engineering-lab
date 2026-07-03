@@ -297,19 +297,35 @@ export async function runHarnessServiceSessionResumeScenario(): Promise<ServiceS
   const steps: HarnessAgentScenarioStepResult[] = [];
   let failedStep: string | null = null;
 
-  await withHarnessWorkspace({ name: SCENARIO_NAME }, async (workspace) => {
-    try {
-      await runServiceSessionResumeAssertions(workspace.root);
-      steps.push({ name: "service session resume", status: "passed" });
-    } catch (error) {
-      failedStep = "service session resume";
-      steps.push({
-        name: "service session resume",
-        status: "failed",
-        message: error instanceof Error ? error.message : String(error),
-      });
-    }
-  });
+  await withHarnessWorkspace(
+    {
+      name: SCENARIO_NAME,
+      files: {
+        [".codex/skills/code-workspace/SKILL.md"]: [
+          "---",
+          "name: code-workspace",
+          "description: Harness workspace coding skill.",
+          "version: 1.2.0",
+          "---",
+          "",
+          "Use the harness workspace skill.",
+        ].join("\n"),
+      },
+    },
+    async (workspace) => {
+      try {
+        await runServiceSessionResumeAssertions(workspace.root);
+        steps.push({ name: "service session resume", status: "passed" });
+      } catch (error) {
+        failedStep = "service session resume";
+        steps.push({
+          name: "service session resume",
+          status: "failed",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    },
+  );
 
   return {
     name: SCENARIO_NAME,

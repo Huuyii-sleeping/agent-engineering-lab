@@ -37,6 +37,7 @@ export type QueryLoopOptions = {
 export type QueryEngineRunInput = {
   tools?: ChatCompletionTool[];
   messages: ChatCompletionMessageParam[];
+  promptSource?: StaticPromptSource;
   runtimeState: AgentRuntimeState;
   includeScheduledNotifications?: boolean;
   onAssistantDelta?: (delta: string) => void | Promise<void>;

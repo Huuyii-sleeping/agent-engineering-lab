@@ -14,6 +14,7 @@ import {
 } from "./sessions.js";
 import { runUserQuery } from "../runtime/query-runtime.js";
 import type { NotificationServiceLike, RuntimeCoordinationServiceLike } from "../services/index.js";
+import { resolveBoundSkills, toPromptSkillBlocks } from "../skills/loader.js";
 
 export type AgentServiceDeps = AgentAppRuntimeDeps;
 
@@ -252,6 +253,22 @@ export class AgentService {
     if (agent) {
       session.agent = agent;
     }
+    const promptSource = { ...this.promptSource };
+    if (session.agent) {
+      const resolvedSkills = resolveBoundSkills(session.agent);
+      if (!resolvedSkills.ok) {
+        return {
+          ok: false,
+          error: {
+            code: "AGENT_SKILL_LOAD_FAILED",
+            message: "agent skill binding could not be loaded",
+            details: resolvedSkills.issues,
+          },
+          session: summarizeSession(session),
+        };
+      }
+      promptSource.skills = toPromptSkillBlocks(resolvedSkills.skills, { sessionId: session.id });
+    }
 
     session.busy = true;
     session.updatedAt = Date.now();
@@ -276,7 +293,7 @@ export class AgentService {
         app: {
           client: this.client,
           model: this.model,
-          promptSource: this.promptSource,
+          promptSource,
           toolService: this.toolService,
           deliveryService: this.deliveryService,
           hookService: this.hookService,

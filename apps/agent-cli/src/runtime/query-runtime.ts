@@ -44,6 +44,7 @@ export async function runUserQuery(opts: RunUserQueryOptions): Promise<QueryRunt
   await withCompactRuntimeContext({ messages: opts.history }, async () =>
     opts.app.queryEngine.run({
       messages: opts.history,
+      promptSource: opts.app.promptSource,
       runtimeState: opts.runtimeState,
       includeScheduledNotifications: opts.includeScheduledNotifications,
       onAssistantDelta: opts.onAssistantDelta,
