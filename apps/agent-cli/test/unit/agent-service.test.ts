@@ -671,6 +671,65 @@ describe("agent service", () => {
     });
   });
 
+  it("accepts and returns agent runtime context on session and chat endpoints", async () => {
+    const service = new AgentService({
+      client: {} as OpenAI,
+      model: "fake-model",
+      promptSource: PROMPT_SOURCE,
+      toolService: createToolService(),
+      deliveryService: createDeliveryService(),
+      hookService: createHookService(),
+      memoryService: createMemoryService(),
+      modelPolicyService: createModelPolicyService(),
+      observabilityService: createObservabilityService(),
+      queryEngine: createLoopRunner(),
+    });
+    const server = createAgentHttpServer(service);
+    const firstAgent = {
+      id: "agent-alpha",
+      name: "Alpha Agent",
+      skills: [{ skillId: "code-workspace", version: "1.2.0", sourceType: "builtin", registrySource: "local" }],
+    };
+    const nextAgent = {
+      id: "agent-beta",
+      name: "Beta Agent",
+      skills: [{ skillId: "quality-gate", version: "0.9.0", sourceType: "builtin", registrySource: "local" }],
+    };
+
+    const created = await requestServer(server, "POST", "/sessions", { agent: firstAgent });
+    const session = created.body.session as { id?: unknown };
+    const sessionId = String(session.id ?? "");
+    const listed = await requestServer(server, "GET", "/sessions");
+    const detail = await requestServer(server, "GET", `/sessions/${sessionId}`);
+    const chat = await requestServer(server, "POST", "/chat", {
+      session_id: sessionId,
+      message: "hello",
+      agent: nextAgent,
+    });
+    const updatedDetail = await requestServer(server, "GET", `/sessions/${sessionId}`);
+
+    expect(created).toMatchObject({
+      statusCode: 201,
+      body: { ok: true, session: { id: sessionId, agent: firstAgent } },
+    });
+    expect(listed.body).toMatchObject({
+      ok: true,
+      sessions: [{ id: sessionId, agent: firstAgent }],
+    });
+    expect(detail.body).toMatchObject({
+      ok: true,
+      session: { id: sessionId, agent: firstAgent, messages: [] },
+    });
+    expect(chat.body).toMatchObject({
+      ok: true,
+      session: { id: sessionId, agent: nextAgent },
+    });
+    expect(updatedDetail.body).toMatchObject({
+      ok: true,
+      session: { id: sessionId, agent: nextAgent },
+    });
+  });
+
   it("replays buffered events before continuing live /events delivery", async () => {
     const service = new AgentService({
       client: {} as OpenAI,

@@ -6,7 +6,8 @@ import { isLocalPersistenceEnabled } from "../runtime-config.js";
 import type { PendingApprovalReplay } from "../runtime/query-types.js";
 import { buildArtifactMetadata, isExpired } from "../security/local-retention.js";
 import { sanitizeAndRedactValue } from "../security/data-hygiene.js";
-import type { AgentSessionRecord } from "./sessions.js";
+import type { AgentRuntimeContext, AgentSessionRecord } from "./sessions.js";
+import { normalizeAgentRuntimeContext } from "./sessions.js";
 
 type PersistedRuntimeState = {
   sessionId: string;
@@ -27,6 +28,7 @@ type PersistedSessionRecord = {
   busy: boolean;
   history: AgentSessionRecord["history"];
   runtimeState: PersistedRuntimeState;
+  agent?: AgentRuntimeContext | null;
 };
 
 type PersistedSessionEnvelope = {
@@ -96,6 +98,7 @@ function toPersistedSessionRecord(session: AgentSessionRecord): PersistedSession
     busy: session.busy,
     history: session.history,
     runtimeState: toPersistedRuntimeState(session),
+    agent: session.agent,
   };
 }
 
@@ -122,6 +125,7 @@ function fromPersistedSessionRecord(input: PersistedSessionRecord): AgentSession
     busy: input.busy,
     history: input.history,
     runtimeState: fromPersistedRuntimeState(input.runtimeState),
+    agent: normalizeAgentRuntimeContext(input.agent),
   };
 }
 

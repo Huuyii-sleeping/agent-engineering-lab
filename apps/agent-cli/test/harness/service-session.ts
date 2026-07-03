@@ -224,7 +224,12 @@ async function readJournalRows(root: string, sessionId: string): Promise<unknown
 
 async function runServiceSessionResumeAssertions(root: string): Promise<void> {
   const firstRuntime = await createServiceRuntime(root, ["alpha first", "beta first"]);
-  const firstAlpha = await firstRuntime.service.chat({ message: "alpha user" });
+  const alphaAgent = {
+    id: "agent-alpha",
+    name: "Alpha Agent",
+    skills: [{ skillId: "code-workspace", version: "1.2.0", sourceType: "builtin" as const, registrySource: "local" as const }],
+  };
+  const firstAlpha = await firstRuntime.service.chat({ message: "alpha user", agent: alphaAgent });
   const firstBeta = await firstRuntime.service.chat({ message: "beta user" });
   const alphaSessionId = readOkChatSessionId(firstAlpha);
   const betaSessionId = readOkChatSessionId(firstBeta);
@@ -234,6 +239,11 @@ async function runServiceSessionResumeAssertions(root: string): Promise<void> {
   assertCondition(
     persistedAlphaBeforeRestart.runtimeState.roundCounter === 1,
     "alpha session did not persist first round counter",
+  );
+  assertCondition(persistedAlphaBeforeRestart.agent?.id === "agent-alpha", "alpha session did not persist agent id");
+  assertCondition(
+    persistedAlphaBeforeRestart.agent.skills[0]?.version === "1.2.0",
+    "alpha session did not persist agent skill version",
   );
 
   const secondRuntime = await createServiceRuntime(root, ["alpha resumed", "beta resumed"]);
@@ -262,7 +272,12 @@ async function runServiceSessionResumeAssertions(root: string): Promise<void> {
   assertCondition(restoredAlpha !== null, "alpha session was not loadable after resumed chat");
   assertCondition(restoredBeta !== null, "beta session was not loadable after resumed chat");
   assertCondition(restoredAlpha.runtimeState.roundCounter === 2, "alpha round counter was not continuous");
+  assertCondition(restoredAlpha.agent?.id === "agent-alpha", "alpha agent context was not restored");
   assertCondition(restoredBeta.runtimeState.roundCounter === 2, "beta round counter was not continuous");
+  assertCondition(restoredBeta.agent === null, "beta session unexpectedly gained agent context");
+
+  const alphaDetail = secondRuntime.service.getSessionDetail(alphaSessionId) as { agent?: { id?: unknown } } | null;
+  assertCondition(alphaDetail?.agent?.id === "agent-alpha", "session detail did not include agent context");
 
   const alphaMessages = JSON.stringify(restoredAlpha.history);
   const betaMessages = JSON.stringify(restoredBeta.history);

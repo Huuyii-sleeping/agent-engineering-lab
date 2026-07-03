@@ -1,6 +1,7 @@
 import type { AgentAppRuntimeDeps } from "../bootstrap/app-runtime.js";
 import type { AgentSessionRecord } from "../service-api/sessions.js";
 import { createAgentSessionRecord } from "../service-api/sessions.js";
+import type { AgentRuntimeContext } from "../service-api/sessions.js";
 import { nowMs } from "../service-api/sessions.js";
 import { sortSessionsByCreatedAt } from "../service-api/sessions.js";
 import { summarizeSession } from "../service-api/sessions.js";
@@ -89,15 +90,15 @@ export class AgentHost {
     return event;
   }
 
-  createSessionSync(): AgentSessionRecord {
-    const session = createAgentSessionRecord();
+  createSessionSync(agent: AgentRuntimeContext | null = null): AgentSessionRecord {
+    const session = createAgentSessionRecord(undefined, undefined, agent);
     this.sessions.set(session.id, session);
     this.emitEvent("session.created", { session: summarizeSession(session) });
     return session;
   }
 
-  async createSession(): Promise<AgentSessionRecord> {
-    const session = this.createSessionSync();
+  async createSession(agent: AgentRuntimeContext | null = null): Promise<AgentSessionRecord> {
+    const session = this.createSessionSync(agent);
     await this.sessionStore.save(session);
     return session;
   }

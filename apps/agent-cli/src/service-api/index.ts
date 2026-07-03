@@ -7,6 +7,7 @@ import type { AgentHostEvent } from "../host/events.js";
 import type { AgentHostEventSubscriber } from "../host/events.js";
 import { createAgentBridgeManifest, type AgentBridgeState } from "./bridge.js";
 import {
+  normalizeAgentRuntimeContext,
   summarizeSession,
   summarizeSessionTranscript,
   type AgentSessionRecord,
@@ -19,6 +20,7 @@ export type AgentServiceDeps = AgentAppRuntimeDeps;
 type ChatRequest = {
   session_id?: string;
   message?: string;
+  agent?: unknown;
   include_scheduled_notifications?: boolean;
 };
 
@@ -156,8 +158,8 @@ export class AgentService {
     this.queryEngine = deps.queryEngine;
   }
 
-  createSession(): AgentSessionRecord {
-    const record = this.host.createSessionSync();
+  createSession(agent?: unknown): AgentSessionRecord {
+    const record = this.host.createSessionSync(normalizeAgentRuntimeContext(agent));
     void this.host.persistSession(record);
     return record;
   }
@@ -225,9 +227,10 @@ export class AgentService {
       };
     }
 
+    const agent = normalizeAgentRuntimeContext(input.agent);
     const session = input.session_id
       ? this.getSession(String(input.session_id))
-      : this.createSession();
+      : this.createSession(agent);
     if (!session) {
       return {
         ok: false,
@@ -245,6 +248,9 @@ export class AgentService {
           message: `session is busy: ${session.id}`,
         },
       };
+    }
+    if (agent) {
+      session.agent = agent;
     }
 
     session.busy = true;
@@ -450,7 +456,8 @@ export function createAgentHttpServer(service: AgentService): Server {
         return;
       }
       if (method === "POST" && pathname === "/sessions") {
-        const session = service.createSession();
+        const body = await parseBody<{ agent?: unknown }>(req);
+        const session = service.createSession(body.agent);
         json(res, 201, { ok: true, session: summarizeSession(session) });
         return;
       }

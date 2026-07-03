@@ -21,16 +21,16 @@
 
 ## 4. Agent service 接收上下文
 
-- [ ] 4.1 Session 模型新增 agent 上下文
-- [ ] 4.2 `/sessions` 和 `/chat` 接收并持久化 agent 上下文
-- [ ] 4.3 summary/detail 返回 agent 上下文
-- [ ] 4.4 补 agent service 测试
+- [x] 4.1 Session 模型新增 agent 上下文
+- [x] 4.2 `/sessions` 和 `/chat` 接收并持久化 agent 上下文
+- [x] 4.3 summary/detail 返回 agent 上下文
+- [x] 4.4 补 agent service 测试
 
 ## 5. 验证
 
 - [x] 5.1 执行 BFF 测试
 - [x] 5.2 执行 Web 测试
-- [ ] 5.3 执行 agent-cli session 测试
+- [x] 5.3 执行 agent-cli session 测试
 - [ ] 5.4 执行根级 `pnpm build`
 - [ ] 5.5 尝试 OpenSpec status / validate 并记录结果
 - [ ] 5.6 清理运行产物
