@@ -8,6 +8,7 @@ export function agentDraftFromProfile(agent: AgentProfile): AgentProfileInput {
     description: agent.description,
     scenario: agent.scenario,
     skillIds: agent.skillIds,
+    skills: agent.skills,
     actions: agent.actions,
     systemPrompt: agent.systemPrompt,
   };

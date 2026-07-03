@@ -27,8 +27,18 @@ const installedSkills: SkillRegistryItem[] = [
     tags: ["code"],
     entry: "SKILL.md",
     sourceType: "builtin",
+    registrySource: "local",
+    publisher: { id: "workspace", name: "Workspace", verified: true },
+    downloads: 0,
+    rating: null,
+    packageSha256: "",
+    deprecated: false,
     status: "installed",
     installed: true,
+    installedVersion: "1.1.0",
+    installedAt: 1,
+    availableVersion: "1.2.0",
+    previousInstalledVersion: "",
     validationErrors: [],
   },
 ];
@@ -56,6 +66,8 @@ describe("AgentConfigPage", () => {
     expect(html).toContain("丢弃草稿");
     expect(html).toContain("Agent 草稿操作失败");
     expect(html).toContain("Failed to fetch");
+    expect(html).toContain("锁定 v1.1.0");
+    expect(html).toContain("版本缺失");
   });
 
   it("keeps delete copy for persisted agents", () => {
@@ -83,5 +95,59 @@ describe("AgentConfigPage", () => {
     expect(html).toContain("disabled=\"\"");
     expect(html).toContain("删除");
     expect(html).not.toContain("丢弃草稿");
+    expect(html).toContain("已卸载");
+  });
+
+  it("shows healthy and drifted version-locked skill bindings", () => {
+    const html = renderToStaticMarkup(
+      <AgentConfigPage
+        activeAgent={savedAgent}
+        draft={{
+          ...defaultAgentProfileInput,
+          skillIds: ["code-workspace"],
+          skills: [
+            { skillId: "code-workspace", version: "1.0.0", sourceType: "builtin", registrySource: "local" },
+            { skillId: "stale-skill", version: "0.1.0", sourceType: "builtin", registrySource: "local" },
+          ],
+        }}
+        error={null}
+        isNewDraft={false}
+        saving={false}
+        installedSkills={installedSkills}
+        onBack={vi.fn()}
+        onDeleteAgent={vi.fn()}
+        onDiscardDraft={vi.fn()}
+        onDraftChange={vi.fn()}
+        onSaveAgent={vi.fn()}
+        onTestAgent={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain("版本漂移：当前已安装 v1.1.0");
+    expect(html).toContain("stale-skill");
+    expect(html).toContain("已卸载");
+
+    const healthyHtml = renderToStaticMarkup(
+      <AgentConfigPage
+        activeAgent={savedAgent}
+        draft={{
+          ...defaultAgentProfileInput,
+          skillIds: ["code-workspace"],
+          skills: [{ skillId: "code-workspace", version: "1.1.0", sourceType: "builtin", registrySource: "local" }],
+        }}
+        error={null}
+        isNewDraft={false}
+        saving={false}
+        installedSkills={installedSkills}
+        onBack={vi.fn()}
+        onDeleteAgent={vi.fn()}
+        onDiscardDraft={vi.fn()}
+        onDraftChange={vi.fn()}
+        onSaveAgent={vi.fn()}
+        onTestAgent={vi.fn()}
+      />,
+    );
+
+    expect(healthyHtml).toContain("绑定正常");
   });
 });

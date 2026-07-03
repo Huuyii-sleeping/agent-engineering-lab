@@ -1,8 +1,38 @@
 import { ArrowLeft, BrainCircuit, Check, MessageSquare, Plus, Trash2, X } from "lucide-react";
 import { toggleAgentBuilderId } from "../../../agent-builder";
-import type { AgentProfile, AgentProfileInput, SkillRegistryItem } from "../../../api";
+import type { AgentProfile, AgentProfileInput, AgentSkillBinding, SkillRegistryItem } from "../../../api";
 import { AgentAvatar } from "../components/AgentAvatar";
 import { agentAvatarOptions } from "../lib/agent-avatar";
+
+function skillBindingFromRegistryItem(skill: SkillRegistryItem): AgentSkillBinding {
+  return {
+    skillId: skill.id,
+    version: skill.installedVersion || skill.version,
+    sourceType: skill.sourceType,
+    registrySource: skill.registrySource,
+  };
+}
+
+function installedSkillVersion(skill: SkillRegistryItem): string {
+  return skill.installedVersion || skill.version;
+}
+
+function bindingStatus(
+  skill: SkillRegistryItem,
+  binding: AgentSkillBinding | undefined,
+): { label: string; tone: "ok" | "warning" } {
+  const lockedVersion = installedSkillVersion(skill);
+  if (!binding || !binding.version) {
+    return { label: "版本缺失，保存后会锁定当前版本", tone: "warning" };
+  }
+  if (binding.version !== lockedVersion) {
+    return { label: `版本漂移：当前已安装 v${lockedVersion}`, tone: "warning" };
+  }
+  if (binding.sourceType !== skill.sourceType || binding.registrySource !== skill.registrySource) {
+    return { label: "来源漂移，保存后会同步当前来源", tone: "warning" };
+  }
+  return { label: "绑定正常", tone: "ok" };
+}
 
 export function AgentConfigPage({
   activeAgent,
@@ -32,16 +62,23 @@ export function AgentConfigPage({
   onTestAgent: (agent: AgentProfile) => void;
 }) {
   const selectedSkillSet = new Set(draft.skillIds);
+  const installedSkillById = new Map(installedSkills.map((skill) => [skill.id, skill]));
+  const bindingById = new Map(draft.skills.map((skill) => [skill.skillId, skill]));
   const selectedInstalledSkillCount = installedSkills.filter((skill) => selectedSkillSet.has(skill.id)).length;
+  const unavailableBindings = draft.skills.filter((binding) => !installedSkillById.has(binding.skillId));
 
   function toggleSkill(skillId: string): void {
+    const nextSkillIds = toggleAgentBuilderId(
+      draft.skillIds,
+      skillId,
+      installedSkills.map((skill) => skill.id),
+    );
     onDraftChange({
       ...draft,
-      skillIds: toggleAgentBuilderId(
-        draft.skillIds,
-        skillId,
-        installedSkills.map((skill) => skill.id),
-      ),
+      skillIds: nextSkillIds,
+      skills: installedSkills
+        .filter((skill) => nextSkillIds.includes(skill.id))
+        .map((skill) => skillBindingFromRegistryItem(skill)),
     });
   }
 
@@ -194,6 +231,8 @@ export function AgentConfigPage({
               ) : null}
               {installedSkills.map((skill) => {
                 const selected = selectedSkillSet.has(skill.id);
+                const lockedVersion = installedSkillVersion(skill);
+                const status = selected ? bindingStatus(skill, bindingById.get(skill.id)) : null;
                 return (
                   <button
                     className={`agent-skill-item ${selected ? "agent-skill-item--selected" : ""}`}
@@ -205,8 +244,13 @@ export function AgentConfigPage({
                     <span>
                       <strong>{skill.name}</strong>
                       <small>
-                        {skill.category} · {skill.provider} · v{skill.version}
+                        {skill.category} · {skill.provider} · 锁定 v{lockedVersion}
                       </small>
+                      {status ? (
+                        <small className={`agent-skill-binding-status agent-skill-binding-status--${status.tone}`}>
+                          {status.label}
+                        </small>
+                      ) : null}
                     </span>
                     <span className="agent-skill-check">
                       {selected ? (
@@ -218,6 +262,20 @@ export function AgentConfigPage({
                   </button>
                 );
               })}
+              {unavailableBindings.map((binding) => (
+                <div className="agent-skill-item agent-skill-item--stale" key={binding.skillId}>
+                  <span>
+                    <strong>{binding.skillId}</strong>
+                    <small>已卸载 · 原锁定 v{binding.version || "未知"}</small>
+                    <small className="agent-skill-binding-status agent-skill-binding-status--warning">
+                      保存前请重新安装或移除该绑定
+                    </small>
+                  </span>
+                  <span className="agent-skill-check">
+                    <X size={14} strokeWidth={2.5} aria-hidden="true" />
+                  </span>
+                </div>
+              ))}
             </div>
 
             <div className="agent-config-panel-heading agent-config-panel-heading--actions">

@@ -17,6 +17,7 @@ export type SessionSummary = {
   busy: boolean;
   messageCount: number;
   rounds: number | null;
+  agent: AgentRuntimeContext | null;
 };
 
 /** Session detail DTO with normalized transcript messages. */
@@ -38,6 +39,27 @@ export type UserProfile = {
   description: string;
 };
 
+/** Where a skill entered the local Skill Hub from. */
+export type SkillSourceType = "builtin" | "remote" | "custom";
+
+/** Trust channel claimed by a registry entry or assigned by the local hub. */
+export type SkillRegistrySource = "official" | "verified" | "community" | "private" | "local";
+
+/** Version-locked skill binding stored by an Agent profile. */
+export type AgentSkillBinding = {
+  skillId: string;
+  version: string;
+  sourceType: SkillSourceType;
+  registrySource: SkillRegistrySource;
+};
+
+/** Minimal Agent context passed into the runtime session APIs. */
+export type AgentRuntimeContext = {
+  id: string;
+  name: string;
+  skills: AgentSkillBinding[];
+};
+
 /** User-managed agent profile displayed and edited in the Agent management workspace. */
 export type AgentProfile = {
   id: string;
@@ -46,6 +68,7 @@ export type AgentProfile = {
   description: string;
   scenario: string;
   skillIds: string[];
+  skills: AgentSkillBinding[];
   actions: string[];
   systemPrompt: string;
   createdAt: number | null;
@@ -55,12 +78,10 @@ export type AgentProfile = {
 /** Editable payload accepted by the BFF agent profile APIs. */
 export type AgentProfileInput = Pick<
   AgentProfile,
-  "avatarId" | "name" | "description" | "scenario" | "skillIds" | "actions" | "systemPrompt"
+  "avatarId" | "name" | "description" | "scenario" | "skillIds" | "skills" | "actions" | "systemPrompt"
 >;
 
 /** Local skill registry item returned by the BFF Skill Hub APIs. */
-export type SkillSourceType = "builtin" | "remote" | "custom";
-export type SkillRegistrySource = "official" | "verified" | "community" | "private" | "local";
 export type SkillStatus = "available" | "downloaded" | "installed" | "updateAvailable" | "invalid";
 
 export type SkillPublisher = {
@@ -92,11 +113,16 @@ export type SkillRegistryItem = {
   deprecated: boolean;
   status: SkillStatus;
   installed: boolean;
+  installedVersion: string;
+  installedAt: number | null;
+  availableVersion: string;
+  previousInstalledVersion: string;
   validationErrors: string[];
 };
 
 /** JSON package accepted by the custom Skill Hub upload API. */
 export type SkillPackageInput = {
+  skillPackageVersion?: "1.0";
   files: Array<{ path: string; content: string }>;
 };
 
@@ -158,6 +184,11 @@ export const defaultAgentProfileInput: AgentProfileInput = {
   description: "面向代码、文档和自动化执行的本地 agent。",
   scenario: "本地研发、资料整理、任务拆解和交付验证。",
   skillIds: ["code-workspace", "memory-context", "quality-gate"],
+  skills: [
+    { skillId: "code-workspace", version: "", sourceType: "builtin", registrySource: "local" },
+    { skillId: "memory-context", version: "", sourceType: "builtin", registrySource: "local" },
+    { skillId: "quality-gate", version: "", sourceType: "builtin", registrySource: "local" },
+  ],
   actions: ["分析需求", "执行任务", "验证结果"],
   systemPrompt: "你是一个严谨的本地工作台 agent，优先明确目标、执行验证，并给出可复查的结果。",
 };
@@ -225,6 +256,56 @@ function normalizePublisher(value: unknown, fallback: string): SkillPublisher {
   };
 }
 
+function normalizeSourceType(value: unknown): SkillSourceType {
+  return value === "remote" || value === "custom" || value === "builtin" ? value : "builtin";
+}
+
+function legacyAgentSkillBinding(skillId: string): AgentSkillBinding {
+  return {
+    skillId,
+    version: "",
+    sourceType: "builtin",
+    registrySource: "local",
+  };
+}
+
+function normalizeAgentSkillBindings(value: unknown, legacySkillIds: string[]): AgentSkillBinding[] {
+  if (!Array.isArray(value)) {
+    return legacySkillIds.map(legacyAgentSkillBinding);
+  }
+  const byId = new Map<string, AgentSkillBinding>();
+  for (const item of value) {
+    const record = asObject(item);
+    const skillId = cleanOptionalText(record.skillId, 80);
+    if (!skillId) {
+      continue;
+    }
+    const sourceType = normalizeSourceType(record.sourceType);
+    byId.set(skillId, {
+      skillId,
+      version: cleanOptionalText(record.version, 40),
+      sourceType,
+      registrySource: normalizeRegistrySource(record.registrySource, sourceType),
+    });
+  }
+  const bindings = [...byId.values()].slice(0, 24);
+  return bindings.length ? bindings : legacySkillIds.map(legacyAgentSkillBinding);
+}
+
+function normalizeAgentRuntimeContext(value: unknown): AgentRuntimeContext | null {
+  const record = asObject(value);
+  const id = cleanOptionalText(record.id, 80);
+  if (!id) {
+    return null;
+  }
+  const legacySkillIds = cleanStringList(record.skillIds, 24, 80);
+  return {
+    id,
+    name: cleanText(record.name, "Agent").slice(0, 36),
+    skills: normalizeAgentSkillBindings(record.skills, legacySkillIds),
+  };
+}
+
 /** Normalize a user profile before it is displayed in the Web console. */
 export function normalizeUserProfile(value: unknown): UserProfile {
   const record = asObject(value);
@@ -237,13 +318,16 @@ export function normalizeUserProfile(value: unknown): UserProfile {
 /** Normalize an agent profile before it is displayed in the Web console. */
 export function normalizeAgentProfile(value: unknown): AgentProfile {
   const record = asObject(value);
+  const legacySkillIds = cleanStringList(record.skillIds, 24, 80);
+  const skills = normalizeAgentSkillBindings(record.skills, legacySkillIds);
   return {
     id: cleanText(record.id, "").slice(0, 80),
     avatarId: cleanText(record.avatarId, defaultAgentProfileInput.avatarId).slice(0, 40),
     name: cleanText(record.name, defaultAgentProfileInput.name).slice(0, 36),
     description: cleanOptionalText(record.description, 140) || defaultAgentProfileInput.description,
     scenario: cleanOptionalText(record.scenario, 180) || defaultAgentProfileInput.scenario,
-    skillIds: cleanStringList(record.skillIds, 24, 80),
+    skillIds: skills.map((skill) => skill.skillId),
+    skills,
     actions: cleanStringList(record.actions, 24, 80),
     systemPrompt: cleanOptionalText(record.systemPrompt, 1600) || defaultAgentProfileInput.systemPrompt,
     createdAt: asNumber(record.createdAt),
@@ -260,6 +344,7 @@ export function normalizeAgentProfileInput(value: unknown): AgentProfileInput {
     description: agent.description,
     scenario: agent.scenario,
     skillIds: agent.skillIds,
+    skills: agent.skills,
     actions: agent.actions,
     systemPrompt: agent.systemPrompt,
   };
@@ -306,6 +391,10 @@ export function normalizeSkillRegistryItem(value: unknown): SkillRegistryItem {
           ? "installed"
           : "downloaded",
     installed: asBoolean(record.installed),
+    installedVersion: cleanOptionalText(record.installedVersion, 40),
+    installedAt: typeof record.installedAt === "number" && Number.isFinite(record.installedAt) ? record.installedAt : null,
+    availableVersion: cleanOptionalText(record.availableVersion, 40),
+    previousInstalledVersion: cleanOptionalText(record.previousInstalledVersion, 40),
     validationErrors: cleanStringList(record.validationErrors, 12, 180),
   };
 }
@@ -346,6 +435,7 @@ function normalizeSessionSummary(value: unknown): SessionSummary {
     busy: asBoolean(record.busy),
     messageCount: Number(record.messageCount ?? 0),
     rounds: asNumber(record.rounds),
+    agent: normalizeAgentRuntimeContext(record.agent),
   };
 }
 
@@ -531,10 +621,15 @@ export async function fetchAgents(): Promise<AgentProfile[]> {
 
 /** Creates a locally persisted agent profile through the BFF business API. */
 export async function createAgentProfile(input: Partial<AgentProfileInput> = {}): Promise<AgentProfile> {
+  const inputRecord = asObject(input);
+  const mergedInput: Partial<AgentProfileInput> = { ...defaultAgentProfileInput, ...input };
+  if (Array.isArray(inputRecord.skillIds) && !Array.isArray(inputRecord.skills)) {
+    delete mergedInput.skills;
+  }
   const response = await requestJson<JsonObject>("/api/agents", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(normalizeAgentProfileInput({ ...defaultAgentProfileInput, ...input })),
+    body: JSON.stringify(normalizeAgentProfileInput(mergedInput)),
   });
   return normalizeAgentProfile(response.agent);
 }
@@ -581,6 +676,22 @@ export async function installSkill(skillId: string): Promise<SkillRegistryItem> 
   return normalizeSkillRegistryItem(response.skill);
 }
 
+/** Updates one installed skill to the newest available version through the BFF business API. */
+export async function updateSkill(skillId: string): Promise<SkillRegistryItem> {
+  const response = await requestJson<JsonObject>(`/api/skills/${encodeURIComponent(skillId)}/update`, {
+    method: "POST",
+  });
+  return normalizeSkillRegistryItem(response.skill);
+}
+
+/** Rolls one installed skill back to the previous local version through the BFF business API. */
+export async function rollbackSkill(skillId: string): Promise<SkillRegistryItem> {
+  const response = await requestJson<JsonObject>(`/api/skills/${encodeURIComponent(skillId)}/rollback`, {
+    method: "POST",
+  });
+  return normalizeSkillRegistryItem(response.skill);
+}
+
 /** Downloads one remote skill through the BFF business API. */
 export async function downloadSkill(skillId: string): Promise<SkillRegistryItem> {
   const response = await requestJson<JsonObject>(`/api/skills/${encodeURIComponent(skillId)}/download`, {
@@ -615,8 +726,12 @@ export async function fetchSessions(): Promise<SessionSummary[]> {
 }
 
 /** Creates a new local agent session through the BFF. */
-export async function createSession(): Promise<SessionSummary> {
-  const response = await requestJson<JsonObject>("/api/sessions", { method: "POST" });
+export async function createSession(agent?: AgentRuntimeContext | null): Promise<SessionSummary> {
+  const response = await requestJson<JsonObject>("/api/sessions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agent: agent ?? null }),
+  });
   return normalizeSessionSummary(response.session);
 }
 
@@ -627,11 +742,15 @@ export async function fetchSession(sessionId: string): Promise<SessionDetail> {
 }
 
 /** Sends a user message to a session through the BFF chat endpoint. */
-export async function sendSessionMessage(sessionId: string, message: string): Promise<SendMessageResult> {
+export async function sendSessionMessage(
+  sessionId: string,
+  message: string,
+  agent?: AgentRuntimeContext | null,
+): Promise<SendMessageResult> {
   const response = await requestJson<JsonObject>(`/api/sessions/${encodeURIComponent(sessionId)}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, agent: agent ?? null }),
   });
   return {
     ok: response.ok !== false,
@@ -645,11 +764,12 @@ export async function sendSessionMessageStream(
   sessionId: string,
   message: string,
   onEvent: (event: StreamMessageEvent) => void,
+  agent?: AgentRuntimeContext | null,
 ): Promise<void> {
   const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/messages/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, agent: agent ?? null }),
   });
   if (!response.ok) {
     const raw = await response.text();

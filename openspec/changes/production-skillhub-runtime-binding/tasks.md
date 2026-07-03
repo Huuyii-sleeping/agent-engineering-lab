@@ -14,10 +14,10 @@
 
 ## 3. Web 绑定状态与运行上下文
 
-- [ ] 3.1 API client 增加 Agent runtime context
-- [ ] 3.2 创建 session / 发送消息携带 active Agent
-- [ ] 3.3 Agent 配置页展示绑定健康状态
-- [ ] 3.4 补 Web API / 页面测试
+- [x] 3.1 API client 增加 Agent runtime context
+- [x] 3.2 创建 session / 发送消息携带 active Agent
+- [x] 3.3 Agent 配置页展示绑定健康状态
+- [x] 3.4 补 Web API / 页面测试
 
 ## 4. Agent service 接收上下文
 
@@ -29,7 +29,7 @@
 ## 5. 验证
 
 - [x] 5.1 执行 BFF 测试
-- [ ] 5.2 执行 Web 测试
+- [x] 5.2 执行 Web 测试
 - [ ] 5.3 执行 agent-cli session 测试
 - [ ] 5.4 执行根级 `pnpm build`
 - [ ] 5.5 尝试 OpenSpec status / validate 并记录结果

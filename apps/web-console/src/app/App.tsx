@@ -17,6 +17,7 @@ import {
   fetchSession,
   fetchSessions,
   installSkill,
+  updateSkill,
   updateAgentProfile,
   sendSessionMessageStream,
   syncSkillRegistry,
@@ -27,6 +28,7 @@ import {
   defaultUserProfile,
   type AgentProfile,
   type AgentProfileInput,
+  type AgentRuntimeContext,
   type ChatMessage,
   type HealthStatus,
   type SessionDetail,
@@ -146,6 +148,16 @@ export function App() {
     return sessionDisplayTitle(session, sessionMetadata, generatedTitle);
   }
 
+  function runtimeContextFromAgent(agent: AgentProfile | null): AgentRuntimeContext | null {
+    return agent
+      ? {
+          id: agent.id,
+          name: agent.name,
+          skills: agent.skills,
+        }
+      : null;
+  }
+
   async function refreshHealth(): Promise<void> {
     try {
       setHealth(await fetchHealth());
@@ -250,7 +262,7 @@ export function App() {
     setView("chat");
     setLoadState("loading");
     try {
-      const session = await createSession();
+      const session = await createSession(runtimeContextFromAgent(activeAgent));
       await refreshSessions();
       setActiveSessionId(session.id);
       setActiveSession({ ...session, messages: [] });
@@ -280,44 +292,49 @@ export function App() {
         : session,
     );
     try {
-      await sendSessionMessageStream(activeSessionId, message, (event) => {
-        if (event.type === "message.delta") {
-          const delta = event.data.delta ?? "";
-          if (!delta) {
-            return;
+      await sendSessionMessageStream(
+        activeSessionId,
+        message,
+        (event) => {
+          if (event.type === "message.delta") {
+            const delta = event.data.delta ?? "";
+            if (!delta) {
+              return;
+            }
+            setActiveSession((session) =>
+              session
+                ? {
+                    ...session,
+                    messages: session.messages.map((item, index) =>
+                      index === session.messages.length - 1 && item.role === "assistant"
+                        ? { role: "assistant", content: `${item.content ?? ""}${delta}` }
+                        : item,
+                    ),
+                  }
+                : session,
+            );
           }
-          setActiveSession((session) =>
-            session
-              ? {
-                  ...session,
-                  messages: session.messages.map((item, index) =>
-                    index === session.messages.length - 1 && item.role === "assistant"
-                      ? { role: "assistant", content: `${item.content ?? ""}${delta}` }
-                      : item,
-                  ),
-                }
-              : session,
-          );
-        }
-        if (event.type === "message.done" && event.data.assistant) {
-          const assistant = event.data.assistant;
-          setActiveSession((session) =>
-            session
-              ? {
-                  ...session,
-                  messages: session.messages.map((item, index) =>
-                    index === session.messages.length - 1 && item.role === "assistant"
-                      ? { role: "assistant", content: assistant }
-                      : item,
-                  ),
-                }
-              : session,
-          );
-        }
-        if (event.type === "message.error") {
-          throw new Error(event.data.message ?? "message stream failed");
-        }
-      });
+          if (event.type === "message.done" && event.data.assistant) {
+            const assistant = event.data.assistant;
+            setActiveSession((session) =>
+              session
+                ? {
+                    ...session,
+                    messages: session.messages.map((item, index) =>
+                      index === session.messages.length - 1 && item.role === "assistant"
+                        ? { role: "assistant", content: assistant }
+                        : item,
+                    ),
+                  }
+                : session,
+            );
+          }
+          if (event.type === "message.error") {
+            throw new Error(event.data.message ?? "message stream failed");
+          }
+        },
+        runtimeContextFromAgent(activeAgent),
+      );
       await Promise.all([refreshSessions(), loadSession(activeSessionId)]);
       setError(null);
     } catch (err) {
@@ -390,6 +407,8 @@ export function App() {
       const nextSkill =
         skill.status === "available"
           ? await downloadSkill(skill.id)
+          : skill.status === "updateAvailable"
+            ? await updateSkill(skill.id)
           : skill.installed
             ? await uninstallSkill(skill.id)
             : await installSkill(skill.id);
@@ -417,10 +436,20 @@ export function App() {
     if (skillRegistry.length === 0) {
       return agentDraft;
     }
-    const installedSkillIds = new Set(installedSkills.map((skill) => skill.id));
+    const installedById = new Map(installedSkills.map((skill) => [skill.id, skill]));
+    const skillIds = agentDraft.skillIds.filter((skillId) => installedById.has(skillId));
     return {
       ...agentDraft,
-      skillIds: agentDraft.skillIds.filter((skillId) => installedSkillIds.has(skillId)),
+      skillIds,
+      skills: skillIds.map((skillId) => {
+        const skill = installedById.get(skillId);
+        return {
+          skillId,
+          version: skill?.installedVersion || skill?.version || "",
+          sourceType: skill?.sourceType ?? "builtin",
+          registrySource: skill?.registrySource ?? "local",
+        };
+      }),
     };
   }
 

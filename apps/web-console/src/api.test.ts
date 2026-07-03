@@ -13,10 +13,12 @@ import {
   fetchSession,
   fetchSessions,
   installSkill,
+  rollbackSkill,
   sendSessionMessage,
   sendSessionMessageStream,
   syncSkillRegistry,
   uninstallSkill,
+  updateSkill,
   uploadSkillPackage,
   updateAgentProfile,
   updateProfile,
@@ -120,10 +122,15 @@ describe("web-console api client", () => {
       return jsonResponse({ ok: false, error: { code: "NOT_FOUND", message: url.pathname } }, 404);
     });
     vi.stubGlobal("fetch", fetchMock);
+    const runtimeAgent = {
+      id: "a1",
+      name: "研发 Agent",
+      skills: [{ skillId: "code-workspace", version: "1.2.0", sourceType: "builtin" as const, registrySource: "local" as const }],
+    };
 
     await expect(fetchHealth()).resolves.toMatchObject({ ok: true, connected: true });
     await expect(fetchSessions()).resolves.toMatchObject([{ id: "s1", messageCount: 1 }]);
-    await expect(createSession()).resolves.toMatchObject({ id: "s2" });
+    await expect(createSession(runtimeAgent)).resolves.toMatchObject({ id: "s2" });
     await expect(fetchSession("s1")).resolves.toMatchObject({
       id: "s1",
       messages: [
@@ -131,7 +138,7 @@ describe("web-console api client", () => {
         { role: "assistant", content: "world" },
       ],
     });
-    await expect(sendSessionMessage("s1", "continue")).resolves.toMatchObject({
+    await expect(sendSessionMessage("s1", "continue", runtimeAgent)).resolves.toMatchObject({
       ok: true,
       assistant: "reply",
     });
@@ -139,7 +146,7 @@ describe("web-console api client", () => {
     expect(fetchMock).toHaveBeenLastCalledWith("/api/sessions/s1/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: "continue" }),
+      body: JSON.stringify({ message: "continue", agent: runtimeAgent }),
     });
   });
 
@@ -201,6 +208,11 @@ describe("web-console api client", () => {
               description: "  本地研发  ",
               scenario: "  代码和验证  ",
               skillIds: ["code-workspace", "code-workspace", "quality-gate"],
+              skills: [
+                { skillId: "code-workspace", version: "1.2.0", sourceType: "builtin", registrySource: "local" },
+                { skillId: "code-workspace", version: "1.3.0", sourceType: "remote", registrySource: "verified" },
+                { skillId: "quality-gate", version: "0.9.0", sourceType: "builtin", registrySource: "local" },
+              ],
               actions: [" 修改代码 ", " 运行测试 "],
               systemPrompt: " 严格验证 ",
               createdAt: 1,
@@ -231,6 +243,10 @@ describe("web-console api client", () => {
         description: "本地研发",
         scenario: "代码和验证",
         skillIds: ["code-workspace", "quality-gate"],
+        skills: [
+          { skillId: "code-workspace", version: "1.3.0", sourceType: "remote", registrySource: "verified" },
+          { skillId: "quality-gate", version: "0.9.0", sourceType: "builtin", registrySource: "local" },
+        ],
         actions: ["修改代码", "运行测试"],
         systemPrompt: "严格验证",
       },
@@ -248,6 +264,7 @@ describe("web-console api client", () => {
         description: "交付验证",
         scenario: "上线前检查",
         skillIds: ["quality-gate"],
+        skills: [{ skillId: "quality-gate", version: "1.2.0", sourceType: "builtin", registrySource: "local" }],
         actions: ["构建"],
         systemPrompt: "输出风险",
       }),
@@ -289,6 +306,10 @@ describe("web-console api client", () => {
               status: "installed",
               validationErrors: [],
               installed: true,
+              installedVersion: "1.2.0",
+              installedAt: 1782691200000,
+              availableVersion: "1.2.0",
+              previousInstalledVersion: "",
             },
           ],
         });
@@ -320,6 +341,32 @@ describe("web-console api client", () => {
       if (method === "POST" && url.pathname === "/api/skills/quality-gate/install") {
         return jsonResponse({ ok: true, skill: { id: "quality-gate", name: "质量闸门", status: "installed", installed: true } });
       }
+      if (method === "POST" && url.pathname === "/api/skills/quality-gate/update") {
+        return jsonResponse({
+          ok: true,
+          skill: {
+            id: "quality-gate",
+            name: "质量闸门",
+            status: "installed",
+            installed: true,
+            installedVersion: "1.0.0",
+            previousInstalledVersion: "0.9.0",
+          },
+        });
+      }
+      if (method === "POST" && url.pathname === "/api/skills/quality-gate/rollback") {
+        return jsonResponse({
+          ok: true,
+          skill: {
+            id: "quality-gate",
+            name: "质量闸门",
+            status: "updateAvailable",
+            installed: true,
+            installedVersion: "0.9.0",
+            previousInstalledVersion: "1.0.0",
+          },
+        });
+      }
       if (method === "POST" && url.pathname === "/api/skills/quality-gate/uninstall") {
         return jsonResponse({ ok: true, skill: { id: "quality-gate", name: "质量闸门", status: "downloaded", installed: false } });
       }
@@ -350,6 +397,8 @@ describe("web-console api client", () => {
         deprecated: false,
         status: "installed",
         installed: true,
+        installedVersion: "1.2.0",
+        availableVersion: "1.2.0",
       },
     ]);
     await expect(fetchSkillRegistrySettings()).resolves.toEqual({
@@ -369,6 +418,8 @@ describe("web-console api client", () => {
       status: "downloaded",
     });
     await expect(installSkill("quality-gate")).resolves.toMatchObject({ id: "quality-gate", installed: true });
+    await expect(updateSkill("quality-gate")).resolves.toMatchObject({ id: "quality-gate", installedVersion: "1.0.0" });
+    await expect(rollbackSkill("quality-gate")).resolves.toMatchObject({ id: "quality-gate", installedVersion: "0.9.0" });
     await expect(uninstallSkill("quality-gate")).resolves.toMatchObject({ id: "quality-gate", installed: false });
     await expect(uploadSkillPackage({ files: [] })).resolves.toMatchObject({
       id: "custom-review",
@@ -402,6 +453,11 @@ describe("web-console api client", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
     const events: string[] = [];
+    const runtimeAgent = {
+      id: "a1",
+      name: "研发 Agent",
+      skills: [{ skillId: "code-workspace", version: "1.2.0", sourceType: "builtin" as const, registrySource: "local" as const }],
+    };
 
     await sendSessionMessageStream("s1", "continue", (event) => {
       if (event.type === "message.delta") {
@@ -410,13 +466,13 @@ describe("web-console api client", () => {
       if (event.type === "message.done") {
         events.push(event.data.assistant ?? "");
       }
-    });
+    }, runtimeAgent);
 
     expect(events).toEqual(["hel", "lo", "hello"]);
     expect(fetchMock).toHaveBeenCalledWith("/api/sessions/s1/messages/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-      body: JSON.stringify({ message: "continue" }),
+      body: JSON.stringify({ message: "continue", agent: runtimeAgent }),
     });
   });
 });

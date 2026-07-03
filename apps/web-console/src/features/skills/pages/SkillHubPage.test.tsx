@@ -30,6 +30,10 @@ describe("SkillHubPage", () => {
             deprecated: false,
             status: "installed",
             installed: true,
+            installedVersion: "1.2.0",
+            installedAt: 1782691200000,
+            availableVersion: "1.2.0",
+            previousInstalledVersion: "",
             validationErrors: [],
           },
           {
@@ -55,6 +59,10 @@ describe("SkillHubPage", () => {
             deprecated: false,
             status: "available",
             installed: false,
+            installedVersion: "",
+            installedAt: null,
+            availableVersion: "0.9.0",
+            previousInstalledVersion: "",
             validationErrors: [],
           },
         ]}
