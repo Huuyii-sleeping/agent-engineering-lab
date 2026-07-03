@@ -6,6 +6,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createSkillRegistryHttpServer } from "../../src/server.js";
 
 const tempDirs: string[] = [];
+const adminToken = "test-admin-token";
+
+function adminHeaders(): Record<string, string> {
+  return { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` };
+}
 
 function sha256Hex(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -121,6 +126,7 @@ describe("skill registry service", () => {
     const server = createSkillRegistryHttpServer({
       dbPath: join(tempDir, "registry.sqlite"),
       packageRoot: join(tempDir, "packages"),
+      adminToken,
     });
     const baseUrl = await listen(server);
     const skillPackage = {
@@ -151,7 +157,7 @@ describe("skill registry service", () => {
 
     const publishResponse = await fetch(`${baseUrl}/admin/publish`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: adminHeaders(),
       body: JSON.stringify({
         package: skillPackage,
         source: "private",
@@ -175,7 +181,7 @@ describe("skill registry service", () => {
 
     const invalidResponse = await fetch(`${baseUrl}/admin/publish`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: adminHeaders(),
       body: JSON.stringify({
         package: { files: [{ path: "scripts/run.sh", content: "echo nope" }] },
       }),
@@ -187,7 +193,7 @@ describe("skill registry service", () => {
     });
     const incompleteResponse = await fetch(`${baseUrl}/admin/publish`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: adminHeaders(),
       body: JSON.stringify({
         package: {
           files: [
@@ -204,6 +210,217 @@ describe("skill registry service", () => {
     await expect(incompleteResponse.json()).resolves.toMatchObject({
       ok: false,
       error: { errors: expect.arrayContaining(["skill.json name is required", "skill.json version is required"]) },
+    });
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  it("publishes package v1 with permissions metadata and rejects unsafe package layouts", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "skill-registry-package-v1-test-"));
+    tempDirs.push(tempDir);
+    const server = createSkillRegistryHttpServer({
+      dbPath: join(tempDir, "registry.sqlite"),
+      packageRoot: join(tempDir, "packages"),
+      adminToken,
+    });
+    const baseUrl = await listen(server);
+    const packageV1 = {
+      skillPackageVersion: "1.0",
+      files: [
+        {
+          path: "SKILL.md",
+          content: "---\nname: package-v1-review\ndescription: Use when testing package v1 validation.\n---\n\n# Package v1\n",
+        },
+        {
+          path: "skill.json",
+          content: JSON.stringify({
+            id: "package-v1-review",
+            name: "Package v1 Review",
+            summary: "验证 package v1。",
+            category: "发布",
+            provider: "Registry",
+            version: "1.0.0",
+            runtime: "Skill runtime",
+            permissions: ["文档读取"],
+            updatedAt: "2026-06-28",
+            maturity: "stable",
+            tags: ["package-v1"],
+            entry: "SKILL.md",
+          }),
+        },
+        {
+          path: "README.md",
+          content: "# Package v1 Review\n",
+        },
+        {
+          path: "permissions.json",
+          content: JSON.stringify({ permissions: ["文档读取"], reason: "验证权限声明覆盖 skill.json" }),
+        },
+        {
+          path: "examples/basic.md",
+          content: "Use this skill to review a PRD.\n",
+        },
+      ],
+    };
+
+    const publishResponse = await fetch(`${baseUrl}/admin/publish`, {
+      method: "POST",
+      headers: adminHeaders(),
+      body: JSON.stringify({
+        package: packageV1,
+        source: "private",
+        publisher: { id: "package-v1-user", name: "Package v1 User", verified: false },
+      }),
+    });
+    await expect(publishResponse.json()).resolves.toMatchObject({
+      ok: true,
+      skill: { id: "package-v1-review", version: "1.0.0", source: "private" },
+    });
+    const packageResponse = await fetch(`${baseUrl}/skills/package-v1-review/download?version=1.0.0`, { method: "POST" });
+    await expect(packageResponse.json()).resolves.toEqual(packageV1);
+
+    const duplicateResponse = await fetch(`${baseUrl}/admin/publish`, {
+      method: "POST",
+      headers: adminHeaders(),
+      body: JSON.stringify({
+        package: {
+          skillPackageVersion: "1.0",
+          files: [
+            { path: "SKILL.md", content: "---\nname: duplicate-path\ndescription: Use when testing duplicate paths.\n---\n" },
+            { path: "SKILL.md", content: "duplicate" },
+            { path: "skill.json", content: JSON.stringify({ id: "duplicate-path", name: "Duplicate", version: "1.0.0" }) },
+          ],
+        },
+      }),
+    });
+    expect(duplicateResponse.status).toBe(400);
+    await expect(duplicateResponse.json()).resolves.toMatchObject({
+      error: { errors: expect.arrayContaining(["duplicate file path: SKILL.md"]) },
+    });
+
+    const permissionsResponse = await fetch(`${baseUrl}/admin/publish`, {
+      method: "POST",
+      headers: adminHeaders(),
+      body: JSON.stringify({
+        package: {
+          skillPackageVersion: "1.0",
+          files: [
+            {
+              path: "SKILL.md",
+              content: "---\nname: bad-permissions\ndescription: Use when testing permissions metadata.\n---\n",
+            },
+            {
+              path: "skill.json",
+              content: JSON.stringify({ id: "bad-permissions", name: "Bad Permissions", version: "1.0.0", permissions: ["文件读写"] }),
+            },
+            { path: "permissions.json", content: JSON.stringify({ permissions: ["网络访问"] }) },
+          ],
+        },
+      }),
+    });
+    expect(permissionsResponse.status).toBe(400);
+    await expect(permissionsResponse.json()).resolves.toMatchObject({
+      error: { errors: expect.arrayContaining(["permissions.json must include skill.json permission: 文件读写"]) },
+    });
+
+    const versionResponse = await fetch(`${baseUrl}/admin/publish`, {
+      method: "POST",
+      headers: adminHeaders(),
+      body: JSON.stringify({ package: { skillPackageVersion: "2.0", files: [] } }),
+    });
+    expect(versionResponse.status).toBe(400);
+    await expect(versionResponse.json()).resolves.toMatchObject({
+      error: { errors: expect.arrayContaining(["skillPackageVersion must be 1.0 when provided"]) },
+    });
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  it("requires admin bearer auth and records publisher and publish audit events", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "skill-registry-admin-test-"));
+    tempDirs.push(tempDir);
+    const server = createSkillRegistryHttpServer({
+      dbPath: join(tempDir, "registry.sqlite"),
+      packageRoot: join(tempDir, "packages"),
+      adminToken,
+    });
+    const baseUrl = await listen(server);
+
+    const unauthenticated = await fetch(`${baseUrl}/admin/publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ package: { files: [] } }),
+    });
+    expect(unauthenticated.status).toBe(401);
+    await expect(unauthenticated.json()).resolves.toMatchObject({ error: { code: "ADMIN_AUTH_REQUIRED" } });
+
+    const forbidden = await fetch(`${baseUrl}/admin/publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer wrong-token" },
+      body: JSON.stringify({ package: { files: [] } }),
+    });
+    expect(forbidden.status).toBe(403);
+    await expect(forbidden.json()).resolves.toMatchObject({ error: { code: "ADMIN_AUTH_FORBIDDEN" } });
+
+    const publisherResponse = await fetch(`${baseUrl}/admin/publishers`, {
+      method: "POST",
+      headers: adminHeaders(),
+      body: JSON.stringify({ id: "team-platform", name: "Team Platform", verified: true }),
+    });
+    expect(publisherResponse.status).toBe(201);
+    await expect(publisherResponse.json()).resolves.toMatchObject({
+      ok: true,
+      publisher: { id: "team-platform", name: "Team Platform", verified: true },
+    });
+
+    const publishersResponse = await fetch(`${baseUrl}/admin/publishers`, { headers: { Authorization: `Bearer ${adminToken}` } });
+    await expect(publishersResponse.json()).resolves.toMatchObject({
+      ok: true,
+      publishers: expect.arrayContaining([{ id: "team-platform", name: "Team Platform", verified: true }]),
+    });
+
+    const skillPackage = {
+      files: [
+        {
+          path: "SKILL.md",
+          content:
+            "---\nname: audited-publish\ndescription: Use when testing authenticated audited publishing.\n---\n\n# Audited Publish\n",
+        },
+        {
+          path: "skill.json",
+          content: JSON.stringify({
+            id: "audited-publish",
+            name: "Audited Publish",
+            summary: "写入 audit log。",
+            category: "发布",
+            provider: "Registry",
+            version: "1.0.0",
+            runtime: "Skill runtime",
+            permissions: [],
+            updatedAt: "2026-06-28",
+            maturity: "stable",
+            tags: ["audit"],
+            entry: "SKILL.md",
+          }),
+        },
+      ],
+    };
+    const publishResponse = await fetch(`${baseUrl}/admin/publish`, {
+      method: "POST",
+      headers: adminHeaders(),
+      body: JSON.stringify({
+        package: skillPackage,
+        source: "private",
+        publisher: { id: "team-platform", name: "Team Platform", verified: true },
+      }),
+    });
+    expect(publishResponse.status).toBe(201);
+
+    const auditResponse = await fetch(`${baseUrl}/admin/audit-events`, { headers: { Authorization: `Bearer ${adminToken}` } });
+    await expect(auditResponse.json()).resolves.toMatchObject({
+      ok: true,
+      events: expect.arrayContaining([
+        expect.objectContaining({ action: "skill.publish", actor: "admin-token", subject: "audited-publish@1.0.0" }),
+        expect.objectContaining({ action: "publisher.upsert", actor: "admin-token", subject: "team-platform" }),
+      ]),
     });
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });

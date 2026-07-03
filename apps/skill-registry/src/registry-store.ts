@@ -4,7 +4,9 @@ import { dirname, join, normalize } from "node:path";
 import { packageDirectory, packageStoragePath, sha256Hex } from "./package-utils.js";
 import { validateSkillPackage } from "./package-validator.js";
 import type {
+  CreatePublisherInput,
   PublishSkillInput,
+  RegistryAuditEvent,
   RegistryIndex,
   RegistrySkillVersion,
   SkillManifest,
@@ -49,6 +51,21 @@ type SkillVersionRow = {
   download_count: number;
 };
 
+type PublisherRow = {
+  id: string;
+  name: string;
+  verified: number;
+};
+
+type AuditEventRow = {
+  id: number;
+  action: string;
+  actor: string;
+  subject: string;
+  metadata_json: string;
+  created_at: number;
+};
+
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
@@ -74,6 +91,21 @@ function cleanPublisher(value: unknown): SkillPublisher {
     id,
     name: cleanString(record.name, id, 120),
     verified: record.verified === true,
+  };
+}
+
+function publisherFromRow(row: PublisherRow): SkillPublisher {
+  return { id: row.id, name: row.name, verified: row.verified === 1 };
+}
+
+function auditEventFromRow(row: AuditEventRow): RegistryAuditEvent {
+  return {
+    id: row.id,
+    action: row.action,
+    actor: row.actor,
+    subject: row.subject,
+    metadata: asObject(JSON.parse(row.metadata_json) as unknown),
+    createdAt: row.created_at,
   };
 }
 
@@ -186,6 +218,55 @@ export class RegistryStore {
     return { skills: rows.map((row) => registryItemFromRow(row, baseUrl)) };
   }
 
+  listPublishers(): SkillPublisher[] {
+    const rows = this.db.prepare("SELECT id, name, verified FROM publishers ORDER BY id ASC").all() as PublisherRow[];
+    return rows.map(publisherFromRow);
+  }
+
+  createPublisher(input: CreatePublisherInput): { ok: true; publisher: SkillPublisher } | { ok: false; errors: string[] } {
+    const publisher = cleanPublisher(input);
+    const errors: string[] = [];
+    if (!publisher.id || publisher.id === "unknown") {
+      errors.push("publisher id is required");
+    }
+    if (!publisher.name || publisher.name === "unknown") {
+      errors.push("publisher name is required");
+    }
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(publisher.id)) {
+      errors.push("publisher id must be kebab-case");
+    }
+    if (errors.length > 0) {
+      return { ok: false, errors };
+    }
+    this.db
+      .prepare("INSERT OR REPLACE INTO publishers(id, name, verified) VALUES (?, ?, ?)")
+      .run(publisher.id, publisher.name, publisher.verified ? 1 : 0);
+    return { ok: true, publisher };
+  }
+
+  recordAuditEvent(action: string, actor: string, subject: string, metadata: Record<string, unknown> = {}): RegistryAuditEvent {
+    const createdAt = Date.now();
+    const result = this.db
+      .prepare("INSERT INTO audit_events(action, actor, subject, metadata_json, created_at) VALUES (?, ?, ?, ?, ?)")
+      .run(action, actor, subject, JSON.stringify(metadata), createdAt);
+    return {
+      id: Number(result.lastInsertRowid),
+      action,
+      actor,
+      subject,
+      metadata,
+      createdAt,
+    };
+  }
+
+  listAuditEvents(limit = 100): RegistryAuditEvent[] {
+    const boundedLimit = Math.min(500, Math.max(1, Math.floor(limit)));
+    const rows = this.db
+      .prepare("SELECT id, action, actor, subject, metadata_json, created_at FROM audit_events ORDER BY id DESC LIMIT ?")
+      .all(boundedLimit) as AuditEventRow[];
+    return rows.map(auditEventFromRow);
+  }
+
   getSkill(skillId: string, baseUrl: string): RegistrySkillVersion | null {
     const row = this.db.prepare(`${this.skillVersionSelectSql()} WHERE sv.skill_id = ? ORDER BY sv.version DESC LIMIT 1`).get(skillId) as
       | SkillVersionRow
@@ -224,7 +305,10 @@ export class RegistryStore {
     if (!validated.ok) {
       return validated;
     }
-    const packageRaw = JSON.stringify({ files: validated.files });
+    const packageRaw = JSON.stringify({
+      ...(validated.skillPackageVersion ? { skillPackageVersion: validated.skillPackageVersion } : {}),
+      files: validated.files,
+    });
     const source = cleanSource(input.source ?? "private");
     const publisher = cleanPublisher(input.publisher ?? { id: "local-user", name: "Local User", verified: false });
     this.upsertPackage({
@@ -409,6 +493,14 @@ export class RegistryStore {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         skill_id TEXT NOT NULL,
         version TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS audit_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        action TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        metadata_json TEXT NOT NULL,
         created_at INTEGER NOT NULL
       );
     `);

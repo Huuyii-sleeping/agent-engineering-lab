@@ -1,4 +1,4 @@
-import type { SkillManifest, SkillMaturity, SkillPackageInput, SkillValidationResult } from "./types.js";
+import type { SkillManifest, SkillMaturity, SkillPackageInput, SkillPackageVersion, SkillValidationResult } from "./types.js";
 
 const maxPackageFiles = 32;
 const maxFileBytes = 128 * 1024;
@@ -58,11 +58,67 @@ function parseJsonObject(raw: string): Record<string, unknown> {
   return asObject(JSON.parse(raw) as unknown);
 }
 
+function normalizePackageVersion(value: unknown, errors: string[]): SkillPackageVersion | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === "1.0") {
+    return "1.0";
+  }
+  errors.push("skillPackageVersion must be 1.0 when provided");
+  return undefined;
+}
+
+function validateUniquePaths(files: Array<{ path: string }>, errors: string[]): void {
+  const seen = new Set<string>();
+  for (const file of files) {
+    if (!file.path) {
+      continue;
+    }
+    if (seen.has(file.path)) {
+      errors.push(`duplicate file path: ${file.path}`);
+      continue;
+    }
+    seen.add(file.path);
+  }
+}
+
+function parsePermissionsFile(raw: string, errors: string[]): string[] {
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = parseJsonObject(raw);
+  } catch {
+    errors.push("permissions.json must be valid JSON");
+    return [];
+  }
+  if (!Object.keys(parsed).length) {
+    errors.push("permissions.json must be a JSON object");
+  }
+  if (!Array.isArray(parsed.permissions) || parsed.permissions.some((permission) => typeof permission !== "string" || !permission.trim())) {
+    errors.push("permissions.json permissions must be a string array");
+    return [];
+  }
+  return cleanStringList(parsed.permissions, 32, 80);
+}
+
+function validatePermissionCoverage(declared: string[], metadataPermissions: string[], errors: string[]): void {
+  if (!declared.length) {
+    return;
+  }
+  const declaredSet = new Set(declared);
+  for (const permission of metadataPermissions) {
+    if (!declaredSet.has(permission)) {
+      errors.push(`permissions.json must include skill.json permission: ${permission}`);
+    }
+  }
+}
+
 /** Validate publishable JSON skill packages before they enter the registry store. */
 export function validateSkillPackage(input: unknown): SkillValidationResult {
   const record = asObject(input);
-  const rawFiles = Array.isArray(record.files) ? record.files : [];
   const errors: string[] = [];
+  const skillPackageVersion = normalizePackageVersion(record.skillPackageVersion, errors);
+  const rawFiles = Array.isArray(record.files) ? record.files : [];
   if (rawFiles.length === 0) {
     errors.push("package must include files");
   }
@@ -76,6 +132,7 @@ export function validateSkillPackage(input: unknown): SkillValidationResult {
       content: typeof file.content === "string" ? file.content : "",
     };
   });
+  validateUniquePaths(files, errors);
   for (const file of files) {
     if (!file.path || file.path.startsWith("/") || file.path.includes("\\") || file.path.split("/").some((part) => !part || part === "..")) {
       errors.push(`invalid file path: ${file.path || "<empty>"}`);
@@ -89,6 +146,7 @@ export function validateSkillPackage(input: unknown): SkillValidationResult {
   }
   const skillFile = files.find((file) => file.path === "SKILL.md");
   const metadataFile = files.find((file) => file.path === "skill.json");
+  const permissionsFile = files.find((file) => file.path === "permissions.json");
   if (!skillFile) {
     errors.push("package must include SKILL.md");
   }
@@ -118,6 +176,10 @@ export function validateSkillPackage(input: unknown): SkillValidationResult {
   const metadataId = cleanText(metadata.id, "", 80);
   const name = cleanText(metadata.name, "", 80);
   const version = cleanText(metadata.version, "", 40);
+  const metadataPermissions = cleanStringList(metadata.permissions, 16, 40);
+  if (permissionsFile) {
+    validatePermissionCoverage(parsePermissionsFile(permissionsFile.content, errors), metadataPermissions, errors);
+  }
   if (!metadataId) {
     errors.push("skill.json id is required");
   }
@@ -143,11 +205,11 @@ export function validateSkillPackage(input: unknown): SkillValidationResult {
     provider: cleanText(metadata.provider, "Registry", 80),
     version,
     runtime: cleanText(metadata.runtime, "Skill runtime", 80),
-    permissions: cleanStringList(metadata.permissions, 16, 40),
+    permissions: metadataPermissions,
     updatedAt: cleanText(metadata.updatedAt, "", 32),
     maturity: normalizeMaturity(metadata.maturity),
     tags: cleanStringList(metadata.tags, 16, 40),
     entry: "SKILL.md",
   };
-  return { ok: true, manifest, files };
+  return { ok: true, manifest, files, skillPackageVersion };
 }

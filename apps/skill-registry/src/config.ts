@@ -2,6 +2,7 @@ import { join } from "node:path";
 import * as process from "node:process";
 
 export const DEFAULT_SKILL_REGISTRY_PORT = 3190;
+export const DEFAULT_SKILL_REGISTRY_ADMIN_TOKEN = "local-dev-skill-registry-admin-token";
 
 function readPort(raw: string | undefined, fallback: number): number {
   const parsed = Number(raw ?? fallback);
@@ -17,6 +18,7 @@ export type SkillRegistryConfig = {
   dbPath: string;
   packageRoot: string;
   seedRegistryUrl: string;
+  adminToken: string;
 };
 
 /** Resolve runtime config for the standalone Skill Registry service. */
@@ -28,5 +30,6 @@ export function resolveSkillRegistryConfig(env: NodeJS.ProcessEnv = process.env)
     packageRoot: env.SKILL_PACKAGE_ROOT?.trim() || join(dataRoot, "packages"),
     seedRegistryUrl:
       env.SKILL_REGISTRY_SEED?.trim() || join(process.cwd(), "registries", "default-skill-registry.json"),
+    adminToken: env.SKILL_REGISTRY_ADMIN_TOKEN?.trim() || DEFAULT_SKILL_REGISTRY_ADMIN_TOKEN,
   };
 }

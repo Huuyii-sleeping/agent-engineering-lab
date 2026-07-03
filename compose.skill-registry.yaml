@@ -13,3 +13,4 @@ services:
       SKILL_PACKAGE_ROOT: /data/packages
       SKILL_REGISTRY_PORT: "3190"
       SKILL_REGISTRY_SEED: /app/registries/default-skill-registry.json
+      SKILL_REGISTRY_ADMIN_TOKEN: ${SKILL_REGISTRY_ADMIN_TOKEN:-local-dev-skill-registry-admin-token}
