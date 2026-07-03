@@ -31,6 +31,6 @@
 - [x] 5.1 执行 BFF 测试
 - [x] 5.2 执行 Web 测试
 - [x] 5.3 执行 agent-cli session 测试
-- [ ] 5.4 执行根级 `pnpm build`
-- [ ] 5.5 尝试 OpenSpec status / validate 并记录结果
-- [ ] 5.6 清理运行产物
+- [x] 5.4 执行根级 `pnpm build`
+- [x] 5.5 尝试 OpenSpec status / validate 并记录结果
+- [x] 5.6 清理运行产物
