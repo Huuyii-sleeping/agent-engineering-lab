@@ -75,10 +75,36 @@ export class SkillsController {
 
   /** Installs one downloaded, builtin, or custom skill by id. */
   @Post(":skillId/install")
-  async installSkill(@Param("skillId") skillId: string, @Res() res: ServerResponse): Promise<void> {
-    const skill = await this.skillRegistryService.installSkill(skillId);
+  async installSkill(@Param("skillId") skillId: string, @Body() body: unknown, @Res() res: ServerResponse): Promise<void> {
+    const version =
+      body && typeof body === "object" && !Array.isArray(body) && typeof (body as { version?: unknown }).version === "string"
+        ? (body as { version: string }).version
+        : undefined;
+    const skill = await this.skillRegistryService.installSkill(skillId, version);
     if (!skill) {
       writeJson(res, 404, errorPayload("SKILL_NOT_FOUND", `skill ${skillId} was not found`));
+      return;
+    }
+    writeJson(res, 200, { ok: true, skill });
+  }
+
+  /** Updates one installed remote skill to the newest available version. */
+  @Post(":skillId/update")
+  async updateSkill(@Param("skillId") skillId: string, @Res() res: ServerResponse): Promise<void> {
+    const skill = await this.skillRegistryService.updateSkill(skillId);
+    if (!skill) {
+      writeJson(res, 404, errorPayload("SKILL_UPDATE_NOT_AVAILABLE", `skill ${skillId} has no installable update`));
+      return;
+    }
+    writeJson(res, 200, { ok: true, skill });
+  }
+
+  /** Rolls one installed skill back to the previous local version. */
+  @Post(":skillId/rollback")
+  async rollbackSkill(@Param("skillId") skillId: string, @Res() res: ServerResponse): Promise<void> {
+    const skill = await this.skillRegistryService.rollbackSkill(skillId);
+    if (!skill) {
+      writeJson(res, 404, errorPayload("SKILL_ROLLBACK_NOT_AVAILABLE", `skill ${skillId} has no local rollback target`));
       return;
     }
     writeJson(res, 200, { ok: true, skill });

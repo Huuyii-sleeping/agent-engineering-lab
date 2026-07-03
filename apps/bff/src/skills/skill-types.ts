@@ -6,9 +6,19 @@ export type SkillSourceType = "builtin" | "remote" | "custom";
 
 /** Trust channel claimed by a registry entry or assigned by the local hub. */
 export type SkillRegistrySource = "official" | "verified" | "community" | "private" | "local";
+export type SkillPackageVersion = "1.0";
 
 /** Lifecycle state for a skill package in the Skill Hub. */
 export type SkillStatus = "available" | "downloaded" | "installed" | "updateAvailable" | "invalid";
+
+/** Versioned install marker persisted by the Skill Hub lifecycle store. */
+export type SkillInstallationRecord = {
+  skillId: string;
+  version: string;
+  sourceType: SkillSourceType;
+  registrySource: SkillRegistrySource;
+  installedAt: number;
+};
 
 /** Normalized skill manifest loaded from SKILL.md plus Hub metadata. */
 export type SkillManifest = {
@@ -38,6 +48,10 @@ export type SkillRegistryItem = SkillManifest & {
   deprecated: boolean;
   status: SkillStatus;
   installed: boolean;
+  installedVersion: string;
+  installedAt: number | null;
+  availableVersion: string;
+  previousInstalledVersion: string;
   validationErrors: string[];
 };
 
@@ -56,11 +70,13 @@ export type SkillPackageFile = {
 
 /** JSON package format accepted by remote registry downloads and custom uploads. */
 export type SkillPackageInput = {
+  skillPackageVersion?: SkillPackageVersion;
   files: SkillPackageFile[];
 };
 
 /** Validated package ready to write into the local skill store. */
 export type ValidatedSkillPackage = {
+  skillPackageVersion?: SkillPackageVersion;
   manifest: SkillManifest;
   files: SkillPackageFile[];
 };
@@ -103,6 +119,8 @@ export type RemoteRegistryState = Omit<RemoteRegistrySettings, "managedByService
 
 export type SkillStoreState = {
   installedSkillIds: string[];
+  installedSkills: SkillInstallationRecord[];
+  previousInstalledSkills: SkillInstallationRecord[];
   downloadedSkillIds: string[];
   customSkillIds: string[];
 };

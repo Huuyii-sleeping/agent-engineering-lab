@@ -66,8 +66,8 @@ export class AppController {
   }
 
   @Post("sessions")
-  async createSession(@Res() res: ServerResponse): Promise<void> {
-    writeProxyResult(res, await this.agentProxy.createSession());
+  async createSession(@Body() body: JsonObject, @Res() res: ServerResponse): Promise<void> {
+    writeProxyResult(res, await this.agentProxy.createSession(body));
   }
 
   @Get("sessions/:sessionId/transcript")

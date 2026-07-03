@@ -61,8 +61,8 @@ export class AgentProxyService {
     return this.proxyJson({ method: "GET", pathname: "/sessions" });
   }
 
-  async createSession(): Promise<ProxyResult> {
-    return this.proxyJson({ method: "POST", pathname: "/sessions", body: {} });
+  async createSession(body: JsonObject = {}): Promise<ProxyResult> {
+    return this.proxyJson({ method: "POST", pathname: "/sessions", body: { agent: body.agent } });
   }
 
   async sessionDetail(sessionId: string): Promise<ProxyResult> {
@@ -98,6 +98,7 @@ export class AgentProxyService {
       body: {
         session_id: sessionId,
         message: body.message,
+        agent: body.agent,
         include_scheduled_notifications: body.include_scheduled_notifications === true,
       },
     });
@@ -150,6 +151,7 @@ export class AgentProxyService {
         body: JSON.stringify({
           session_id: sessionId,
           message: body.message,
+          agent: body.agent,
           include_scheduled_notifications: body.include_scheduled_notifications === true,
         }),
       });

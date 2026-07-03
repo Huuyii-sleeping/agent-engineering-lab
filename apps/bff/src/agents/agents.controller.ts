@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Inject, Param, Post, Put, Res } from "@nestjs/common";
 import type { ServerResponse } from "node:http";
 import { errorPayload, writeJson } from "../http-utils.js";
-import { AgentProfileService } from "./agent-profile.service.js";
+import { AgentProfileService, AgentSkillBindingValidationError } from "./agent-profile.service.js";
 
 @Controller("/api/agents")
 export class AgentsController {
@@ -19,7 +19,11 @@ export class AgentsController {
   /** Creates a new agent profile from a submitted draft. */
   @Post()
   async createAgent(@Body() body: unknown, @Res() res: ServerResponse): Promise<void> {
-    writeJson(res, 201, { ok: true, agent: await this.agentProfileService.createAgent(body) });
+    try {
+      writeJson(res, 201, { ok: true, agent: await this.agentProfileService.createAgent(body) });
+    } catch (error) {
+      this.writeAgentError(res, error);
+    }
   }
 
   /** Updates a single agent profile by id. */
@@ -29,12 +33,16 @@ export class AgentsController {
     @Body() body: unknown,
     @Res() res: ServerResponse,
   ): Promise<void> {
-    const agent = await this.agentProfileService.updateAgent(agentId, body);
-    if (!agent) {
-      writeJson(res, 404, errorPayload("AGENT_NOT_FOUND", `agent ${agentId} was not found`));
-      return;
+    try {
+      const agent = await this.agentProfileService.updateAgent(agentId, body);
+      if (!agent) {
+        writeJson(res, 404, errorPayload("AGENT_NOT_FOUND", `agent ${agentId} was not found`));
+        return;
+      }
+      writeJson(res, 200, { ok: true, agent });
+    } catch (error) {
+      this.writeAgentError(res, error);
     }
-    writeJson(res, 200, { ok: true, agent });
   }
 
   /** Deletes a single agent profile by id. */
@@ -46,5 +54,21 @@ export class AgentsController {
       return;
     }
     writeJson(res, 200, { ok: true });
+  }
+
+  private writeAgentError(res: ServerResponse, error: unknown): void {
+    if (error instanceof AgentSkillBindingValidationError) {
+      const payload = errorPayload(error.code, error.message);
+      writeJson(res, 400, {
+        ...payload,
+        error: {
+          code: error.code,
+          message: error.message,
+          details: error.issues,
+        },
+      });
+      return;
+    }
+    throw error;
   }
 }

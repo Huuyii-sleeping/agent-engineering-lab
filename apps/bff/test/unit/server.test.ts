@@ -197,8 +197,9 @@ async function startMockSkillRegistry(): Promise<{ registryUrl: string }> {
   return { registryUrl: `${await listen(server)}/registry.json` };
 }
 
-async function startMockSkillRegistryService(): Promise<{ baseUrl: string; downloads: string[] }> {
+async function startMockSkillRegistryService(adminToken?: string): Promise<{ baseUrl: string; downloads: string[]; adminAuthorizations: string[] }> {
   const downloads: string[] = [];
+  const adminAuthorizations: string[] = [];
   const published = new Map<string, { raw: string; skill: Record<string, unknown> }>();
   const servicePackage = {
     files: [
@@ -261,6 +262,14 @@ async function startMockSkillRegistryService(): Promise<{ baseUrl: string; downl
       return;
     }
     if (req.method === "POST" && url.pathname === "/admin/publish") {
+      adminAuthorizations.push(String(req.headers.authorization ?? ""));
+      if (adminToken && req.headers.authorization !== `Bearer ${adminToken}`) {
+        json(res, req.headers.authorization ? 403 : 401, {
+          ok: false,
+          error: { code: req.headers.authorization ? "ADMIN_AUTH_FORBIDDEN" : "ADMIN_AUTH_REQUIRED" },
+        });
+        return;
+      }
       const body = asObject(await readBody(req));
       const skillPackage = asObject(body.package);
       const files = Array.isArray(skillPackage.files) ? skillPackage.files : [];
@@ -320,12 +329,18 @@ async function startMockSkillRegistryService(): Promise<{ baseUrl: string; downl
     }
     json(res, 404, { ok: false, error: { code: "NOT_FOUND", message: url.pathname } });
   });
-  return { baseUrl: await listen(server), downloads };
+  return { baseUrl: await listen(server), downloads, adminAuthorizations };
 }
 
 async function startBff(
   agentBaseUrl: string,
-  options: { skillsRoot?: string; skillDataRoot?: string; remoteRegistryUrl?: string; registryServiceUrl?: string } = {},
+  options: {
+    skillsRoot?: string;
+    skillDataRoot?: string;
+    remoteRegistryUrl?: string;
+    registryServiceUrl?: string;
+    registryAdminToken?: string;
+  } = {},
 ): Promise<string> {
   const tempDir = await mkdtemp(join(tmpdir(), "agent-bff-test-"));
   tempDirs.push(tempDir);
@@ -341,6 +356,7 @@ async function startBff(
       skillDataRoot: options.skillDataRoot ?? join(tempDir, "skills-data"),
       remoteRegistryUrl,
       registryServiceUrl: options.registryServiceUrl,
+      registryAdminToken: options.registryAdminToken,
     }),
   );
 }
@@ -533,7 +549,7 @@ describe("bff server", () => {
         name: "  文档分析 Agent  ",
         description: "  处理长文档  ",
         scenario: "  文档整理和摘要  ",
-        skillIds: ["document-pipeline", "document-pipeline", "memory-context"],
+        skillIds: ["code-workspace", "code-workspace", "memory-context"],
         actions: [" 摘要文档 ", " 输出待办 "],
         systemPrompt: " 保持结论可验证 ",
       }),
@@ -548,7 +564,11 @@ describe("bff server", () => {
           name: "文档分析 Agent",
           description: "处理长文档",
           scenario: "文档整理和摘要",
-          skillIds: ["document-pipeline", "memory-context"],
+          skillIds: ["code-workspace", "memory-context"],
+          skills: [
+            { skillId: "code-workspace", version: "1.2.0", sourceType: "builtin", registrySource: "local" },
+            { skillId: "memory-context", version: "0.8.0", sourceType: "builtin", registrySource: "local" },
+          ],
           actions: ["摘要文档", "输出待办"],
           systemPrompt: "保持结论可验证",
         },
@@ -565,11 +585,104 @@ describe("bff server", () => {
       requestJson(`${bffBaseUrl}/api/agents/${createdAgent.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ avatarId: "compass", name: "交付 Agent", actions: ["验证构建"] }),
+        body: JSON.stringify({
+          avatarId: "compass",
+          name: "交付 Agent",
+          skillIds: ["legacy-stale"],
+          skills: [
+            { skillId: "memory-context", version: "0.8.0", sourceType: "builtin", registrySource: "local" },
+            { skillId: "memory-context", version: "0.8.0", sourceType: "builtin", registrySource: "local" },
+          ],
+          actions: ["验证构建"],
+        }),
       }),
     ).resolves.toMatchObject({
       status: 200,
-      body: { ok: true, agent: { id: createdAgent.id, avatarId: "compass", name: "交付 Agent", actions: ["验证构建"] } },
+      body: {
+        ok: true,
+        agent: {
+          id: createdAgent.id,
+          avatarId: "compass",
+          name: "交付 Agent",
+          skillIds: ["memory-context"],
+          skills: [{ skillId: "memory-context", version: "0.8.0", sourceType: "builtin", registrySource: "local" }],
+          actions: ["验证构建"],
+        },
+      },
+    });
+
+    await expect(
+      requestJson(`${bffBaseUrl}/api/agents/${createdAgent.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...createdAgent,
+          skills: [{ skillId: "memory-context", version: "0.7.0", sourceType: "builtin", registrySource: "local" }],
+        }),
+      }),
+    ).resolves.toMatchObject({
+      status: 400,
+      body: { ok: false, error: { code: "AGENT_SKILL_BINDING_INVALID" } },
+    });
+
+    await expect(
+      requestJson(`${bffBaseUrl}/api/agents/${createdAgent.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...createdAgent,
+          skills: [{ skillId: "not-installed", version: "1.0.0", sourceType: "builtin", registrySource: "local" }],
+        }),
+      }),
+    ).resolves.toMatchObject({
+      status: 400,
+      body: {
+        ok: false,
+        error: {
+          code: "AGENT_SKILL_BINDING_INVALID",
+          details: [{ skillId: "not-installed", code: "SKILL_NOT_INSTALLED" }],
+        },
+      },
+    });
+
+    await expect(
+      requestJson(`${bffBaseUrl}/api/agents/${createdAgent.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...createdAgent,
+          skills: [{ skillId: "memory-context", version: "0.8.0", sourceType: "remote", registrySource: "local" }],
+        }),
+      }),
+    ).resolves.toMatchObject({
+      status: 400,
+      body: {
+        ok: false,
+        error: {
+          code: "AGENT_SKILL_BINDING_INVALID",
+          details: [{ skillId: "memory-context", code: "SOURCE_MISMATCH" }],
+        },
+      },
+    });
+
+    await expect(
+      requestJson(`${bffBaseUrl}/api/agents/${createdAgent.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...createdAgent,
+          skills: [{ skillId: "memory-context", version: "0.8.0", sourceType: "builtin", registrySource: "official" }],
+        }),
+      }),
+    ).resolves.toMatchObject({
+      status: 400,
+      body: {
+        ok: false,
+        error: {
+          code: "AGENT_SKILL_BINDING_INVALID",
+          details: [{ skillId: "memory-context", code: "REGISTRY_SOURCE_MISMATCH" }],
+        },
+      },
     });
 
     await expect(requestJson(`${bffBaseUrl}/api/agents/${createdAgent.id}`, { method: "DELETE" })).resolves.toMatchObject({
@@ -777,6 +890,46 @@ describe("bff server", () => {
       status: 201,
       body: { ok: true, skill: { id: "custom-review", sourceType: "custom", status: "downloaded" } },
     });
+    const packageV1 = {
+      skillPackageVersion: "1.0",
+      files: [
+        {
+          path: "SKILL.md",
+          content:
+            "---\nname: package-v1-custom\ndescription: Use when testing package v1 custom uploads.\n---\n\n# Package v1 Custom\n",
+        },
+        {
+          path: "skill.json",
+          content: JSON.stringify({
+            id: "package-v1-custom",
+            name: "Package v1 Custom",
+            summary: "通过 BFF 上传 package v1。",
+            category: "自定义",
+            provider: "User",
+            version: "1.0.0",
+            runtime: "Skill runtime",
+            permissions: ["本地存储"],
+            updatedAt: "2026-06-28",
+            maturity: "stable",
+            tags: ["package-v1"],
+            entry: "SKILL.md",
+          }),
+        },
+        { path: "README.md", content: "# Package v1 Custom\n" },
+        { path: "permissions.json", content: JSON.stringify({ permissions: ["本地存储"] }) },
+        { path: "examples/basic.md", content: "Upload this package through SkillHub.\n" },
+      ],
+    };
+    await expect(
+      requestJson(`${bffBaseUrl}/api/skills/upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(packageV1),
+      }),
+    ).resolves.toMatchObject({
+      status: 201,
+      body: { ok: true, skill: { id: "package-v1-custom", sourceType: "custom", status: "downloaded" } },
+    });
     await expect(
       requestJson(`${bffBaseUrl}/api/skills/upload`, {
         method: "POST",
@@ -786,6 +939,69 @@ describe("bff server", () => {
     ).resolves.toMatchObject({
       status: 400,
       body: { ok: false, error: { code: "SKILL_PACKAGE_INVALID" } },
+    });
+    await expect(
+      requestJson(`${bffBaseUrl}/api/skills/upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          skillPackageVersion: "1.0",
+          files: [
+            { path: "SKILL.md", content: "---\nname: duplicate-custom\ndescription: Use when testing duplicate paths.\n---\n" },
+            { path: "SKILL.md", content: "duplicate" },
+            { path: "skill.json", content: JSON.stringify({ id: "duplicate-custom", name: "Duplicate", version: "1.0.0" }) },
+          ],
+        }),
+      }),
+    ).resolves.toMatchObject({
+      status: 400,
+      body: {
+        ok: false,
+        error: { code: "SKILL_PACKAGE_INVALID", errors: expect.arrayContaining(["duplicate file path: SKILL.md"]) },
+      },
+    });
+    await expect(
+      requestJson(`${bffBaseUrl}/api/skills/upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          skillPackageVersion: "2.0",
+          files: [],
+        }),
+      }),
+    ).resolves.toMatchObject({
+      status: 400,
+      body: {
+        ok: false,
+        error: { code: "SKILL_PACKAGE_INVALID", errors: expect.arrayContaining(["skillPackageVersion must be 1.0 when provided"]) },
+      },
+    });
+    await expect(
+      requestJson(`${bffBaseUrl}/api/skills/upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          skillPackageVersion: "1.0",
+          files: [
+            {
+              path: "SKILL.md",
+              content:
+                "---\nname: missing-permission\ndescription: Use when testing permission declaration coverage.\n---\n",
+            },
+            {
+              path: "skill.json",
+              content: JSON.stringify({ id: "missing-permission", name: "Missing Permission", version: "1.0.0", permissions: ["文件读写"] }),
+            },
+            { path: "permissions.json", content: JSON.stringify({ permissions: ["网络访问"] }) },
+          ],
+        }),
+      }),
+    ).resolves.toMatchObject({
+      status: 400,
+      body: {
+        ok: false,
+        error: { code: "SKILL_PACKAGE_INVALID", errors: expect.arrayContaining(["permissions.json must include skill.json permission: 文件读写"]) },
+      },
     });
     await expect(
       requestJson(`${bffBaseUrl}/api/skills/upload`, {
@@ -873,6 +1089,137 @@ describe("bff server", () => {
         error: {
           code: "SKILL_DOWNLOAD_FAILED",
           message: expect.stringContaining("hash mismatch"),
+        },
+      },
+    });
+  });
+
+  it("tracks installed versions, updates to newer remote versions, and rolls back", async () => {
+    const agent = await startMockAgent();
+    const tempDir = await mkdtemp(join(tmpdir(), "agent-bff-skillhub-update-"));
+    tempDirs.push(tempDir);
+    const skillsRoot = join(tempDir, "builtin");
+    const registryPath = join(tempDir, "registry.json");
+    await mkdir(skillsRoot, { recursive: true });
+
+    function packageRaw(version: string): string {
+      return JSON.stringify({
+        files: [
+          {
+            path: "SKILL.md",
+            content:
+              "---\nname: remote-updatable\ndescription: Use when testing remote skill updates.\n---\n\n# Remote Updatable\n",
+          },
+          {
+            path: "skill.json",
+            content: JSON.stringify({
+              id: "remote-updatable",
+              name: "远端可升级",
+              summary: `远端版本 ${version}。`,
+              category: "远端",
+              provider: "Registry",
+              version,
+              runtime: "Skill runtime",
+              permissions: ["测试"],
+              updatedAt: "2026-06-29",
+              maturity: "stable",
+              tags: ["remote", "update"],
+              entry: "SKILL.md",
+            }),
+          },
+        ],
+      });
+    }
+
+    const packageV1Raw = packageRaw("1.0.0");
+    const packageV11Raw = packageRaw("1.1.0");
+    const packageV1Path = join(tempDir, "remote-updatable-1.0.0.package.json");
+    const packageV11Path = join(tempDir, "remote-updatable-1.1.0.package.json");
+    await writeFile(packageV1Path, packageV1Raw, "utf8");
+    await writeFile(packageV11Path, packageV11Raw, "utf8");
+
+    function registryEntry(version: string, packagePath: string, raw: string) {
+      return {
+        id: "remote-updatable",
+        version,
+        packageUrl: packagePath,
+        packageSha256: sha256Hex(raw),
+        source: "official",
+        publisher: { id: "registry", name: "Registry", verified: true },
+        downloads: 10,
+        rating: 4.8,
+        metadata: { name: "远端可升级", summary: `远端版本 ${version}。`, category: "远端" },
+      };
+    }
+
+    await writeFile(
+      registryPath,
+      JSON.stringify({ skills: [registryEntry("1.0.0", packageV1Path, packageV1Raw)] }),
+      "utf8",
+    );
+    const bffBaseUrl = await startBff(agent.baseUrl, { skillsRoot, remoteRegistryUrl: registryPath });
+
+    await expect(requestJson(`${bffBaseUrl}/api/skills/remote-updatable/download`, { method: "POST" })).resolves.toMatchObject({
+      status: 200,
+      body: { ok: true, skill: { id: "remote-updatable", status: "downloaded", version: "1.0.0" } },
+    });
+    await expect(requestJson(`${bffBaseUrl}/api/skills/remote-updatable/install`, { method: "POST" })).resolves.toMatchObject({
+      status: 200,
+      body: {
+        ok: true,
+        skill: { id: "remote-updatable", status: "installed", installed: true, installedVersion: "1.0.0" },
+      },
+    });
+
+    await writeFile(
+      registryPath,
+      JSON.stringify({
+        skills: [
+          registryEntry("1.0.0", packageV1Path, packageV1Raw),
+          registryEntry("1.1.0", packageV11Path, packageV11Raw),
+        ],
+      }),
+      "utf8",
+    );
+    await expect(requestJson(`${bffBaseUrl}/api/skills`)).resolves.toMatchObject({
+      status: 200,
+      body: {
+        ok: true,
+        skills: [
+          expect.objectContaining({
+            id: "remote-updatable",
+            status: "updateAvailable",
+            installed: true,
+            installedVersion: "1.0.0",
+            availableVersion: "1.1.0",
+          }),
+        ],
+      },
+    });
+
+    await expect(requestJson(`${bffBaseUrl}/api/skills/remote-updatable/update`, { method: "POST" })).resolves.toMatchObject({
+      status: 200,
+      body: {
+        ok: true,
+        skill: {
+          id: "remote-updatable",
+          status: "installed",
+          installed: true,
+          installedVersion: "1.1.0",
+          previousInstalledVersion: "1.0.0",
+        },
+      },
+    });
+    await expect(requestJson(`${bffBaseUrl}/api/skills/remote-updatable/rollback`, { method: "POST" })).resolves.toMatchObject({
+      status: 200,
+      body: {
+        ok: true,
+        skill: {
+          id: "remote-updatable",
+          status: "updateAvailable",
+          installed: true,
+          installedVersion: "1.0.0",
+          previousInstalledVersion: "1.1.0",
         },
       },
     });
@@ -969,12 +1316,14 @@ describe("bff server", () => {
 
   it("publishes custom uploads to the standalone registry service when configured", async () => {
     const agent = await startMockAgent();
-    const registryService = await startMockSkillRegistryService();
+    const registryAdminToken = "bff-registry-admin-token";
+    const registryService = await startMockSkillRegistryService(registryAdminToken);
     const tempDir = await mkdtemp(join(tmpdir(), "agent-bff-registry-publish-"));
     tempDirs.push(tempDir);
     const bffBaseUrl = await startBff(agent.baseUrl, {
       skillsRoot: join(tempDir, "empty-builtin"),
       registryServiceUrl: registryService.baseUrl,
+      registryAdminToken,
     });
     const skillPackage = {
       files: [
@@ -1031,6 +1380,7 @@ describe("bff server", () => {
         ]),
       },
     });
+    expect(registryService.adminAuthorizations).toEqual([`Bearer ${registryAdminToken}`]);
   });
 
   it("proxies agent service SSE events", async () => {

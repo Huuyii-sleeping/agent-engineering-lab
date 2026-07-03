@@ -2,9 +2,12 @@ import { Inject, Injectable } from "@nestjs/common";
 import { LocalStoreService } from "../local-store.service.js";
 import type {
   RemoteSkillRegistry,
+  SkillInstallationRecord,
   SkillPackageInput,
   SkillRegistryItem,
+  SkillRegistrySource,
   SkillStoreState,
+  SkillSourceType,
   ValidatedSkillPackage,
 } from "./skill-types.js";
 import { SkillStoreService } from "./skill-store.service.js";
@@ -30,9 +33,71 @@ function normalizeIds(value: unknown): string[] {
     : [];
 }
 
+function normalizeSourceType(value: unknown): SkillSourceType {
+  return value === "remote" || value === "custom" || value === "builtin" ? value : "builtin";
+}
+
+function normalizeRegistrySource(value: unknown): SkillRegistrySource {
+  return value === "official" || value === "verified" || value === "community" || value === "private" || value === "local" ? value : "local";
+}
+
+function installationRecordFromSkill(skill: SkillRegistryItem, installedAt = Date.now()): SkillInstallationRecord {
+  return {
+    skillId: skill.id,
+    version: skill.version,
+    sourceType: skill.sourceType,
+    registrySource: skill.registrySource,
+    installedAt,
+  };
+}
+
+function legacyInstallationRecord(skillId: string): SkillInstallationRecord {
+  return {
+    skillId,
+    version: "",
+    sourceType: "builtin",
+    registrySource: "local",
+    installedAt: 0,
+  };
+}
+
+function normalizeInstallationRecords(value: unknown): SkillInstallationRecord[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const records = value
+    .map((item) => {
+      const record = asObject(item);
+      const skillId = typeof record.skillId === "string" && record.skillId.trim() ? record.skillId.trim() : "";
+      if (!skillId) {
+        return null;
+      }
+      return {
+        skillId,
+        version: typeof record.version === "string" ? record.version.trim() : "",
+        sourceType: normalizeSourceType(record.sourceType),
+        registrySource: normalizeRegistrySource(record.registrySource),
+        installedAt: typeof record.installedAt === "number" && Number.isFinite(record.installedAt) ? record.installedAt : 0,
+      };
+    })
+    .filter((item): item is SkillInstallationRecord => Boolean(item));
+  const byId = new Map<string, SkillInstallationRecord>();
+  for (const record of records) {
+    byId.set(record.skillId, record);
+  }
+  return [...byId.values()];
+}
+
+function replaceRecord(records: SkillInstallationRecord[], next: SkillInstallationRecord): SkillInstallationRecord[] {
+  return [...records.filter((record) => record.skillId !== next.skillId), next];
+}
+
 export function defaultSkillStoreState(): SkillStoreState {
+  const installedSkills = defaultInstalledSkillIds.map(legacyInstallationRecord);
   return {
     installedSkillIds: defaultInstalledSkillIds,
+    installedSkills,
+    previousInstalledSkills: [],
     downloadedSkillIds: [],
     customSkillIds: [],
   };
@@ -40,10 +105,15 @@ export function defaultSkillStoreState(): SkillStoreState {
 
 export function normalizeSkillStoreState(value: unknown): SkillStoreState {
   const record = asObject(value);
+  const legacyIds = normalizeIds(record.installedSkillIds);
+  const installedSkills = normalizeInstallationRecords(record.installedSkills);
+  const normalizedInstalledSkills = installedSkills.length
+    ? installedSkills
+    : (legacyIds.length ? legacyIds : defaultInstalledSkillIds).map(legacyInstallationRecord);
   return {
-    installedSkillIds: normalizeIds(record.installedSkillIds).length
-      ? normalizeIds(record.installedSkillIds)
-      : defaultInstalledSkillIds,
+    installedSkillIds: normalizedInstalledSkills.map((item) => item.skillId),
+    installedSkills: normalizedInstalledSkills,
+    previousInstalledSkills: normalizeInstallationRecords(record.previousInstalledSkills),
     downloadedSkillIds: normalizeIds(record.downloadedSkillIds),
     customSkillIds: normalizeIds(record.customSkillIds),
   };
@@ -65,8 +135,11 @@ export class SkillInstallerService {
 
   /** Persists Skill Hub lifecycle state. */
   async writeState(state: SkillStoreState): Promise<SkillStoreState> {
+    const installedSkills = normalizeInstallationRecords(state.installedSkills);
     return this.localStore.writeSection(skillStoreKey, {
-      installedSkillIds: [...new Set(state.installedSkillIds)],
+      installedSkillIds: [...new Set(installedSkills.map((record) => record.skillId))],
+      installedSkills,
+      previousInstalledSkills: normalizeInstallationRecords(state.previousInstalledSkills),
       downloadedSkillIds: [...new Set(state.downloadedSkillIds)],
       customSkillIds: [...new Set(state.customSkillIds)],
     });
@@ -77,9 +150,12 @@ export class SkillInstallerService {
     skillId: string,
     registry?: RemoteSkillRegistry,
     remoteRegistryUrl?: string,
+    version?: string,
   ): Promise<{ ok: true } | { ok: false; code: string; message: string }> {
     const targetRegistry = registry ?? (await this.skillStore.readRemoteRegistry(remoteRegistryUrl));
-    const entry = targetRegistry.skills.find((item) => item.id === skillId);
+    const entry = targetRegistry.skills
+      .filter((item) => item.id === skillId && (!version || item.version === version))
+      .sort((left, right) => compareVersion(right.version, left.version))[0];
     if (!entry) {
       return { ok: false, code: "SKILL_NOT_FOUND", message: `skill ${skillId} was not found` };
     }
@@ -122,15 +198,49 @@ export class SkillInstallerService {
   }
 
   /** Marks an existing local skill package as installed. */
-  async installSkill(skillId: string, localSkills: SkillRegistryItem[]): Promise<boolean> {
-    const target = localSkills.find((skill) => skill.id === skillId && skill.status !== "available" && skill.status !== "invalid");
+  async installSkill(skillId: string, localSkills: SkillRegistryItem[], version?: string): Promise<boolean> {
+    const target = localSkills
+      .filter((skill) => skill.id === skillId && (!version || skill.version === version) && skill.status !== "available" && skill.status !== "invalid")
+      .sort((left, right) => compareVersion(right.version, left.version))[0];
     if (!target) {
       return false;
     }
     const state = await this.readState();
+    const previous = state.installedSkills.find((record) => record.skillId === skillId);
+    const nextRecord = installationRecordFromSkill(target);
+    const previousInstalledSkills =
+      previous && previous.version && previous.version !== nextRecord.version
+        ? replaceRecord(state.previousInstalledSkills, previous)
+        : state.previousInstalledSkills;
     await this.writeState({
       ...state,
-      installedSkillIds: [...new Set([...state.installedSkillIds, skillId])],
+      installedSkills: replaceRecord(state.installedSkills, nextRecord),
+      previousInstalledSkills,
+    });
+    return true;
+  }
+
+  /** Restores the previous installed version if that package is still local. */
+  async rollbackSkill(skillId: string, localSkills: SkillRegistryItem[]): Promise<boolean> {
+    const state = await this.readState();
+    const current = state.installedSkills.find((record) => record.skillId === skillId);
+    const previous = state.previousInstalledSkills.find((record) => record.skillId === skillId);
+    if (!previous) {
+      return false;
+    }
+    const target = localSkills.find((skill) => skill.id === skillId && skill.version === previous.version && skill.status !== "available" && skill.status !== "invalid");
+    if (!target) {
+      return false;
+    }
+    await this.writeState({
+      ...state,
+      installedSkills: replaceRecord(state.installedSkills, {
+        ...previous,
+        sourceType: target.sourceType,
+        registrySource: target.registrySource,
+        installedAt: Date.now(),
+      }),
+      previousInstalledSkills: current && current.version ? replaceRecord(state.previousInstalledSkills, current) : state.previousInstalledSkills,
     });
     return true;
   }
@@ -140,7 +250,19 @@ export class SkillInstallerService {
     const state = await this.readState();
     await this.writeState({
       ...state,
-      installedSkillIds: state.installedSkillIds.filter((id) => id !== skillId),
+      installedSkills: state.installedSkills.filter((record) => record.skillId !== skillId),
     });
   }
+}
+
+function compareVersion(left: string, right: string): number {
+  const leftParts = left.split(".").map((part) => Number(part) || 0);
+  const rightParts = right.split(".").map((part) => Number(part) || 0);
+  for (let index = 0; index < Math.max(leftParts.length, rightParts.length); index += 1) {
+    const diff = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
+    if (diff !== 0) {
+      return diff;
+    }
+  }
+  return 0;
 }

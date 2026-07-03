@@ -20,6 +20,7 @@ export type SkillStoreOptions = {
   skillDataRoot?: string;
   remoteRegistryUrl?: string;
   registryServiceUrl?: string;
+  registryAdminToken?: string;
 };
 
 export type StoredSkillPackage = ValidatedSkillPackage & {
@@ -94,6 +95,7 @@ export class SkillStoreService {
   private readonly skillDataRoot: string;
   private readonly remoteRegistryUrl: string;
   private readonly registryServiceUrl?: string;
+  private readonly registryAdminToken?: string;
 
   constructor(
     private readonly validator: SkillValidatorService,
@@ -102,6 +104,7 @@ export class SkillStoreService {
     this.skillsRoot = options.skillsRoot ?? defaultSkillsRoot();
     this.skillDataRoot = options.skillDataRoot ?? defaultSkillDataRoot();
     this.registryServiceUrl = options.registryServiceUrl?.replace(/\/+$/, "");
+    this.registryAdminToken = options.registryAdminToken?.trim();
     this.remoteRegistryUrl = options.remoteRegistryUrl ?? (this.registryServiceUrl ? `${this.registryServiceUrl}/skills` : defaultRemoteRegistryUrl());
   }
 
@@ -148,7 +151,10 @@ export class SkillStoreService {
       throw new Error(`skill package hash mismatch for ${entry.id}: expected ${entry.packageSha256}, got ${actualSha256}`);
     }
     const parsed = asObject(JSON.parse(raw) as unknown);
-    return { files: Array.isArray(parsed.files) ? (parsed.files as SkillPackageFile[]) : [] };
+    return {
+      ...(parsed.skillPackageVersion === "1.0" ? { skillPackageVersion: "1.0" as const } : {}),
+      files: Array.isArray(parsed.files) ? (parsed.files as SkillPackageFile[]) : [],
+    };
   }
 
   /** Returns the built-in default remote registry URL for local development. */
@@ -168,7 +174,10 @@ export class SkillStoreService {
     }
     const response = await fetch(`${this.registryServiceUrl}/admin/publish`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(this.registryAdminToken ? { Authorization: `Bearer ${this.registryAdminToken}` } : {}),
+      },
       body: JSON.stringify({
         package: input,
         source: "private",

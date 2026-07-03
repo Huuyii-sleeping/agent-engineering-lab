@@ -5,6 +5,7 @@ import type {
   RemoteRegistryState,
   RemoteSkillIndexItem,
   RemoteSkillRegistry,
+  SkillInstallationRecord,
   SkillManifest,
   SkillPackageInput,
   SkillPublisher,
@@ -57,10 +58,14 @@ function remoteManifest(entry: RemoteSkillIndexItem): SkillManifest {
 
 function registryItemFromPackage(
   skillPackage: StoredSkillPackage,
-  installedIds: Set<string>,
+  installedById: Map<string, SkillInstallationRecord>,
+  previousById: Map<string, SkillInstallationRecord>,
   status: SkillStatus,
   validationErrors: string[] = [],
 ): SkillRegistryItem {
+  const installedRecord = installedById.get(skillPackage.manifest.id);
+  const previousRecord = previousById.get(skillPackage.manifest.id);
+  const installed = Boolean(installedRecord && (!installedRecord.version || installedRecord.version === skillPackage.manifest.version));
   return {
     ...skillPackage.manifest,
     sourceType: skillPackage.sourceType,
@@ -70,8 +75,12 @@ function registryItemFromPackage(
     rating: null,
     packageSha256: "",
     deprecated: false,
-    status: installedIds.has(skillPackage.manifest.id) ? "installed" : status,
-    installed: installedIds.has(skillPackage.manifest.id),
+    status: installed ? "installed" : status,
+    installed,
+    installedVersion: installedRecord?.version || (installed ? skillPackage.manifest.version : ""),
+    installedAt: installedRecord?.installedAt || null,
+    availableVersion: skillPackage.manifest.version,
+    previousInstalledVersion: previousRecord?.version ?? "",
     validationErrors,
   };
 }
@@ -88,6 +97,10 @@ function registryItemFromRemote(entry: RemoteSkillIndexItem, status: SkillStatus
     deprecated: entry.deprecated,
     status,
     installed: false,
+    installedVersion: "",
+    installedAt: null,
+    availableVersion: entry.version,
+    previousInstalledVersion: "",
     validationErrors: [],
   };
 }
@@ -99,6 +112,25 @@ function applyRemoteRegistryMetadata(local: SkillRegistryItem, entry: RemoteSkil
   local.rating = entry.rating;
   local.packageSha256 = entry.packageSha256;
   local.deprecated = entry.deprecated;
+  local.availableVersion = entry.version;
+}
+
+function latestPackage(packages: StoredSkillPackage[]): StoredSkillPackage {
+  return [...packages].sort((left, right) => compareVersion(right.manifest.version, left.manifest.version))[0] as StoredSkillPackage;
+}
+
+function visibleLocalPackages(packages: StoredSkillPackage[], installedById: Map<string, SkillInstallationRecord>): StoredSkillPackage[] {
+  const grouped = new Map<string, StoredSkillPackage[]>();
+  for (const skillPackage of packages) {
+    grouped.set(skillPackage.manifest.id, [...(grouped.get(skillPackage.manifest.id) ?? []), skillPackage]);
+  }
+  return [...grouped.entries()].map(([skillId, versions]) => {
+    const installed = installedById.get(skillId);
+    if (installed?.version) {
+      return versions.find((item) => item.manifest.version === installed.version) ?? latestPackage(versions);
+    }
+    return latestPackage(versions);
+  });
 }
 
 function remoteRegistrySettings(state: RemoteRegistryState, managedByService: boolean): RemoteRegistrySettings {
@@ -227,11 +259,14 @@ export class SkillRegistryService {
       this.resolveRemoteRegistry(remoteRegistryState),
       this.installer.readState(),
     ]);
-    const installedIds = new Set(state.installedSkillIds);
-    const localItems = [...builtin, ...downloaded, ...custom].map((skillPackage) =>
+    const installedById = new Map(state.installedSkills.map((record) => [record.skillId, record]));
+    const previousById = new Map(state.previousInstalledSkills.map((record) => [record.skillId, record]));
+    const localPackages = visibleLocalPackages([...builtin, ...downloaded, ...custom], installedById);
+    const localItems = localPackages.map((skillPackage) =>
       registryItemFromPackage(
         skillPackage,
-        installedIds,
+        installedById,
+        previousById,
         state.downloadedSkillIds.includes(skillPackage.manifest.id) || skillPackage.sourceType !== "remote"
           ? "downloaded"
           : "available",
@@ -260,10 +295,10 @@ export class SkillRegistryService {
   }
 
   /** Downloads a remote skill package and returns its registry item. */
-  async downloadSkill(skillId: string): Promise<SkillRegistryItem | null> {
+  async downloadSkill(skillId: string, version?: string): Promise<SkillRegistryItem | null> {
     const remoteRegistryState = await this.readRemoteRegistryState();
     const registry = await this.resolveRemoteRegistry(remoteRegistryState);
-    const result = await this.installer.downloadSkill(skillId, registry, remoteRegistryState.url);
+    const result = await this.installer.downloadSkill(skillId, registry, remoteRegistryState.url, version);
     if (!result.ok) {
       return null;
     }
@@ -284,10 +319,38 @@ export class SkillRegistryService {
   }
 
   /** Marks a downloaded, builtin, or custom skill as installed. */
-  async installSkill(skillId: string): Promise<SkillRegistryItem | null> {
-    const localSkills = (await this.listSkills()).filter((skill) => skill.status !== "available");
-    const installed = await this.installer.installSkill(skillId, localSkills);
+  async installSkill(skillId: string, version?: string): Promise<SkillRegistryItem | null> {
+    const localSkills = await this.listLocalSkillItems();
+    const installed = await this.installer.installSkill(skillId, localSkills, version);
     return installed ? this.findSkill(skillId) : null;
+  }
+
+  /** Downloads and installs the newest remote version newer than the current installed version. */
+  async updateSkill(skillId: string): Promise<SkillRegistryItem | null> {
+    const state = await this.installer.readState();
+    const current = state.installedSkills.find((record) => record.skillId === skillId);
+    if (!current) {
+      return null;
+    }
+    const remoteRegistryState = await this.readRemoteRegistryState();
+    const registry = await this.resolveRemoteRegistry(remoteRegistryState);
+    const target = registry.skills
+      .filter((entry) => entry.id === skillId && (!current.version || compareVersion(entry.version, current.version) > 0))
+      .sort((left, right) => compareVersion(right.version, left.version))[0];
+    if (!target) {
+      return null;
+    }
+    const downloaded = await this.installer.downloadSkill(skillId, { skills: [target] }, remoteRegistryState.url, target.version);
+    if (!downloaded.ok) {
+      return null;
+    }
+    return this.installSkill(skillId, target.version);
+  }
+
+  /** Restores the previous installed version when it still exists locally. */
+  async rollbackSkill(skillId: string): Promise<SkillRegistryItem | null> {
+    const rolledBack = await this.installer.rollbackSkill(skillId, await this.listLocalSkillItems());
+    return rolledBack ? this.findSkill(skillId) : null;
   }
 
   /** Marks one skill as uninstalled. */
@@ -298,6 +361,25 @@ export class SkillRegistryService {
 
   private async findSkill(skillId: string): Promise<SkillRegistryItem | null> {
     return (await this.listSkills()).find((skill) => skill.id === skillId) ?? null;
+  }
+
+  private async listLocalSkillItems(): Promise<SkillRegistryItem[]> {
+    const [builtin, downloaded, custom, state] = await Promise.all([
+      this.skillStore.listBuiltinPackages(),
+      this.skillStore.listDownloadedPackages(),
+      this.skillStore.listCustomPackages(),
+      this.installer.readState(),
+    ]);
+    const installedById = new Map(state.installedSkills.map((record) => [record.skillId, record]));
+    const previousById = new Map(state.previousInstalledSkills.map((record) => [record.skillId, record]));
+    return [...builtin, ...downloaded, ...custom].map((skillPackage) =>
+      registryItemFromPackage(
+        skillPackage,
+        installedById,
+        previousById,
+        state.downloadedSkillIds.includes(skillPackage.manifest.id) || skillPackage.sourceType !== "remote" ? "downloaded" : "available",
+      ),
+    );
   }
 
   private async readRemoteRegistryState(): Promise<RemoteRegistryState> {
