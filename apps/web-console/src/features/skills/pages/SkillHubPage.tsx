@@ -134,6 +134,11 @@ export function skillActionLabel(skill: SkillRegistryItem): string {
   return "安装";
 }
 
+/** Returns whether the primary Skill lifecycle action should be blocked in the UI. */
+export function isPrimarySkillActionDisabled(skill: SkillRegistryItem): boolean {
+  return skill.status === "invalid" || (skill.deprecated && skill.status === "available");
+}
+
 /** Returns whether a Skill operation should be confirmed because bound Agents may be affected. */
 export function shouldConfirmSkillImpact(skill: SkillRegistryItem, affectedAgentCount: number, kind: SkillImpactActionKind): boolean {
   if (affectedAgentCount === 0) {
@@ -236,6 +241,9 @@ export function SkillHubPage({
   }
 
   function requestSkillAction(skill: SkillRegistryItem): void {
+    if (isPrimarySkillActionDisabled(skill)) {
+      return;
+    }
     if (hasSkillOperationInFlight) {
       return;
     }
@@ -486,7 +494,7 @@ export function SkillHubPage({
                     className="skillhub-action"
                     type="button"
                     aria-busy={isSkillOperationRunning(skill, "primary")}
-                    disabled={hasSkillOperationInFlight || (skill.deprecated && skill.status === "available")}
+                    disabled={hasSkillOperationInFlight || isPrimarySkillActionDisabled(skill)}
                     onClick={() => requestSkillAction(skill)}
                   >
                     {skill.status === "available" ? (
@@ -677,7 +685,7 @@ export function SkillHubPage({
                     className="skillhub-action"
                     type="button"
                     aria-busy={isSkillOperationRunning(selectedSkill, "primary")}
-                    disabled={hasSkillOperationInFlight}
+                    disabled={hasSkillOperationInFlight || isPrimarySkillActionDisabled(selectedSkill)}
                     onClick={() => requestSkillAction(selectedSkill)}
                   >
                     <PackageCheck size={15} strokeWidth={2.4} aria-hidden="true" />

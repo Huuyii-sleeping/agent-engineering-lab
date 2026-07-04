@@ -1,7 +1,13 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { SkillRegistryItem } from "../../../api";
-import { SkillHubPage, shouldConfirmSkillImpact, skillActionLabel, type SkillLifecycleOperationState } from "./SkillHubPage";
+import {
+  SkillHubPage,
+  isPrimarySkillActionDisabled,
+  shouldConfirmSkillImpact,
+  skillActionLabel,
+  type SkillLifecycleOperationState,
+} from "./SkillHubPage";
 
 const installedSkill: SkillRegistryItem = {
   id: "code-workspace",
@@ -36,9 +42,11 @@ const installedSkill: SkillRegistryItem = {
 function renderMinimalSkillHub({
   registryRefreshing = false,
   skillOperationInFlight = null,
+  skills = [installedSkill],
 }: {
   registryRefreshing?: boolean;
   skillOperationInFlight?: SkillLifecycleOperationState | null;
+  skills?: SkillRegistryItem[];
 } = {}): string {
   return renderToStaticMarkup(
     <SkillHubPage
@@ -47,7 +55,7 @@ function renderMinimalSkillHub({
       registrySettings={null}
       registryRefreshing={registryRefreshing}
       skillOperationInFlight={skillOperationInFlight}
-      skills={[installedSkill]}
+      skills={skills}
       onRefreshRegistry={vi.fn()}
       onRollbackSkill={vi.fn()}
       onSkillAction={vi.fn()}
@@ -209,6 +217,10 @@ describe("SkillHubPage", () => {
   it("labels and confirms operations that can affect bound agents", () => {
     expect(skillActionLabel(installedSkill)).toBe("卸载");
     expect(skillActionLabel({ ...installedSkill, status: "updateAvailable" })).toBe("升级");
+    expect(skillActionLabel({ ...installedSkill, status: "invalid" })).toBe("不可用");
+    expect(isPrimarySkillActionDisabled({ ...installedSkill, status: "invalid" })).toBe(true);
+    expect(isPrimarySkillActionDisabled({ ...installedSkill, status: "available", deprecated: true })).toBe(true);
+    expect(isPrimarySkillActionDisabled(installedSkill)).toBe(false);
     expect(shouldConfirmSkillImpact({ ...installedSkill, status: "updateAvailable" }, 1, "primary")).toBe(true);
     expect(shouldConfirmSkillImpact(installedSkill, 1, "primary")).toBe(true);
     expect(shouldConfirmSkillImpact(installedSkill, 1, "rollback")).toBe(true);
@@ -228,6 +240,16 @@ describe("SkillHubPage", () => {
     const html = renderMinimalSkillHub({ registryRefreshing: true });
 
     expect(html).toContain("同步中");
+    expect(html).toContain("disabled=\"\"");
+  });
+
+  it("disables invalid skill primary actions", () => {
+    const html = renderMinimalSkillHub({
+      skills: [{ ...installedSkill, installed: false, status: "invalid", validationErrors: ["missing SKILL.md"] }],
+    });
+
+    expect(html).toContain("不可用");
+    expect(html).toContain("missing SKILL.md");
     expect(html).toContain("disabled=\"\"");
   });
 });
