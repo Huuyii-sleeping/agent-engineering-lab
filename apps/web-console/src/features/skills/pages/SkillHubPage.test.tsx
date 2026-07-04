@@ -86,7 +86,14 @@ describe("SkillHubPage", () => {
     expect(html).not.toContain("Docker Registry");
     expect(html).not.toContain("http://127.0.0.1:3190/skills");
     expect(html).toContain("已安装");
+    expect(html).toContain("详情");
+    expect(html).toContain("Skill detail");
+    expect(html).toContain("当前版本");
+    expect(html).toContain("已安装版本");
+    expect(html).toContain("上一版本");
     expect(html).toContain("可回滚到 v1.1.0");
+    expect(html).toContain("回滚到 v1.1.0");
+    expect(html).toContain("未发现校验错误");
     expect(html).toContain("回滚");
     expect(html).toContain("下载");
     expect(html).toContain("Private publish");

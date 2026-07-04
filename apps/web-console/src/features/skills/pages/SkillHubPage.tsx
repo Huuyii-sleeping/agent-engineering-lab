@@ -1,9 +1,11 @@
 import {
+  AlertTriangle,
   BadgeCheck,
   Check,
   CircleHelp,
   Download,
   Hash,
+  Info,
   Layers3,
   PackageCheck,
   RotateCcw,
@@ -12,6 +14,7 @@ import {
   SlidersHorizontal,
   Star,
   Upload,
+  X,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { SkillPackageInput, SkillRegistryItem } from "../../../api";
@@ -29,6 +32,24 @@ const skillPackageExample = `{
     }
   ]
 }`;
+
+function versionLabel(version: string): string {
+  return version ? `v${version}` : "无";
+}
+
+function installedVersionLabel(skill: SkillRegistryItem): string {
+  if (!skill.installed) {
+    return "未安装";
+  }
+  return versionLabel(skill.installedVersion || skill.version);
+}
+
+function installedAtLabel(value: number | null): string {
+  if (!value) {
+    return "未安装";
+  }
+  return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
 
 /** Render the local registry of skills that can be loaded into agents. */
 export function SkillHubPage({
@@ -48,6 +69,8 @@ export function SkillHubPage({
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [customPackageText, setCustomPackageText] = useState("");
   const [customPackageError, setCustomPackageError] = useState<string | null>(null);
+  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = useState(true);
   const categories = useMemo(() => [allCategories, ...new Set(skills.map((skill) => skill.category))], [skills]);
   const filteredSkills = skills.filter((skill) => {
     const keyword = query.trim().toLowerCase();
@@ -60,6 +83,8 @@ export function SkillHubPage({
     const matchesLoaded = !showLoadedOnly || skill.installed;
     return matchesKeyword && matchesCategory && matchesLoaded;
   });
+  const selectedSkill = skills.find((skill) => skill.id === selectedSkillId) ?? filteredSkills[0] ?? null;
+  const showDetailPanel = detailOpen && selectedSkill !== null;
 
   function actionLabel(skill: SkillRegistryItem): string {
     if (skill.deprecated && skill.status === "available") {
@@ -101,6 +126,11 @@ export function SkillHubPage({
     } catch {
       setCustomPackageError("请输入合法的 Skill package JSON。");
     }
+  }
+
+  function openSkillDetail(skill: SkillRegistryItem): void {
+    setSelectedSkillId(skill.id);
+    setDetailOpen(true);
   }
 
   return (
@@ -203,11 +233,12 @@ export function SkillHubPage({
             <small>{activeCategory === allCategories ? "全部分类" : activeCategory}</small>
           </div>
 
-          <div className="skillhub-grid">
-            {filteredSkills.map((skill) => {
-              const installed = skill.installed;
-              return (
-                <article className={`skillhub-card ${installed ? "skillhub-card--downloaded" : ""}`} key={skill.id}>
+          <div className={`skillhub-registry-body ${showDetailPanel ? "skillhub-registry-body--with-detail" : ""}`}>
+            <div className="skillhub-grid">
+              {filteredSkills.map((skill) => {
+                const installed = skill.installed;
+                return (
+                  <article className={`skillhub-card ${installed ? "skillhub-card--downloaded" : ""}`} key={skill.id}>
                   <div className="skillhub-card-top">
                     <span>{skill.category}</span>
                     <strong>{skill.maturity === "stable" ? "Stable" : "Beta"}</strong>
@@ -263,6 +294,15 @@ export function SkillHubPage({
                     </div>
                   ) : null}
                   <button
+                    className="skillhub-detail-action"
+                    type="button"
+                    aria-pressed={detailOpen && selectedSkill?.id === skill.id}
+                    onClick={() => openSkillDetail(skill)}
+                  >
+                    <Info size={15} strokeWidth={2.4} aria-hidden="true" />
+                    <span>详情</span>
+                  </button>
+                  <button
                     className="skillhub-action"
                     type="button"
                     disabled={skill.deprecated && skill.status === "available"}
@@ -292,14 +332,107 @@ export function SkillHubPage({
                     </button>
                   ) : null}
                 </article>
-              );
-            })}
-            {filteredSkills.length === 0 ? (
-              <div className="skillhub-empty">
-                <Search size={22} strokeWidth={2.2} aria-hidden="true" />
-                <strong>没有匹配的 Skill</strong>
-                <span>调整关键词或筛选条件后再试。</span>
-              </div>
+                );
+              })}
+              {filteredSkills.length === 0 ? (
+                <div className="skillhub-empty">
+                  <Search size={22} strokeWidth={2.2} aria-hidden="true" />
+                  <strong>没有匹配的 Skill</strong>
+                  <span>调整关键词或筛选条件后再试。</span>
+                </div>
+              ) : null}
+            </div>
+            {showDetailPanel ? (
+              <aside className="skillhub-detail-panel" aria-label={`${selectedSkill.name} 详情`}>
+                <div className="skillhub-detail-header">
+                  <div>
+                    <span>Skill detail</span>
+                    <h2>{selectedSkill.name}</h2>
+                  </div>
+                  <button className="skillhub-detail-close" type="button" aria-label="关闭 Skill 详情" onClick={() => setDetailOpen(false)}>
+                    <X size={16} strokeWidth={2.4} aria-hidden="true" />
+                  </button>
+                </div>
+                <div className="skillhub-detail-badges">
+                  <span>{sourceLabel(selectedSkill.registrySource)}</span>
+                  <span>{selectedSkill.status}</span>
+                  <span>{selectedSkill.maturity === "stable" ? "Stable" : "Beta"}</span>
+                </div>
+                <p>{selectedSkill.description || selectedSkill.summary}</p>
+                <dl className="skillhub-detail-list">
+                  <div>
+                    <dt>当前版本</dt>
+                    <dd>{versionLabel(selectedSkill.version)}</dd>
+                  </div>
+                  <div>
+                    <dt>已安装版本</dt>
+                    <dd>{installedVersionLabel(selectedSkill)}</dd>
+                  </div>
+                  <div>
+                    <dt>可用版本</dt>
+                    <dd>{versionLabel(selectedSkill.availableVersion || selectedSkill.version)}</dd>
+                  </div>
+                  <div>
+                    <dt>上一版本</dt>
+                    <dd>{versionLabel(selectedSkill.previousInstalledVersion)}</dd>
+                  </div>
+                  <div>
+                    <dt>安装时间</dt>
+                    <dd>{installedAtLabel(selectedSkill.installedAt)}</dd>
+                  </div>
+                  <div>
+                    <dt>入口文件</dt>
+                    <dd>{selectedSkill.entry}</dd>
+                  </div>
+                  <div>
+                    <dt>Package hash</dt>
+                    <dd>{selectedSkill.packageSha256 || "未提供 hash"}</dd>
+                  </div>
+                </dl>
+                <div className="skillhub-detail-section">
+                  <strong>权限</strong>
+                  <div className="skillhub-detail-pills">
+                    {selectedSkill.permissions.map((permission) => (
+                      <span key={permission}>{permission}</span>
+                    ))}
+                  </div>
+                </div>
+                <div className="skillhub-detail-section">
+                  <strong>标签</strong>
+                  <div className="skillhub-detail-pills">
+                    {selectedSkill.tags.map((tag) => (
+                      <span key={tag}>{tag}</span>
+                    ))}
+                  </div>
+                </div>
+                <div className="skillhub-detail-section">
+                  <strong>校验</strong>
+                  {selectedSkill.validationErrors.length > 0 ? (
+                    <ul className="skillhub-detail-errors">
+                      {selectedSkill.validationErrors.map((error) => (
+                        <li key={error}>
+                          <AlertTriangle size={14} strokeWidth={2.4} aria-hidden="true" />
+                          <span>{error}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <span className="skillhub-detail-muted">未发现校验错误</span>
+                  )}
+                </div>
+                <div className="skillhub-detail-actions">
+                  <button className="skillhub-action" type="button" onClick={() => onSkillAction(selectedSkill)}>
+                    <PackageCheck size={15} strokeWidth={2.4} aria-hidden="true" />
+                    <span>{actionLabel(selectedSkill)}</span>
+                  </button>
+                  {selectedSkill.installed && selectedSkill.previousInstalledVersion ? (
+                    <button className="skillhub-rollback-action" type="button" onClick={() => onRollbackSkill(selectedSkill)}>
+                      <RotateCcw size={15} strokeWidth={2.4} aria-hidden="true" />
+                      <span>回滚到 {versionLabel(selectedSkill.previousInstalledVersion)}</span>
+                    </button>
+                  ) : null}
+                </div>
+              </aside>
             ) : null}
           </div>
         </section>
