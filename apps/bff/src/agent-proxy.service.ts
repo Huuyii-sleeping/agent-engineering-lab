@@ -104,6 +104,14 @@ export class AgentProxyService {
     });
   }
 
+  async resolveAgentSkills(body: JsonObject): Promise<ProxyResult> {
+    return this.proxyJson({
+      method: "POST",
+      pathname: "/skills/resolve",
+      body: { agent: body.agent },
+    });
+  }
+
   async auditEvents(search: string): Promise<ProxyResult> {
     return this.proxyJson({ method: "GET", pathname: "/audit/events", search });
   }

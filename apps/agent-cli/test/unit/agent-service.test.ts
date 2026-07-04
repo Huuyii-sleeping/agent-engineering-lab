@@ -805,6 +805,84 @@ describe("agent service", () => {
     expect(runInputs[0]?.promptSource?.skills[0]).not.toContain("global skill should be replaced");
   });
 
+  it("resolves agent skill bindings without exposing full skill content", async () => {
+    const skillHubRoot = await mkdtemp(path.join(tmpdir(), "agent-service-skillhub-"));
+    tempDir = skillHubRoot;
+    process.env.AGENT_SKILLHUB_ROOTS = skillHubRoot;
+    await writeSkillHubPackage(
+      skillHubRoot,
+      "remote",
+      "remote-review",
+      "1.2.0",
+      ["---", "name: remote-review", "description: Review remotely.", "---", "", "Private preflight body."].join("\n"),
+    );
+    const service = new AgentService({
+      client: {} as OpenAI,
+      model: "fake-model",
+      promptSource: PROMPT_SOURCE,
+      toolService: createToolService(),
+      deliveryService: createDeliveryService(),
+      hookService: createHookService(),
+      memoryService: createMemoryService(),
+      modelPolicyService: createModelPolicyService(),
+      observabilityService: createObservabilityService(),
+      queryEngine: createLoopRunner(),
+    });
+    const server = createAgentHttpServer(service);
+
+    const result = await requestServer(server, "POST", "/skills/resolve", {
+      agent: {
+        id: "agent-alpha",
+        name: "Alpha Agent",
+        skills: [{ skillId: "remote-review", version: "1.2.0", sourceType: "remote", registrySource: "official" }],
+      },
+    });
+
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toMatchObject({
+      ok: true,
+      agent: { id: "agent-alpha" },
+      skills: [{ name: "remote-review", sourceType: "remote", contentLength: "Private preflight body.".length }],
+    });
+    expect(JSON.stringify(result.body)).not.toContain("Private preflight body.");
+  });
+
+  it("reports preflight binding failures before query runtime", async () => {
+    const service = new AgentService({
+      client: {} as OpenAI,
+      model: "fake-model",
+      promptSource: PROMPT_SOURCE,
+      toolService: createToolService(),
+      deliveryService: createDeliveryService(),
+      hookService: createHookService(),
+      memoryService: createMemoryService(),
+      modelPolicyService: createModelPolicyService(),
+      observabilityService: createObservabilityService(),
+      queryEngine: createLoopRunner(),
+    });
+    const server = createAgentHttpServer(service);
+
+    const result = await requestServer(server, "POST", "/skills/resolve", {
+      agent: {
+        id: "agent-alpha",
+        name: "Alpha Agent",
+        skills: [{ skillId: "missing-skill", version: "1.0.0", sourceType: "remote", registrySource: "official" }],
+      },
+    });
+    const invalid = await requestServer(server, "POST", "/skills/resolve", { agent: {} });
+
+    expect(result.statusCode).toBe(400);
+    expect(result.body).toMatchObject({
+      ok: false,
+      error: {
+        code: "AGENT_SKILL_LOAD_FAILED",
+        details: [{ skillId: "missing-skill", code: "SKILL_PACKAGE_NOT_FOUND" }],
+      },
+    });
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.body).toMatchObject({ ok: false, error: { code: "INVALID_AGENT_CONTEXT" } });
+  });
+
   it("returns a structured error and skips the query runtime when a bound skill is missing", async () => {
     const runInputs: QueryEngineRunInput[] = [];
     const service = new AgentService({

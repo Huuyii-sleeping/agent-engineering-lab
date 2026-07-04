@@ -181,6 +181,41 @@ export class AgentService {
     return this.toolService.runToolByName(name, argumentsJson);
   }
 
+  resolveAgentSkills(input: unknown): Record<string, unknown> {
+    const agent = normalizeAgentRuntimeContext(input);
+    if (!agent) {
+      return {
+        ok: false,
+        error: {
+          code: "INVALID_AGENT_CONTEXT",
+          message: "agent context is required",
+        },
+      };
+    }
+    const resolvedSkills = resolveBoundSkills(agent);
+    if (!resolvedSkills.ok) {
+      return {
+        ok: false,
+        error: {
+          code: "AGENT_SKILL_LOAD_FAILED",
+          message: "agent skill binding could not be loaded",
+          details: resolvedSkills.issues,
+        },
+        agent,
+      };
+    }
+    return {
+      ok: true,
+      agent,
+      skills: resolvedSkills.skills.map((skill) => ({
+        name: skill.name,
+        sourceType: skill.sourceType,
+        path: skill.path,
+        contentLength: skill.contentLength,
+      })),
+    };
+  }
+
   getSessionDetail(sessionId: string): Record<string, unknown> | null {
     const session = this.getSession(sessionId);
     return session ? summarizeSessionTranscript(session) : null;
@@ -385,6 +420,12 @@ export function createAgentHttpServer(service: AgentService): Server {
       }
       if (method === "GET" && pathname === "/tools") {
         json(res, 200, { ok: true, tools: await service.toolsMetadata() });
+        return;
+      }
+      if (method === "POST" && pathname === "/skills/resolve") {
+        const body = await parseBody<{ agent?: unknown }>(req);
+        const result = service.resolveAgentSkills(body.agent);
+        json(res, result.ok === false ? 400 : 200, result);
         return;
       }
       if (method === "GET" && pathname === "/audit/events") {

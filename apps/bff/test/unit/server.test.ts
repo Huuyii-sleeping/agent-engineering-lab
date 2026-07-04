@@ -91,6 +91,10 @@ async function startMockAgent(): Promise<{ baseUrl: string; seen: SeenRequest[] 
       json(res, 200, { ok: true, session: { id: "s1" }, assistant: "reply" });
       return;
     }
+    if (method === "POST" && url.pathname === "/skills/resolve") {
+      json(res, 200, { ok: true, skills: [{ name: "remote-review", sourceType: "remote" }] });
+      return;
+    }
     if (method === "POST" && url.pathname === "/chat/stream") {
       res.statusCode = 200;
       res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
@@ -445,6 +449,22 @@ describe("bff server", () => {
       status: 200,
       body: { ok: true, assistant: "reply" },
     });
+    await expect(
+      requestJson(`${bffBaseUrl}/api/agent-skills/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agent: {
+            id: "agent-alpha",
+            name: "Alpha Agent",
+            skills: [{ skillId: "remote-review", version: "1.2.0", sourceType: "remote", registrySource: "official" }],
+          },
+        }),
+      }),
+    ).resolves.toMatchObject({
+      status: 200,
+      body: { ok: true, skills: [{ name: "remote-review", sourceType: "remote" }] },
+    });
     await expect(requestJson(`${bffBaseUrl}/api/audit/events?limit=5`)).resolves.toMatchObject({
       status: 200,
       body: { ok: true, events: [{ id: "aud1" }], query: "5" },
@@ -461,6 +481,7 @@ describe("bff server", () => {
       "GET /sessions/s1",
       "GET /sessions/s1",
       "POST /chat",
+      "POST /skills/resolve",
       "GET /audit/events?limit=5",
       "GET /security/findings",
     ]);
@@ -468,6 +489,13 @@ describe("bff server", () => {
       session_id: "s1",
       message: "continue",
       include_scheduled_notifications: true,
+    });
+    expect(agent.seen.find((item) => item.pathname === "/skills/resolve")?.body).toEqual({
+      agent: {
+        id: "agent-alpha",
+        name: "Alpha Agent",
+        skills: [{ skillId: "remote-review", version: "1.2.0", sourceType: "remote", registrySource: "official" }],
+      },
     });
   });
 

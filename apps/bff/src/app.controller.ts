@@ -84,6 +84,11 @@ export class AppController {
     writeProxyResult(res, await this.agentProxy.sendMessage(sessionId, body));
   }
 
+  @Post("agent-skills/resolve")
+  async resolveAgentSkills(@Body() body: JsonObject, @Res() res: ServerResponse): Promise<void> {
+    writeProxyResult(res, await this.agentProxy.resolveAgentSkills(body));
+  }
+
   @Post("sessions/:sessionId/messages/stream")
   async streamMessage(
     @Param("sessionId") sessionId: string,
