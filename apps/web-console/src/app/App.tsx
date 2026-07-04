@@ -39,6 +39,7 @@ import {
   type SessionSummary,
   type SkillAuditEvent,
   type SkillRegistryItem,
+  type RemoteRegistrySettings,
   type SkillPackageInput,
   type UserProfile,
 } from "../api";
@@ -89,6 +90,7 @@ export function App() {
   );
   const [skillRegistry, setSkillRegistry] = useState<SkillRegistryItem[]>([]);
   const [skillAuditEvents, setSkillAuditEvents] = useState<SkillAuditEvent[]>([]);
+  const [skillRegistrySettings, setSkillRegistrySettings] = useState<RemoteRegistrySettings | null>(null);
   const [agents, setAgents] = useState<AgentProfile[]>([]);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [agentDraft, setAgentDraft] = useState<AgentProfileInput>(defaultAgentProfileInput);
@@ -227,8 +229,9 @@ export function App() {
   }
 
   async function refreshSkills(): Promise<void> {
-    await syncSkillRegistry();
+    const nextRegistrySettings = await syncSkillRegistry();
     const [nextSkills, nextAuditEvents] = await Promise.all([fetchSkills(), fetchSkillAuditEvents()]);
+    setSkillRegistrySettings(nextRegistrySettings);
     setSkillRegistry(nextSkills);
     setSkillAuditEvents(nextAuditEvents);
   }
@@ -942,6 +945,7 @@ export function App() {
               <SkillHubPage
                 agents={agents}
                 auditEvents={skillAuditEvents}
+                registrySettings={skillRegistrySettings}
                 skills={skillRegistry}
                 onRollbackSkill={(skill) => void handleRollbackSkill(skill)}
                 onSkillAction={(skill) => void handleSkillAction(skill)}

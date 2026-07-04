@@ -91,8 +91,15 @@ describe("SkillHubPage", () => {
             at: 1782691200000,
           },
         ]}
+        registrySettings={{
+          url: "https://registry.example.com/index.json",
+          managedByService: false,
+          lastSyncedAt: 1782691400000,
+          lastSyncError: "",
+          skillCount: 2,
+        }}
         skills={[
-          installedSkill,
+          { ...installedSkill, status: "updateAvailable" },
           {
             id: "quality-gate",
             name: "质量闸门",
@@ -130,6 +137,11 @@ describe("SkillHubPage", () => {
     );
 
     expect(html).toContain("Production Skill Hub");
+    expect(html).toContain("Hub readiness");
+    expect(html).toContain("Registry synced");
+    expect(html).toContain("<strong>1</strong>已安装");
+    expect(html).toContain("<strong>1</strong>可升级");
+    expect(html).toContain("<strong>1</strong>失败事件");
     expect(html).toContain("Skill filters");
     expect(html).toContain("搜索 skill、来源或标签");
     expect(html).toContain("Local workspace");

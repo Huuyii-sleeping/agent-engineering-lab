@@ -2404,6 +2404,88 @@ p {
   line-height: 1.62;
 }
 
+.skillhub-readiness {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid color-mix(in srgb, var(--skillhub-line) 72%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--skillhub-panel) 84%, transparent);
+  padding: 12px 14px;
+}
+
+.skillhub-readiness-main {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.skillhub-readiness-main svg {
+  color: var(--accent-strong);
+}
+
+.skillhub-readiness-main div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.skillhub-readiness-main span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.skillhub-readiness-main strong {
+  color: var(--text-main);
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.skillhub-readiness-main small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 760;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skillhub-readiness--warning .skillhub-readiness-main svg,
+.skillhub-readiness--warning .skillhub-readiness-main strong {
+  color: var(--danger);
+}
+
+.skillhub-readiness--waiting .skillhub-readiness-main svg {
+  color: var(--text-muted);
+}
+
+.skillhub-readiness-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(74px, auto));
+  gap: 8px;
+}
+
+.skillhub-readiness-metrics span {
+  display: grid;
+  gap: 2px;
+  border-left: 1px solid color-mix(in srgb, var(--skillhub-line) 54%, transparent);
+  color: var(--text-muted);
+  padding-left: 10px;
+  font-size: 11px;
+  font-weight: 820;
+}
+
+.skillhub-readiness-metrics strong {
+  color: var(--text-main);
+  font-size: 16px;
+  font-weight: 950;
+}
+
 .skillhub-workbench {
   display: grid;
   min-height: 0;
@@ -4884,6 +4966,21 @@ button.settings-row:hover {
 
   .skillhub-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .skillhub-readiness {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .skillhub-readiness-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .skillhub-readiness-metrics span {
+    border-top: 1px solid color-mix(in srgb, var(--skillhub-line) 42%, transparent);
+    border-left: 0;
+    padding-top: 8px;
+    padding-left: 0;
   }
 
   .skillhub-registry-body--with-detail {

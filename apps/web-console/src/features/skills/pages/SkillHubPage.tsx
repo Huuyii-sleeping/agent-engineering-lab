@@ -5,6 +5,7 @@ import {
   CircleHelp,
   Download,
   Hash,
+  HeartPulse,
   Info,
   Layers3,
   PackageCheck,
@@ -17,7 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import type { AgentProfile, SkillAuditAction, SkillAuditEvent, SkillPackageInput, SkillRegistryItem } from "../../../api";
+import type { AgentProfile, RemoteRegistrySettings, SkillAuditAction, SkillAuditEvent, SkillPackageInput, SkillRegistryItem } from "../../../api";
 
 const allCategories = "全部";
 const skillPackageExample = `{
@@ -64,6 +65,26 @@ function eventTimeLabel(value: number): string {
     return "未知时间";
   }
   return new Intl.DateTimeFormat("zh-CN", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+}
+
+function registryReadinessLabel(registrySettings: RemoteRegistrySettings | null): string {
+  if (!registrySettings) {
+    return "等待同步";
+  }
+  return registrySettings.lastSyncError ? "需要关注" : "Registry synced";
+}
+
+function registryDetailLabel(registrySettings: RemoteRegistrySettings | null): string {
+  if (!registrySettings) {
+    return "正在等待 registry 状态。";
+  }
+  if (registrySettings.lastSyncError) {
+    return registrySettings.lastSyncError;
+  }
+  if (!registrySettings.lastSyncedAt) {
+    return "尚未同步 registry。";
+  }
+  return `上次同步 ${eventTimeLabel(registrySettings.lastSyncedAt)}`;
 }
 
 function auditActionLabel(action: SkillAuditAction): string {
@@ -122,6 +143,7 @@ export function shouldConfirmSkillImpact(skill: SkillRegistryItem, affectedAgent
 export function SkillHubPage({
   agents,
   auditEvents,
+  registrySettings,
   skills,
   onRollbackSkill,
   onSkillAction,
@@ -129,6 +151,7 @@ export function SkillHubPage({
 }: {
   agents: AgentProfile[];
   auditEvents: SkillAuditEvent[];
+  registrySettings: RemoteRegistrySettings | null;
   skills: SkillRegistryItem[];
   onRollbackSkill: (skill: SkillRegistryItem) => void;
   onSkillAction: (skill: SkillRegistryItem) => void;
@@ -143,6 +166,10 @@ export function SkillHubPage({
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(true);
   const [pendingImpactAction, setPendingImpactAction] = useState<PendingSkillImpactAction | null>(null);
+  const installedCount = skills.filter((skill) => skill.installed).length;
+  const updateAvailableCount = skills.filter((skill) => skill.status === "updateAvailable").length;
+  const failedAuditCount = auditEvents.filter((event) => !event.ok).length;
+  const readinessTone = !registrySettings ? "waiting" : registrySettings.lastSyncError ? "warning" : "ok";
   const categories = useMemo(() => [allCategories, ...new Set(skills.map((skill) => skill.category))], [skills]);
   const filteredSkills = skills.filter((skill) => {
     const keyword = query.trim().toLowerCase();
@@ -237,6 +264,31 @@ export function SkillHubPage({
           <span>Production Skill Hub</span>
           <h1>Skill Hub</h1>
           <p>统一管理可被 Agent 安装和绑定的能力包，覆盖官方、验证、社区、私有发布和本地内置来源。</p>
+        </div>
+      </section>
+
+      <section className={`skillhub-readiness skillhub-readiness--${readinessTone}`} aria-label="SkillHub 健康摘要">
+        <div className="skillhub-readiness-main">
+          <HeartPulse size={18} strokeWidth={2.4} aria-hidden="true" />
+          <div>
+            <span>Hub readiness</span>
+            <strong>{registryReadinessLabel(registrySettings)}</strong>
+            <small>{registryDetailLabel(registrySettings)}</small>
+          </div>
+        </div>
+        <div className="skillhub-readiness-metrics">
+          <span>
+            <strong>{installedCount}</strong>
+            已安装
+          </span>
+          <span>
+            <strong>{updateAvailableCount}</strong>
+            可升级
+          </span>
+          <span>
+            <strong>{failedAuditCount}</strong>
+            失败事件
+          </span>
         </div>
       </section>
 
