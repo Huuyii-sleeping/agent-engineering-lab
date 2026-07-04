@@ -397,6 +397,9 @@ describe("web-console api client", () => {
             {
               id: "audit-1",
               action: "update",
+              ok: false,
+              code: "SKILL_UPDATE_NOT_AVAILABLE",
+              message: "skill has no installable update",
               skillId: "quality-gate",
               skillName: "质量闸门",
               version: "1.0.0",
@@ -497,6 +500,9 @@ describe("web-console api client", () => {
       {
         id: "audit-1",
         action: "update",
+        ok: false,
+        code: "SKILL_UPDATE_NOT_AVAILABLE",
+        message: "skill has no installable update",
         skillId: "quality-gate",
         version: "1.0.0",
         status: "installed",

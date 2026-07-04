@@ -154,6 +154,9 @@ export type SkillAuditAction = "download" | "upload" | "install" | "update" | "r
 export type SkillAuditEvent = {
   id: string;
   action: SkillAuditAction;
+  ok: boolean;
+  code: string;
+  message: string;
   skillId: string;
   skillName: string;
   version: string;
@@ -511,6 +514,9 @@ export function normalizeSkillAuditEvent(value: unknown): SkillAuditEvent {
   return {
     id: cleanText(record.id, `${asNumber(record.at) ?? 0}-${skillId}`).slice(0, 140),
     action: normalizeSkillAuditAction(record.action),
+    ok: record.ok !== false,
+    code: cleanOptionalText(record.code, 80),
+    message: cleanOptionalText(record.message, 240),
     skillId,
     skillName: cleanText(record.skillName, skillId || "未命名 Skill").slice(0, 120),
     version: cleanOptionalText(record.version, 40),

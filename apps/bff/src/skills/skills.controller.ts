@@ -59,12 +59,16 @@ export class SkillsController {
     try {
       const skill = await this.skillRegistryService.downloadSkill(skillId);
       if (!skill) {
-        writeJson(res, 404, errorPayload("SKILL_NOT_FOUND", `skill ${skillId} was not found or could not be downloaded`));
+        const message = `skill ${skillId} was not found or could not be downloaded`;
+        await this.skillRegistryService.auditFailure("download", skillId, "SKILL_NOT_FOUND", message);
+        writeJson(res, 404, errorPayload("SKILL_NOT_FOUND", message));
         return;
       }
       writeJson(res, 200, { ok: true, skill });
     } catch (error) {
-      writeJson(res, 400, errorPayload("SKILL_DOWNLOAD_FAILED", error instanceof Error ? error.message : String(error)));
+      const message = error instanceof Error ? error.message : String(error);
+      await this.skillRegistryService.auditFailure("download", skillId, "SKILL_DOWNLOAD_FAILED", message);
+      writeJson(res, 400, errorPayload("SKILL_DOWNLOAD_FAILED", message));
     }
   }
 
@@ -88,7 +92,9 @@ export class SkillsController {
         : undefined;
     const skill = await this.skillRegistryService.installSkill(skillId, version);
     if (!skill) {
-      writeJson(res, 404, errorPayload("SKILL_NOT_FOUND", `skill ${skillId} was not found`));
+      const message = `skill ${skillId} was not found`;
+      await this.skillRegistryService.auditFailure("install", skillId, "SKILL_NOT_FOUND", message);
+      writeJson(res, 404, errorPayload("SKILL_NOT_FOUND", message));
       return;
     }
     writeJson(res, 200, { ok: true, skill });
@@ -99,7 +105,9 @@ export class SkillsController {
   async updateSkill(@Param("skillId") skillId: string, @Res() res: ServerResponse): Promise<void> {
     const skill = await this.skillRegistryService.updateSkill(skillId);
     if (!skill) {
-      writeJson(res, 404, errorPayload("SKILL_UPDATE_NOT_AVAILABLE", `skill ${skillId} has no installable update`));
+      const message = `skill ${skillId} has no installable update`;
+      await this.skillRegistryService.auditFailure("update", skillId, "SKILL_UPDATE_NOT_AVAILABLE", message);
+      writeJson(res, 404, errorPayload("SKILL_UPDATE_NOT_AVAILABLE", message));
       return;
     }
     writeJson(res, 200, { ok: true, skill });
@@ -110,7 +118,9 @@ export class SkillsController {
   async rollbackSkill(@Param("skillId") skillId: string, @Res() res: ServerResponse): Promise<void> {
     const skill = await this.skillRegistryService.rollbackSkill(skillId);
     if (!skill) {
-      writeJson(res, 404, errorPayload("SKILL_ROLLBACK_NOT_AVAILABLE", `skill ${skillId} has no local rollback target`));
+      const message = `skill ${skillId} has no local rollback target`;
+      await this.skillRegistryService.auditFailure("rollback", skillId, "SKILL_ROLLBACK_NOT_AVAILABLE", message);
+      writeJson(res, 404, errorPayload("SKILL_ROLLBACK_NOT_AVAILABLE", message));
       return;
     }
     writeJson(res, 200, { ok: true, skill });
@@ -121,7 +131,9 @@ export class SkillsController {
   async uninstallSkill(@Param("skillId") skillId: string, @Res() res: ServerResponse): Promise<void> {
     const skill = await this.skillRegistryService.uninstallSkill(skillId);
     if (!skill) {
-      writeJson(res, 404, errorPayload("SKILL_NOT_FOUND", `skill ${skillId} was not found`));
+      const message = `skill ${skillId} was not found`;
+      await this.skillRegistryService.auditFailure("uninstall", skillId, "SKILL_NOT_FOUND", message);
+      writeJson(res, 404, errorPayload("SKILL_NOT_FOUND", message));
       return;
     }
     writeJson(res, 200, { ok: true, skill });

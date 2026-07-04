@@ -18,6 +18,9 @@ export type SkillAuditAction = "download" | "upload" | "install" | "update" | "r
 export type SkillAuditEvent = {
   id: string;
   action: SkillAuditAction;
+  ok: boolean;
+  code: string;
+  message: string;
   skillId: string;
   skillName: string;
   version: string;

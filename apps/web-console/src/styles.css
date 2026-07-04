@@ -3270,6 +3270,10 @@ p {
   font-weight: 900;
 }
 
+.skillhub-audit-item--failed span {
+  color: var(--danger);
+}
+
 .skillhub-audit-item strong {
   overflow: hidden;
   color: var(--text-main);
@@ -3284,6 +3288,15 @@ p {
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 780;
+}
+
+.skillhub-audit-item em {
+  grid-column: 1 / -1;
+  color: var(--danger);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 780;
+  line-height: 1.4;
 }
 
 .skillhub-impact-confirmation {

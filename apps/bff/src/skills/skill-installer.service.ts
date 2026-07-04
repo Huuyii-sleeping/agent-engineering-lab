@@ -115,6 +115,9 @@ function normalizeAuditEvents(value: unknown): SkillAuditEvent[] {
       return {
         id: typeof record.id === "string" && record.id.trim() ? record.id.trim() : `${record.at ?? 0}-${action}-${skillId}`,
         action,
+        ok: record.ok !== false,
+        code: typeof record.code === "string" ? record.code.trim().slice(0, 80) : "",
+        message: typeof record.message === "string" ? record.message.trim().slice(0, 240) : "",
         skillId,
         skillName: typeof record.skillName === "string" && record.skillName.trim() ? record.skillName.trim().slice(0, 120) : skillId,
         version: typeof record.version === "string" ? record.version.trim().slice(0, 40) : "",
@@ -206,10 +209,36 @@ export class SkillInstallerService {
     const event: SkillAuditEvent = {
       id: `${at}-${action}-${skill.id}`,
       action,
+      ok: true,
+      code: "",
+      message: "",
       skillId: skill.id,
       skillName: skill.name,
       version: skill.installedVersion || skill.version,
       status: skill.status,
+      at,
+    };
+    await this.writeState({
+      ...state,
+      auditEvents: [event, ...state.auditEvents].slice(0, maxAuditEvents),
+    });
+    return event;
+  }
+
+  /** Appends a failed Skill lifecycle audit event. */
+  async appendAuditFailure(action: SkillAuditAction, skillId: string, code: string, message: string): Promise<SkillAuditEvent> {
+    const state = await this.readState();
+    const at = Date.now();
+    const event: SkillAuditEvent = {
+      id: `${at}-${action}-${skillId}-failed`,
+      action,
+      ok: false,
+      code: code.slice(0, 80),
+      message: message.slice(0, 240),
+      skillId,
+      skillName: skillId,
+      version: "",
+      status: "invalid",
       at,
     };
     await this.writeState({

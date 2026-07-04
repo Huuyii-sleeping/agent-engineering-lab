@@ -541,12 +541,13 @@ export function SkillHubPage({
                   {selectedSkillAuditEvents.length > 0 ? (
                     <div className="skillhub-audit-list">
                       {selectedSkillAuditEvents.map((event) => (
-                        <div className="skillhub-audit-item" key={event.id}>
-                          <span>{auditActionLabel(event.action)}</span>
+                        <div className={`skillhub-audit-item ${event.ok ? "" : "skillhub-audit-item--failed"}`} key={event.id}>
+                          <span>{event.ok ? auditActionLabel(event.action) : `${auditActionLabel(event.action)}失败`}</span>
                           <strong>{versionLabel(event.version)}</strong>
                           <small>
-                            {event.status} · {eventTimeLabel(event.at)}
+                            {event.ok ? event.status : event.code || "FAILED"} · {eventTimeLabel(event.at)}
                           </small>
+                          {!event.ok && event.message ? <em>{event.message}</em> : null}
                         </div>
                       ))}
                     </div>

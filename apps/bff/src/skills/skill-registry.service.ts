@@ -301,6 +301,11 @@ export class SkillRegistryService {
     return this.installer.listAuditEvents();
   }
 
+  /** Records a failed Skill lifecycle operation for a concrete Skill id. */
+  async auditFailure(action: SkillAuditAction, skillId: string, code: string, message: string): Promise<SkillAuditEvent> {
+    return this.installer.appendAuditFailure(action, skillId, code, message);
+  }
+
   /** Downloads a remote skill package and returns its registry item. */
   async downloadSkill(skillId: string, version?: string): Promise<SkillRegistryItem | null> {
     const remoteRegistryState = await this.readRemoteRegistryState();

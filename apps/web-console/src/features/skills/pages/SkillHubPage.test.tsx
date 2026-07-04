@@ -69,6 +69,9 @@ describe("SkillHubPage", () => {
           {
             id: "audit-1",
             action: "update",
+            ok: true,
+            code: "",
+            message: "",
             skillId: "code-workspace",
             skillName: "代码工作区",
             version: "1.2.0",
@@ -77,11 +80,14 @@ describe("SkillHubPage", () => {
           },
           {
             id: "audit-2",
-            action: "install",
-            skillId: "quality-gate",
-            skillName: "质量闸门",
-            version: "0.9.0",
-            status: "installed",
+            action: "rollback",
+            ok: false,
+            code: "SKILL_ROLLBACK_NOT_AVAILABLE",
+            message: "skill code-workspace has no local rollback target",
+            skillId: "code-workspace",
+            skillName: "代码工作区",
+            version: "",
+            status: "invalid",
             at: 1782691200000,
           },
         ]}
@@ -152,6 +158,8 @@ describe("SkillHubPage", () => {
     expect(html).not.toContain("发布 Agent");
     expect(html).toContain("审计日志");
     expect(html).toContain("升级");
+    expect(html).toContain("回滚失败");
+    expect(html).toContain("skill code-workspace has no local rollback target");
     expect(html).toContain("回滚");
     expect(html).toContain("下载");
     expect(html).toContain("Private publish");

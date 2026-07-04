@@ -1263,6 +1263,24 @@ describe("bff server", () => {
         ]),
       },
     });
+    await expect(requestJson(`${bffBaseUrl}/api/skills/missing-skill/rollback`, { method: "POST" })).resolves.toMatchObject({
+      status: 404,
+      body: { ok: false, error: { code: "SKILL_ROLLBACK_NOT_AVAILABLE" } },
+    });
+    await expect(requestJson(`${bffBaseUrl}/api/skills/audit`)).resolves.toMatchObject({
+      status: 200,
+      body: {
+        ok: true,
+        events: expect.arrayContaining([
+          expect.objectContaining({
+            action: "rollback",
+            ok: false,
+            skillId: "missing-skill",
+            code: "SKILL_ROLLBACK_NOT_AVAILABLE",
+          }),
+        ]),
+      },
+    });
   });
 
   it("configures and syncs an HTTP remote skill registry", async () => {
