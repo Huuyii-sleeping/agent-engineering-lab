@@ -33,7 +33,7 @@ describe("SkillHubPage", () => {
             installedVersion: "1.2.0",
             installedAt: 1782691200000,
             availableVersion: "1.2.0",
-            previousInstalledVersion: "",
+            previousInstalledVersion: "1.1.0",
             validationErrors: [],
           },
           {
@@ -66,6 +66,7 @@ describe("SkillHubPage", () => {
             validationErrors: [],
           },
         ]}
+        onRollbackSkill={vi.fn()}
         onSkillAction={vi.fn()}
         onUploadPackage={vi.fn()}
       />,
@@ -85,6 +86,8 @@ describe("SkillHubPage", () => {
     expect(html).not.toContain("Docker Registry");
     expect(html).not.toContain("http://127.0.0.1:3190/skills");
     expect(html).toContain("已安装");
+    expect(html).toContain("可回滚到 v1.1.0");
+    expect(html).toContain("回滚");
     expect(html).toContain("下载");
     expect(html).toContain("Private publish");
     expect(html).toContain("查看上传标准格式");

@@ -6,6 +6,7 @@ import {
   Hash,
   Layers3,
   PackageCheck,
+  RotateCcw,
   Search,
   ShieldCheck,
   SlidersHorizontal,
@@ -32,10 +33,12 @@ const skillPackageExample = `{
 /** Render the local registry of skills that can be loaded into agents. */
 export function SkillHubPage({
   skills,
+  onRollbackSkill,
   onSkillAction,
   onUploadPackage,
 }: {
   skills: SkillRegistryItem[];
+  onRollbackSkill: (skill: SkillRegistryItem) => void;
   onSkillAction: (skill: SkillRegistryItem) => void;
   onUploadPackage: (input: SkillPackageInput) => void;
 }) {
@@ -254,6 +257,11 @@ export function SkillHubPage({
                     <span>v{skill.version}</span>
                     <span>{skill.updatedAt}</span>
                   </div>
+                  {installed && skill.previousInstalledVersion ? (
+                    <div className="skillhub-rollback-note">
+                      <span>可回滚到 v{skill.previousInstalledVersion}</span>
+                    </div>
+                  ) : null}
                   <button
                     className="skillhub-action"
                     type="button"
@@ -277,6 +285,12 @@ export function SkillHubPage({
                       </>
                     )}
                   </button>
+                  {installed && skill.previousInstalledVersion ? (
+                    <button className="skillhub-rollback-action" type="button" onClick={() => onRollbackSkill(skill)}>
+                      <RotateCcw size={15} strokeWidth={2.4} aria-hidden="true" />
+                      <span>回滚</span>
+                    </button>
+                  ) : null}
                 </article>
               );
             })}

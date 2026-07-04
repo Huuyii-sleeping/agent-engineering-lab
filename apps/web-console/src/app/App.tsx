@@ -17,6 +17,7 @@ import {
   fetchSession,
   fetchSessions,
   installSkill,
+  rollbackSkill,
   updateSkill,
   updateAgentProfile,
   resolveAgentSkills,
@@ -424,6 +425,16 @@ export function App() {
           : skill.installed
             ? await uninstallSkill(skill.id)
             : await installSkill(skill.id);
+      setSkillRegistry((current) => current.map((item) => (item.id === skill.id ? nextSkill : item)));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleRollbackSkill(skill: SkillRegistryItem): Promise<void> {
+    try {
+      const nextSkill = await rollbackSkill(skill.id);
       setSkillRegistry((current) => current.map((item) => (item.id === skill.id ? nextSkill : item)));
       setError(null);
     } catch (err) {
@@ -918,6 +929,7 @@ export function App() {
             ) : (
               <SkillHubPage
                 skills={skillRegistry}
+                onRollbackSkill={(skill) => void handleRollbackSkill(skill)}
                 onSkillAction={(skill) => void handleSkillAction(skill)}
                 onUploadPackage={(input) => void handleUploadSkillPackage(input)}
               />

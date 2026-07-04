@@ -2846,6 +2846,17 @@ p {
   text-align: right;
 }
 
+.skillhub-rollback-note {
+  display: flex;
+  min-height: 24px;
+  align-items: center;
+  border-top: 1px solid color-mix(in srgb, var(--skillhub-line) 34%, transparent);
+  margin-top: -2px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 820;
+}
+
 .skillhub-card-source {
   justify-content: flex-start;
 }
@@ -3007,6 +3018,30 @@ p {
 .skillhub-action:disabled {
   cursor: not-allowed;
   opacity: 0.52;
+}
+
+.skillhub-rollback-action {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid color-mix(in srgb, var(--skillhub-line) 82%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel-bg) 56%, transparent);
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 900;
+  transition:
+    border-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    background 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.skillhub-rollback-action:hover {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--skillhub-line));
+  background: color-mix(in srgb, var(--accent-soft) 76%, transparent);
+  color: var(--accent-strong);
 }
 
 .skillhub-empty {
