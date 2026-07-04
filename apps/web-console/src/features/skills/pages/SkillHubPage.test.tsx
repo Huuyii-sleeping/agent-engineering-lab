@@ -1,6 +1,37 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { SkillHubPage } from "./SkillHubPage";
+import type { SkillRegistryItem } from "../../../api";
+import { SkillHubPage, shouldConfirmSkillImpact, skillActionLabel } from "./SkillHubPage";
+
+const installedSkill: SkillRegistryItem = {
+  id: "code-workspace",
+  name: "代码工作区",
+  description: "Use when an agent needs to inspect a repository and edit code.",
+  summary: "读取仓库、修改文件、运行验证命令。",
+  category: "执行",
+  provider: "Workspace",
+  version: "1.2.0",
+  runtime: "Local workspace",
+  permissions: ["文件读写", "命令执行"],
+  updatedAt: "2026-06-18",
+  maturity: "stable",
+  tags: ["code", "test", "repo"],
+  entry: "SKILL.md",
+  sourceType: "builtin",
+  registrySource: "local",
+  publisher: { id: "workspace", name: "Workspace", verified: true },
+  downloads: 0,
+  rating: null,
+  packageSha256: "",
+  deprecated: false,
+  status: "installed",
+  installed: true,
+  installedVersion: "1.2.0",
+  installedAt: 1782691200000,
+  availableVersion: "1.2.0",
+  previousInstalledVersion: "1.1.0",
+  validationErrors: [],
+};
 
 describe("SkillHubPage", () => {
   it("renders a registry-style skill hub with metadata and load state", () => {
@@ -35,35 +66,7 @@ describe("SkillHubPage", () => {
           },
         ]}
         skills={[
-          {
-            id: "code-workspace",
-            name: "代码工作区",
-            description: "Use when an agent needs to inspect a repository and edit code.",
-            summary: "读取仓库、修改文件、运行验证命令。",
-            category: "执行",
-            provider: "Workspace",
-            version: "1.2.0",
-            runtime: "Local workspace",
-            permissions: ["文件读写", "命令执行"],
-            updatedAt: "2026-06-18",
-            maturity: "stable",
-            tags: ["code", "test", "repo"],
-            entry: "SKILL.md",
-            sourceType: "builtin",
-            registrySource: "local",
-            publisher: { id: "workspace", name: "Workspace", verified: true },
-            downloads: 0,
-            rating: null,
-            packageSha256: "",
-            deprecated: false,
-            status: "installed",
-            installed: true,
-            installedVersion: "1.2.0",
-            installedAt: 1782691200000,
-            availableVersion: "1.2.0",
-            previousInstalledVersion: "1.1.0",
-            validationErrors: [],
-          },
+          installedSkill,
           {
             id: "quality-gate",
             name: "质量闸门",
@@ -133,5 +136,15 @@ describe("SkillHubPage", () => {
     expect(html).toContain("查看上传标准格式");
     expect(html).toContain("&quot;path&quot;: &quot;SKILL.md&quot;");
     expect(html).toContain("&quot;path&quot;: &quot;skill.json&quot;");
+  });
+
+  it("labels and confirms operations that can affect bound agents", () => {
+    expect(skillActionLabel(installedSkill)).toBe("卸载");
+    expect(skillActionLabel({ ...installedSkill, status: "updateAvailable" })).toBe("升级");
+    expect(shouldConfirmSkillImpact({ ...installedSkill, status: "updateAvailable" }, 1, "primary")).toBe(true);
+    expect(shouldConfirmSkillImpact(installedSkill, 1, "primary")).toBe(true);
+    expect(shouldConfirmSkillImpact(installedSkill, 1, "rollback")).toBe(true);
+    expect(shouldConfirmSkillImpact(installedSkill, 0, "rollback")).toBe(false);
+    expect(shouldConfirmSkillImpact({ ...installedSkill, installed: false, status: "downloaded" }, 1, "primary")).toBe(false);
   });
 });

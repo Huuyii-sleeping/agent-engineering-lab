@@ -3247,6 +3247,81 @@ p {
   font-weight: 780;
 }
 
+.skillhub-impact-confirmation {
+  display: grid;
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--danger) 42%, var(--skillhub-line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--danger-bg) 62%, transparent);
+  padding: 12px;
+}
+
+.skillhub-impact-confirmation > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.skillhub-impact-confirmation strong {
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.skillhub-impact-confirmation span {
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 820;
+}
+
+.skillhub-impact-confirmation-list {
+  display: grid;
+  gap: 6px;
+}
+
+.skillhub-impact-confirmation-list > span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--skillhub-line) 54%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--panel-bg) 42%, transparent);
+  padding: 7px 8px;
+}
+
+.skillhub-impact-confirmation-list small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 820;
+  white-space: nowrap;
+}
+
+.skillhub-impact-confirmation-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.skillhub-impact-confirmation-actions button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--skillhub-line) 76%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel-bg) 52%, transparent);
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.skillhub-impact-confirmation-actions button:last-child {
+  border-color: color-mix(in srgb, var(--danger) 48%, var(--skillhub-line));
+  background: color-mix(in srgb, var(--danger-bg) 80%, transparent);
+  color: var(--danger);
+}
+
 .skillhub-detail-actions {
   display: grid;
   gap: 8px;
