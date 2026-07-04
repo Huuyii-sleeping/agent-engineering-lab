@@ -6,6 +6,34 @@ describe("SkillHubPage", () => {
   it("renders a registry-style skill hub with metadata and load state", () => {
     const html = renderToStaticMarkup(
       <SkillHubPage
+        agents={[
+          {
+            id: "agent-1",
+            avatarId: "code",
+            name: "研发 Agent",
+            description: "处理代码任务",
+            scenario: "代码开发",
+            skillIds: ["code-workspace"],
+            skills: [{ skillId: "code-workspace", version: "1.2.0", sourceType: "builtin", registrySource: "local" }],
+            actions: [],
+            systemPrompt: "",
+            createdAt: 1782691200000,
+            updatedAt: 1782691200000,
+          },
+          {
+            id: "agent-2",
+            avatarId: "assistant",
+            name: "发布 Agent",
+            description: "处理发布任务",
+            scenario: "发布验证",
+            skillIds: ["quality-gate"],
+            skills: [],
+            actions: [],
+            systemPrompt: "",
+            createdAt: 1782691200000,
+            updatedAt: 1782691200000,
+          },
+        ]}
         skills={[
           {
             id: "code-workspace",
@@ -94,6 +122,11 @@ describe("SkillHubPage", () => {
     expect(html).toContain("可回滚到 v1.1.0");
     expect(html).toContain("回滚到 v1.1.0");
     expect(html).toContain("未发现校验错误");
+    expect(html).toContain("使用中的 Agent");
+    expect(html).toContain("1 个 Agent 正在绑定");
+    expect(html).toContain("研发 Agent");
+    expect(html).toContain("锁定 v1.2.0");
+    expect(html).not.toContain("发布 Agent");
     expect(html).toContain("回滚");
     expect(html).toContain("下载");
     expect(html).toContain("Private publish");

@@ -3211,6 +3211,42 @@ p {
   line-height: 1.42;
 }
 
+.skillhub-agent-impact-list {
+  display: grid;
+  gap: 8px;
+}
+
+.skillhub-agent-impact-list > span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 820;
+}
+
+.skillhub-agent-impact-item {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  border: 1px solid color-mix(in srgb, var(--skillhub-line) 54%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel-bg) 38%, transparent);
+  padding: 9px 10px;
+}
+
+.skillhub-agent-impact-item strong {
+  overflow: hidden;
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skillhub-agent-impact-item small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 780;
+}
+
 .skillhub-detail-actions {
   display: grid;
   gap: 8px;

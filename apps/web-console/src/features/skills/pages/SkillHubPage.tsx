@@ -17,7 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import type { SkillPackageInput, SkillRegistryItem } from "../../../api";
+import type { AgentProfile, SkillPackageInput, SkillRegistryItem } from "../../../api";
 
 const allCategories = "全部";
 const skillPackageExample = `{
@@ -51,13 +51,24 @@ function installedAtLabel(value: number | null): string {
   return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
+function agentBindingVersion(agent: AgentProfile, skillId: string): string {
+  const binding = agent.skills.find((skill) => skill.skillId === skillId);
+  return binding?.version || "";
+}
+
+function agentUsesSkill(agent: AgentProfile, skillId: string): boolean {
+  return agent.skills.some((skill) => skill.skillId === skillId) || agent.skillIds.includes(skillId);
+}
+
 /** Render the local registry of skills that can be loaded into agents. */
 export function SkillHubPage({
+  agents,
   skills,
   onRollbackSkill,
   onSkillAction,
   onUploadPackage,
 }: {
+  agents: AgentProfile[];
   skills: SkillRegistryItem[];
   onRollbackSkill: (skill: SkillRegistryItem) => void;
   onSkillAction: (skill: SkillRegistryItem) => void;
@@ -85,6 +96,7 @@ export function SkillHubPage({
   });
   const selectedSkill = skills.find((skill) => skill.id === selectedSkillId) ?? filteredSkills[0] ?? null;
   const showDetailPanel = detailOpen && selectedSkill !== null;
+  const selectedSkillAgents = selectedSkill ? agents.filter((agent) => agentUsesSkill(agent, selectedSkill.id)) : [];
 
   function actionLabel(skill: SkillRegistryItem): string {
     if (skill.deprecated && skill.status === "available") {
@@ -418,6 +430,25 @@ export function SkillHubPage({
                     </ul>
                   ) : (
                     <span className="skillhub-detail-muted">未发现校验错误</span>
+                  )}
+                </div>
+                <div className="skillhub-detail-section">
+                  <strong>使用中的 Agent</strong>
+                  {selectedSkillAgents.length > 0 ? (
+                    <div className="skillhub-agent-impact-list">
+                      <span>{selectedSkillAgents.length} 个 Agent 正在绑定</span>
+                      {selectedSkillAgents.map((agent) => {
+                        const version = agentBindingVersion(agent, selectedSkill.id);
+                        return (
+                          <div className="skillhub-agent-impact-item" key={agent.id}>
+                            <strong>{agent.name}</strong>
+                            <small>{version ? `锁定 ${versionLabel(version)}` : "未锁定版本"}</small>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <span className="skillhub-detail-muted">当前没有 Agent 绑定这个 Skill</span>
                   )}
                 </div>
                 <div className="skillhub-detail-actions">

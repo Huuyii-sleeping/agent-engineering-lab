@@ -928,6 +928,7 @@ export function App() {
               <AgentBuilderPage config={builderConfig} onConfigChange={updateBuilderConfig} />
             ) : (
               <SkillHubPage
+                agents={agents}
                 skills={skillRegistry}
                 onRollbackSkill={(skill) => void handleRollbackSkill(skill)}
                 onSkillAction={(skill) => void handleSkillAction(skill)}
