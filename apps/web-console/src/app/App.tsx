@@ -91,6 +91,7 @@ export function App() {
   const [skillRegistry, setSkillRegistry] = useState<SkillRegistryItem[]>([]);
   const [skillAuditEvents, setSkillAuditEvents] = useState<SkillAuditEvent[]>([]);
   const [skillRegistrySettings, setSkillRegistrySettings] = useState<RemoteRegistrySettings | null>(null);
+  const [skillRegistryRefreshing, setSkillRegistryRefreshing] = useState(false);
   const [skillOperationInFlight, setSkillOperationInFlight] = useState<SkillLifecycleOperationState | null>(null);
   const [agents, setAgents] = useState<AgentProfile[]>([]);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
@@ -121,6 +122,7 @@ export function App() {
   const [agentError, setAgentError] = useState<string | null>(null);
   const activeSessionIdRef = useRef<string | null>(null);
   const streamingSessionIdRef = useRef<string | null>(null);
+  const skillRegistryRefreshingRef = useRef(false);
   const skillOperationInFlightRef = useRef<SkillLifecycleOperationState | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -231,11 +233,21 @@ export function App() {
   }
 
   async function refreshSkills(): Promise<void> {
-    const nextRegistrySettings = await syncSkillRegistry();
-    const [nextSkills, nextAuditEvents] = await Promise.all([fetchSkills(), fetchSkillAuditEvents()]);
-    setSkillRegistrySettings(nextRegistrySettings);
-    setSkillRegistry(nextSkills);
-    setSkillAuditEvents(nextAuditEvents);
+    if (skillRegistryRefreshingRef.current) {
+      return;
+    }
+    skillRegistryRefreshingRef.current = true;
+    setSkillRegistryRefreshing(true);
+    try {
+      const nextRegistrySettings = await syncSkillRegistry();
+      const [nextSkills, nextAuditEvents] = await Promise.all([fetchSkills(), fetchSkillAuditEvents()]);
+      setSkillRegistrySettings(nextRegistrySettings);
+      setSkillRegistry(nextSkills);
+      setSkillAuditEvents(nextAuditEvents);
+    } finally {
+      skillRegistryRefreshingRef.current = false;
+      setSkillRegistryRefreshing(false);
+    }
   }
 
   async function refreshSkillAuditEvents(): Promise<void> {
@@ -427,6 +439,15 @@ export function App() {
   function updateBuilderConfig(config: AgentBuilderConfig): void {
     setBuilderConfig(config);
     writeAgentBuilderConfig(window.localStorage, config);
+  }
+
+  async function handleRefreshSkillRegistry(): Promise<void> {
+    try {
+      await refreshSkills();
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
   }
 
   function beginSkillOperation(operation: SkillLifecycleOperationState): boolean {
@@ -977,8 +998,10 @@ export function App() {
                 agents={agents}
                 auditEvents={skillAuditEvents}
                 registrySettings={skillRegistrySettings}
+                registryRefreshing={skillRegistryRefreshing}
                 skillOperationInFlight={skillOperationInFlight}
                 skills={skillRegistry}
+                onRefreshRegistry={() => void handleRefreshSkillRegistry()}
                 onRollbackSkill={(skill) => void handleRollbackSkill(skill)}
                 onSkillAction={(skill) => void handleSkillAction(skill)}
                 onUploadPackage={(input) => void handleUploadSkillPackage(input)}

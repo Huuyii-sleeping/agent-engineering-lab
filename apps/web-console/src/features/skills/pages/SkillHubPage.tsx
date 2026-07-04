@@ -9,6 +9,7 @@ import {
   Info,
   Layers3,
   PackageCheck,
+  RefreshCw,
   RotateCcw,
   Search,
   ShieldCheck,
@@ -149,8 +150,10 @@ export function SkillHubPage({
   agents,
   auditEvents,
   registrySettings,
+  registryRefreshing,
   skillOperationInFlight,
   skills,
+  onRefreshRegistry,
   onRollbackSkill,
   onSkillAction,
   onUploadPackage,
@@ -158,8 +161,10 @@ export function SkillHubPage({
   agents: AgentProfile[];
   auditEvents: SkillAuditEvent[];
   registrySettings: RemoteRegistrySettings | null;
+  registryRefreshing: boolean;
   skillOperationInFlight: SkillLifecycleOperationState | null;
   skills: SkillRegistryItem[];
+  onRefreshRegistry: () => void;
   onRollbackSkill: (skill: SkillRegistryItem) => void;
   onSkillAction: (skill: SkillRegistryItem) => void;
   onUploadPackage: (input: SkillPackageInput) => void;
@@ -312,6 +317,10 @@ export function SkillHubPage({
             失败事件
           </span>
         </div>
+        <button className="skillhub-refresh-action" type="button" disabled={registryRefreshing} onClick={onRefreshRegistry}>
+          <RefreshCw size={15} strokeWidth={2.4} aria-hidden="true" />
+          <span>{registryRefreshing ? "同步中" : "刷新 registry"}</span>
+        </button>
       </section>
 
       <section className="skillhub-workbench" aria-label="Skill 注册表">

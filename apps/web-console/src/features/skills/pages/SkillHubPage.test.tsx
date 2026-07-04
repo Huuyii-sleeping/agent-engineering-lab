@@ -33,14 +33,22 @@ const installedSkill: SkillRegistryItem = {
   validationErrors: [],
 };
 
-function renderMinimalSkillHub(skillOperationInFlight: SkillLifecycleOperationState | null = null): string {
+function renderMinimalSkillHub({
+  registryRefreshing = false,
+  skillOperationInFlight = null,
+}: {
+  registryRefreshing?: boolean;
+  skillOperationInFlight?: SkillLifecycleOperationState | null;
+} = {}): string {
   return renderToStaticMarkup(
     <SkillHubPage
       agents={[]}
       auditEvents={[]}
       registrySettings={null}
+      registryRefreshing={registryRefreshing}
       skillOperationInFlight={skillOperationInFlight}
       skills={[installedSkill]}
+      onRefreshRegistry={vi.fn()}
       onRollbackSkill={vi.fn()}
       onSkillAction={vi.fn()}
       onUploadPackage={vi.fn()}
@@ -113,6 +121,7 @@ describe("SkillHubPage", () => {
           lastSyncError: "",
           skillCount: 2,
         }}
+        registryRefreshing={false}
         skillOperationInFlight={null}
         skills={[
           { ...installedSkill, status: "updateAvailable" },
@@ -155,6 +164,7 @@ describe("SkillHubPage", () => {
     expect(html).toContain("Production Skill Hub");
     expect(html).toContain("Hub readiness");
     expect(html).toContain("Registry synced");
+    expect(html).toContain("刷新 registry");
     expect(html).toContain("<strong>1</strong>已安装");
     expect(html).toContain("<strong>1</strong>可升级");
     expect(html).toContain("<strong>1</strong>失败事件");
@@ -207,10 +217,17 @@ describe("SkillHubPage", () => {
   });
 
   it("renders pending lifecycle operation state", () => {
-    const html = renderMinimalSkillHub({ skillId: "code-workspace", kind: "primary" });
+    const html = renderMinimalSkillHub({ skillOperationInFlight: { skillId: "code-workspace", kind: "primary" } });
 
     expect(html).toContain("aria-busy=\"true\"");
     expect(html).toContain("disabled=\"\"");
     expect(html).toContain("处理中");
+  });
+
+  it("renders pending registry refresh state", () => {
+    const html = renderMinimalSkillHub({ registryRefreshing: true });
+
+    expect(html).toContain("同步中");
+    expect(html).toContain("disabled=\"\"");
   });
 });

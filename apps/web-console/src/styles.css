@@ -2406,7 +2406,7 @@ p {
 
 .skillhub-readiness {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 14px;
   border: 1px solid color-mix(in srgb, var(--skillhub-line) 72%, transparent);
@@ -2484,6 +2484,36 @@ p {
   color: var(--text-main);
   font-size: 16px;
   font-weight: 950;
+}
+
+.skillhub-refresh-action {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid color-mix(in srgb, var(--accent) 48%, var(--skillhub-line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent-soft) 58%, transparent);
+  color: var(--accent-strong);
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+  transition:
+    border-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    background 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.skillhub-refresh-action:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 84%, transparent);
+}
+
+.skillhub-refresh-action:disabled {
+  cursor: progress;
+  opacity: 0.58;
 }
 
 .skillhub-workbench {
