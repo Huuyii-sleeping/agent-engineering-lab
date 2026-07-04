@@ -42,6 +42,11 @@ type PendingSkillImpactAction = {
   kind: SkillImpactActionKind;
 };
 
+export type SkillLifecycleOperationState = {
+  skillId: string;
+  kind: SkillImpactActionKind;
+};
+
 function versionLabel(version: string): string {
   return version ? `v${version}` : "无";
 }
@@ -144,6 +149,7 @@ export function SkillHubPage({
   agents,
   auditEvents,
   registrySettings,
+  skillOperationInFlight,
   skills,
   onRollbackSkill,
   onSkillAction,
@@ -152,6 +158,7 @@ export function SkillHubPage({
   agents: AgentProfile[];
   auditEvents: SkillAuditEvent[];
   registrySettings: RemoteRegistrySettings | null;
+  skillOperationInFlight: SkillLifecycleOperationState | null;
   skills: SkillRegistryItem[];
   onRollbackSkill: (skill: SkillRegistryItem) => void;
   onSkillAction: (skill: SkillRegistryItem) => void;
@@ -170,6 +177,7 @@ export function SkillHubPage({
   const updateAvailableCount = skills.filter((skill) => skill.status === "updateAvailable").length;
   const failedAuditCount = auditEvents.filter((event) => !event.ok).length;
   const readinessTone = !registrySettings ? "waiting" : registrySettings.lastSyncError ? "warning" : "ok";
+  const hasSkillOperationInFlight = skillOperationInFlight !== null;
   const categories = useMemo(() => [allCategories, ...new Set(skills.map((skill) => skill.category))], [skills]);
   const filteredSkills = skills.filter((skill) => {
     const keyword = query.trim().toLowerCase();
@@ -223,6 +231,9 @@ export function SkillHubPage({
   }
 
   function requestSkillAction(skill: SkillRegistryItem): void {
+    if (hasSkillOperationInFlight) {
+      return;
+    }
     const affectedAgents = agents.filter((agent) => agentUsesSkill(agent, skill.id));
     if (shouldConfirmSkillImpact(skill, affectedAgents.length, "primary")) {
       setSelectedSkillId(skill.id);
@@ -234,6 +245,9 @@ export function SkillHubPage({
   }
 
   function requestRollbackSkill(skill: SkillRegistryItem): void {
+    if (hasSkillOperationInFlight) {
+      return;
+    }
     const affectedAgents = agents.filter((agent) => agentUsesSkill(agent, skill.id));
     if (shouldConfirmSkillImpact(skill, affectedAgents.length, "rollback")) {
       setSelectedSkillId(skill.id);
@@ -255,6 +269,14 @@ export function SkillHubPage({
       return;
     }
     onSkillAction(pendingSkill);
+  }
+
+  function isSkillOperationRunning(skill: SkillRegistryItem, kind: SkillImpactActionKind): boolean {
+    return skillOperationInFlight?.skillId === skill.id && skillOperationInFlight.kind === kind;
+  }
+
+  function primaryOperationLabel(skill: SkillRegistryItem): string {
+    return isSkillOperationRunning(skill, "primary") ? "处理中" : skillActionLabel(skill);
   }
 
   return (
@@ -454,30 +476,37 @@ export function SkillHubPage({
                   <button
                     className="skillhub-action"
                     type="button"
-                    disabled={skill.deprecated && skill.status === "available"}
+                    aria-busy={isSkillOperationRunning(skill, "primary")}
+                    disabled={hasSkillOperationInFlight || (skill.deprecated && skill.status === "available")}
                     onClick={() => requestSkillAction(skill)}
                   >
                     {skill.status === "available" ? (
                       <>
                         <Download size={16} strokeWidth={2.4} aria-hidden="true" />
-                        <span>{skillActionLabel(skill)}</span>
+                        <span>{primaryOperationLabel(skill)}</span>
                       </>
                     ) : installed ? (
                       <>
                         <Check size={16} strokeWidth={2.4} aria-hidden="true" />
-                        <span>{skillActionLabel(skill)}</span>
+                        <span>{primaryOperationLabel(skill)}</span>
                       </>
                     ) : (
                       <>
                         <PackageCheck size={16} strokeWidth={2.4} aria-hidden="true" />
-                        <span>{skillActionLabel(skill)}</span>
+                        <span>{primaryOperationLabel(skill)}</span>
                       </>
                     )}
                   </button>
                   {installed && skill.previousInstalledVersion ? (
-                    <button className="skillhub-rollback-action" type="button" onClick={() => requestRollbackSkill(skill)}>
+                    <button
+                      className="skillhub-rollback-action"
+                      type="button"
+                      aria-busy={isSkillOperationRunning(skill, "rollback")}
+                      disabled={hasSkillOperationInFlight}
+                      onClick={() => requestRollbackSkill(skill)}
+                    >
                       <RotateCcw size={15} strokeWidth={2.4} aria-hidden="true" />
-                      <span>回滚</span>
+                      <span>{isSkillOperationRunning(skill, "rollback") ? "处理中" : "回滚"}</span>
                     </button>
                   ) : null}
                 </article>
@@ -635,14 +664,30 @@ export function SkillHubPage({
                   </div>
                 ) : null}
                 <div className="skillhub-detail-actions">
-                  <button className="skillhub-action" type="button" onClick={() => requestSkillAction(selectedSkill)}>
+                  <button
+                    className="skillhub-action"
+                    type="button"
+                    aria-busy={isSkillOperationRunning(selectedSkill, "primary")}
+                    disabled={hasSkillOperationInFlight}
+                    onClick={() => requestSkillAction(selectedSkill)}
+                  >
                     <PackageCheck size={15} strokeWidth={2.4} aria-hidden="true" />
-                    <span>{skillActionLabel(selectedSkill)}</span>
+                    <span>{primaryOperationLabel(selectedSkill)}</span>
                   </button>
                   {selectedSkill.installed && selectedSkill.previousInstalledVersion ? (
-                    <button className="skillhub-rollback-action" type="button" onClick={() => requestRollbackSkill(selectedSkill)}>
+                    <button
+                      className="skillhub-rollback-action"
+                      type="button"
+                      aria-busy={isSkillOperationRunning(selectedSkill, "rollback")}
+                      disabled={hasSkillOperationInFlight}
+                      onClick={() => requestRollbackSkill(selectedSkill)}
+                    >
                       <RotateCcw size={15} strokeWidth={2.4} aria-hidden="true" />
-                      <span>回滚到 {versionLabel(selectedSkill.previousInstalledVersion)}</span>
+                      <span>
+                        {isSkillOperationRunning(selectedSkill, "rollback")
+                          ? "处理中"
+                          : `回滚到 ${versionLabel(selectedSkill.previousInstalledVersion)}`}
+                      </span>
                     </button>
                   ) : null}
                 </div>

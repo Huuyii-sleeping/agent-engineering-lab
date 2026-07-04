@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { SkillRegistryItem } from "../../../api";
-import { SkillHubPage, shouldConfirmSkillImpact, skillActionLabel } from "./SkillHubPage";
+import { SkillHubPage, shouldConfirmSkillImpact, skillActionLabel, type SkillLifecycleOperationState } from "./SkillHubPage";
 
 const installedSkill: SkillRegistryItem = {
   id: "code-workspace",
@@ -32,6 +32,21 @@ const installedSkill: SkillRegistryItem = {
   previousInstalledVersion: "1.1.0",
   validationErrors: [],
 };
+
+function renderMinimalSkillHub(skillOperationInFlight: SkillLifecycleOperationState | null = null): string {
+  return renderToStaticMarkup(
+    <SkillHubPage
+      agents={[]}
+      auditEvents={[]}
+      registrySettings={null}
+      skillOperationInFlight={skillOperationInFlight}
+      skills={[installedSkill]}
+      onRollbackSkill={vi.fn()}
+      onSkillAction={vi.fn()}
+      onUploadPackage={vi.fn()}
+    />,
+  );
+}
 
 describe("SkillHubPage", () => {
   it("renders a registry-style skill hub with metadata and load state", () => {
@@ -98,6 +113,7 @@ describe("SkillHubPage", () => {
           lastSyncError: "",
           skillCount: 2,
         }}
+        skillOperationInFlight={null}
         skills={[
           { ...installedSkill, status: "updateAvailable" },
           {
@@ -188,5 +204,13 @@ describe("SkillHubPage", () => {
     expect(shouldConfirmSkillImpact(installedSkill, 1, "rollback")).toBe(true);
     expect(shouldConfirmSkillImpact(installedSkill, 0, "rollback")).toBe(false);
     expect(shouldConfirmSkillImpact({ ...installedSkill, installed: false, status: "downloaded" }, 1, "primary")).toBe(false);
+  });
+
+  it("renders pending lifecycle operation state", () => {
+    const html = renderMinimalSkillHub({ skillId: "code-workspace", kind: "primary" });
+
+    expect(html).toContain("aria-busy=\"true\"");
+    expect(html).toContain("disabled=\"\"");
+    expect(html).toContain("处理中");
   });
 });

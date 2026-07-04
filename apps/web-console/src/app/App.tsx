@@ -73,7 +73,7 @@ import { AgentBuilderPage } from "../features/agents/pages/AgentBuilderPage";
 import { AgentWorkspaceTree } from "../features/agents/components/AgentWorkspaceTree";
 import { LandingPage } from "../pages/LandingPage";
 import { SettingsPage } from "../pages/SettingsPage";
-import { SkillHubPage } from "../features/skills/pages/SkillHubPage";
+import { SkillHubPage, type SkillLifecycleOperationState } from "../features/skills/pages/SkillHubPage";
 
 export function App() {
   const initialSettingsSection = typeof window === "undefined" ? null : settingsSectionFromHash(window.location.hash);
@@ -91,6 +91,7 @@ export function App() {
   const [skillRegistry, setSkillRegistry] = useState<SkillRegistryItem[]>([]);
   const [skillAuditEvents, setSkillAuditEvents] = useState<SkillAuditEvent[]>([]);
   const [skillRegistrySettings, setSkillRegistrySettings] = useState<RemoteRegistrySettings | null>(null);
+  const [skillOperationInFlight, setSkillOperationInFlight] = useState<SkillLifecycleOperationState | null>(null);
   const [agents, setAgents] = useState<AgentProfile[]>([]);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [agentDraft, setAgentDraft] = useState<AgentProfileInput>(defaultAgentProfileInput);
@@ -120,6 +121,7 @@ export function App() {
   const [agentError, setAgentError] = useState<string | null>(null);
   const activeSessionIdRef = useRef<string | null>(null);
   const streamingSessionIdRef = useRef<string | null>(null);
+  const skillOperationInFlightRef = useRef<SkillLifecycleOperationState | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const activeSummary = useMemo(
@@ -427,7 +429,28 @@ export function App() {
     writeAgentBuilderConfig(window.localStorage, config);
   }
 
+  function beginSkillOperation(operation: SkillLifecycleOperationState): boolean {
+    if (skillOperationInFlightRef.current) {
+      return false;
+    }
+    skillOperationInFlightRef.current = operation;
+    setSkillOperationInFlight(operation);
+    return true;
+  }
+
+  function endSkillOperation(operation: SkillLifecycleOperationState): void {
+    const current = skillOperationInFlightRef.current;
+    if (current?.skillId === operation.skillId && current.kind === operation.kind) {
+      skillOperationInFlightRef.current = null;
+      setSkillOperationInFlight(null);
+    }
+  }
+
   async function handleSkillAction(skill: SkillRegistryItem): Promise<void> {
+    const operation: SkillLifecycleOperationState = { skillId: skill.id, kind: "primary" };
+    if (!beginSkillOperation(operation)) {
+      return;
+    }
     try {
       const nextSkill =
         skill.status === "available"
@@ -442,10 +465,16 @@ export function App() {
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      endSkillOperation(operation);
     }
   }
 
   async function handleRollbackSkill(skill: SkillRegistryItem): Promise<void> {
+    const operation: SkillLifecycleOperationState = { skillId: skill.id, kind: "rollback" };
+    if (!beginSkillOperation(operation)) {
+      return;
+    }
     try {
       const nextSkill = await rollbackSkill(skill.id);
       setSkillRegistry((current) => current.map((item) => (item.id === skill.id ? nextSkill : item)));
@@ -453,6 +482,8 @@ export function App() {
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      endSkillOperation(operation);
     }
   }
 
@@ -946,6 +977,7 @@ export function App() {
                 agents={agents}
                 auditEvents={skillAuditEvents}
                 registrySettings={skillRegistrySettings}
+                skillOperationInFlight={skillOperationInFlight}
                 skills={skillRegistry}
                 onRollbackSkill={(skill) => void handleRollbackSkill(skill)}
                 onSkillAction={(skill) => void handleSkillAction(skill)}
