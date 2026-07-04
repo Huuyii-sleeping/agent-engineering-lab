@@ -189,7 +189,11 @@ export function resolveSkillHubRoots(options: SkillLoaderOptions = {}): string[]
     return uniquePaths(options.skillHubRoots);
   }
   const env = options.env ?? process.env;
-  return uniquePaths(parseSkillHubRootsEnv(env.AGENT_SKILLHUB_ROOTS?.trim() ?? ""));
+  const agentRoots = parseSkillHubRootsEnv(env.AGENT_SKILLHUB_ROOTS?.trim() ?? "");
+  if (agentRoots.length > 0) {
+    return uniquePaths(agentRoots);
+  }
+  return uniquePaths(parseSkillHubRootsEnv(env.SKILLHUB_DATA_ROOT?.trim() ?? ""));
 }
 
 function listSkillFiles(root: string): string[] {

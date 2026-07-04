@@ -155,6 +155,8 @@ describe("skills/loader", () => {
     );
 
     expect(resolveSkillHubRoots({ env: { AGENT_SKILLHUB_ROOTS: root } })).toEqual([root]);
+    expect(resolveSkillHubRoots({ env: { SKILLHUB_DATA_ROOT: root } })).toEqual([root]);
+    expect(resolveSkillHubRoots({ env: { AGENT_SKILLHUB_ROOTS: root, SKILLHUB_DATA_ROOT: createSkillRoot() } })).toEqual([root]);
     expect(resolved).toMatchObject({
       ok: true,
       skills: [{ name: "remote-review", sourceType: "remote", content: "Use exact remote version." }],

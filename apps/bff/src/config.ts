@@ -1,4 +1,5 @@
 import * as process from "node:process";
+import { join } from "node:path";
 
 export const DEFAULT_BFF_PORT = 3182;
 export const DEFAULT_AGENT_SERVICE_BASE_URL = "http://127.0.0.1:3181";
@@ -34,4 +35,9 @@ export function resolveSkillRegistryServiceUrl(env: NodeJS.ProcessEnv = process.
 /** Resolve the bearer token used by BFF for Skill Registry admin publish calls. */
 export function resolveSkillRegistryAdminToken(env: NodeJS.ProcessEnv = process.env): string {
   return env.SKILL_REGISTRY_ADMIN_TOKEN?.trim() || DEFAULT_SKILL_REGISTRY_ADMIN_TOKEN;
+}
+
+/** Resolve the shared local package root used by BFF writes and Agent runtime reads. */
+export function resolveSkillHubDataRoot(env: NodeJS.ProcessEnv = process.env, cwd = process.cwd()): string {
+  return env.SKILLHUB_DATA_ROOT?.trim() || join(cwd, ".data", "skills");
 }
