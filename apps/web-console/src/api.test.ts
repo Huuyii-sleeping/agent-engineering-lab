@@ -14,6 +14,7 @@ import {
   fetchSessions,
   installSkill,
   rollbackSkill,
+  resolveAgentSkills,
   sendSessionMessage,
   sendSessionMessageStream,
   syncSkillRegistry,
@@ -272,6 +273,80 @@ describe("web-console api client", () => {
     await expect(deleteAgentProfile("a1")).resolves.toBeUndefined();
 
     expect(fetchMock).toHaveBeenLastCalledWith("/api/agents/a1", { method: "DELETE" });
+  });
+
+  it("checks agent runtime skill bindings through the BFF preflight API", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(String(input), "http://localhost");
+      const method = init?.method ?? "GET";
+
+      if (method === "POST" && url.pathname === "/api/agent-skills/resolve") {
+        const body = JSON.parse(String(init?.body)) as { agent?: unknown };
+        return jsonResponse({
+          ok: true,
+          agent: body.agent,
+          skills: [{ name: "remote-review", sourceType: "remote", path: "/skills/remote-review/SKILL.md", contentLength: 120 }],
+        });
+      }
+
+      return jsonResponse({ ok: false, error: { code: "NOT_FOUND", message: url.pathname } }, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const runtimeAgent = {
+      id: "a1",
+      name: "研发 Agent",
+      skills: [{ skillId: "remote-review", version: "1.2.0", sourceType: "remote" as const, registrySource: "official" as const }],
+    };
+
+    await expect(resolveAgentSkills(runtimeAgent)).resolves.toMatchObject({
+      ok: true,
+      agent: { id: "a1" },
+      skills: [{ name: "remote-review", sourceType: "remote", contentLength: 120 }],
+    });
+    expect(fetchMock).toHaveBeenCalledWith("/api/agent-skills/resolve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agent: runtimeAgent }),
+    });
+  });
+
+  it("normalizes failed agent runtime skill preflight details", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async () =>
+        jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "AGENT_SKILL_LOAD_FAILED",
+              message: "agent skill binding could not be loaded",
+              details: [
+                {
+                  skillId: "missing-skill",
+                  version: "1.0.0",
+                  sourceType: "remote",
+                  code: "SKILL_PACKAGE_NOT_FOUND",
+                  message: "skill package not found",
+                },
+              ],
+            },
+          },
+          400,
+        ),
+      ),
+    );
+
+    await expect(
+      resolveAgentSkills({
+        id: "a1",
+        name: "研发 Agent",
+        skills: [{ skillId: "missing-skill", version: "1.0.0", sourceType: "remote", registrySource: "official" }],
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      code: "AGENT_SKILL_LOAD_FAILED",
+      issues: [{ skillId: "missing-skill", code: "SKILL_PACKAGE_NOT_FOUND" }],
+    });
   });
 
   it("calls BFF skill registry APIs", async () => {

@@ -1,4 +1,4 @@
-import type { AgentProfile, AgentProfileInput, SkillRegistryItem } from "../../../api";
+import type { AgentProfile, AgentProfileInput, AgentSkillPreflightResult, SkillRegistryItem } from "../../../api";
 import { AgentConfigPage } from "./AgentConfigPage";
 import { AgentDraftsPage } from "./AgentDraftsPage";
 
@@ -19,8 +19,11 @@ export function AgentManagerPage({
   onDraftChange,
   onOpenAgent,
   onRefresh,
+  onResolveAgentSkills,
   onSaveAgent,
   onTestAgent,
+  skillPreflight,
+  skillPreflightLoading,
 }: {
   agents: AgentProfile[];
   activeAgent: AgentProfile | null;
@@ -38,8 +41,11 @@ export function AgentManagerPage({
   onDraftChange: (draft: AgentProfileInput) => void;
   onOpenAgent: (agent: AgentProfile) => void;
   onRefresh: () => void;
+  onResolveAgentSkills: () => void;
   onSaveAgent: () => void;
   onTestAgent: (agent: AgentProfile) => void;
+  skillPreflight: AgentSkillPreflightResult | null;
+  skillPreflightLoading: boolean;
 }) {
   if (mode === "config") {
     return (
@@ -54,8 +60,11 @@ export function AgentManagerPage({
         onDeleteAgent={onDeleteAgent}
         onDiscardDraft={onDiscardDraft}
         onDraftChange={onDraftChange}
+        onResolveAgentSkills={onResolveAgentSkills}
         onSaveAgent={onSaveAgent}
         onTestAgent={onTestAgent}
+        skillPreflight={skillPreflight}
+        skillPreflightLoading={skillPreflightLoading}
       />
     );
   }

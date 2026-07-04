@@ -60,6 +60,35 @@ export type AgentRuntimeContext = {
   skills: AgentSkillBinding[];
 };
 
+export type AgentResolvedSkillSummary = {
+  name: string;
+  sourceType: SkillSourceType;
+  path: string;
+  contentLength: number;
+};
+
+export type AgentSkillPreflightIssue = {
+  skillId: string;
+  version: string;
+  sourceType: SkillSourceType;
+  code: string;
+  message: string;
+};
+
+export type AgentSkillPreflightResult =
+  | {
+      ok: true;
+      agent: AgentRuntimeContext | null;
+      skills: AgentResolvedSkillSummary[];
+    }
+  | {
+      ok: false;
+      code: string;
+      message: string;
+      agent: AgentRuntimeContext | null;
+      issues: AgentSkillPreflightIssue[];
+    };
+
 /** User-managed agent profile displayed and edited in the Agent management workspace. */
 export type AgentProfile = {
   id: string;
@@ -303,6 +332,49 @@ function normalizeAgentRuntimeContext(value: unknown): AgentRuntimeContext | nul
     id,
     name: cleanText(record.name, "Agent").slice(0, 36),
     skills: normalizeAgentSkillBindings(record.skills, legacySkillIds),
+  };
+}
+
+function normalizeResolvedSkillSummary(value: unknown): AgentResolvedSkillSummary {
+  const record = asObject(value);
+  return {
+    name: cleanText(record.name, "未命名 Skill").slice(0, 80),
+    sourceType: normalizeSourceType(record.sourceType),
+    path: cleanOptionalText(record.path, 600),
+    contentLength: Math.max(0, Math.floor(cleanNumber(record.contentLength, 0))),
+  };
+}
+
+function normalizePreflightIssue(value: unknown): AgentSkillPreflightIssue {
+  const record = asObject(value);
+  return {
+    skillId: cleanOptionalText(record.skillId, 80),
+    version: cleanOptionalText(record.version, 40),
+    sourceType: normalizeSourceType(record.sourceType),
+    code: cleanText(record.code, "SKILL_PRECHECK_FAILED").slice(0, 80),
+    message: cleanText(record.message, "Skill runtime check failed.").slice(0, 240),
+  };
+}
+
+function normalizeAgentSkillPreflightResult(value: unknown): AgentSkillPreflightResult {
+  const record = asObject(value);
+  const agent = normalizeAgentRuntimeContext(record.agent);
+  if (record.ok !== false) {
+    const skills = Array.isArray(record.skills) ? record.skills : [];
+    return {
+      ok: true,
+      agent,
+      skills: skills.map(normalizeResolvedSkillSummary),
+    };
+  }
+  const error = asObject(record.error);
+  const details = Array.isArray(error.details) ? error.details : [];
+  return {
+    ok: false,
+    code: cleanText(error.code, "AGENT_SKILL_PREFLIGHT_FAILED").slice(0, 80),
+    message: cleanText(error.message, "Agent skill runtime check failed.").slice(0, 240),
+    agent,
+    issues: details.map(normalizePreflightIssue).filter((issue) => issue.skillId),
   };
 }
 
@@ -647,6 +719,18 @@ export async function updateAgentProfile(agentId: string, input: AgentProfileInp
 /** Deletes a locally persisted agent profile through the BFF business API. */
 export async function deleteAgentProfile(agentId: string): Promise<void> {
   await requestJson<JsonObject>(`/api/agents/${encodeURIComponent(agentId)}`, { method: "DELETE" });
+}
+
+/** Checks whether an Agent profile's version-bound skills can be loaded by the runtime. */
+export async function resolveAgentSkills(agent: AgentRuntimeContext): Promise<AgentSkillPreflightResult> {
+  const response = await fetch("/api/agent-skills/resolve", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agent }),
+  });
+  const raw = await response.text();
+  const parsed = raw.trim() ? (JSON.parse(raw) as JsonObject) : {};
+  return normalizeAgentSkillPreflightResult(parsed);
 }
 
 /** Fetches local skill registry items through the BFF business API. */

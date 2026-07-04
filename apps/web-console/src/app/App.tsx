@@ -19,6 +19,7 @@ import {
   installSkill,
   updateSkill,
   updateAgentProfile,
+  resolveAgentSkills,
   sendSessionMessageStream,
   syncSkillRegistry,
   uninstallSkill,
@@ -29,6 +30,7 @@ import {
   type AgentProfile,
   type AgentProfileInput,
   type AgentRuntimeContext,
+  type AgentSkillPreflightResult,
   type ChatMessage,
   type HealthStatus,
   type SessionDetail,
@@ -88,6 +90,8 @@ export function App() {
   const [agentDraft, setAgentDraft] = useState<AgentProfileInput>(defaultAgentProfileInput);
   const [isNewAgentDraft, setIsNewAgentDraft] = useState(false);
   const [agentSaving, setAgentSaving] = useState(false);
+  const [agentSkillPreflight, setAgentSkillPreflight] = useState<AgentSkillPreflightResult | null>(null);
+  const [agentSkillPreflightLoading, setAgentSkillPreflightLoading] = useState(false);
   const [profile, setProfile] = useState<UserProfile>(defaultUserProfile);
   const [profileDraft, setProfileDraft] = useState<UserProfile>(profile);
   const [editingProfile, setEditingProfile] = useState(false);
@@ -156,6 +160,14 @@ export function App() {
           skills: agent.skills,
         }
       : null;
+  }
+
+  function runtimeContextFromDraft(): AgentRuntimeContext {
+    return {
+      id: activeAgent?.id ?? "draft-agent",
+      name: agentDraft.name,
+      skills: agentDraft.skills,
+    };
   }
 
   async function refreshHealth(): Promise<void> {
@@ -478,6 +490,7 @@ export function App() {
   function selectAgent(agent: AgentProfile): void {
     setActiveAgentId(agent.id);
     setAgentDraft(agentDraftFromProfile(agent));
+    setAgentSkillPreflight(null);
     setIsNewAgentDraft(false);
   }
 
@@ -492,9 +505,27 @@ export function App() {
       ...defaultAgentProfileInput,
       name: `新 Agent ${agents.length + 1}`,
     });
+    setAgentSkillPreflight(null);
     setIsNewAgentDraft(true);
     setView("agent-config");
     setAgentError(null);
+  }
+
+  function handleAgentDraftChange(nextDraft: AgentProfileInput): void {
+    setAgentDraft(nextDraft);
+    setAgentSkillPreflight(null);
+  }
+
+  async function handleResolveAgentSkills(): Promise<void> {
+    setAgentSkillPreflightLoading(true);
+    try {
+      setAgentSkillPreflight(await resolveAgentSkills(runtimeContextFromDraft()));
+      setAgentError(null);
+    } catch (err) {
+      setAgentError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAgentSkillPreflightLoading(false);
+    }
   }
 
   async function handleSaveAgent(): Promise<void> {
@@ -512,6 +543,7 @@ export function App() {
       );
       setActiveAgentId(agent.id);
       setAgentDraft(agentDraftFromProfile(agent));
+      setAgentSkillPreflight(null);
       setIsNewAgentDraft(false);
       setView("agent-config");
       setAgentError(null);
@@ -531,6 +563,7 @@ export function App() {
       const nextAgent = nextAgents[0] ?? null;
       setActiveAgentId(nextAgent?.id ?? null);
       setAgentDraft(nextAgent ? agentDraftFromProfile(nextAgent) : defaultAgentProfileInput);
+      setAgentSkillPreflight(null);
       setIsNewAgentDraft(false);
       setView("agents");
       setAgentError(null);
@@ -545,6 +578,7 @@ export function App() {
     const nextAgent = activeAgent ?? agents[0] ?? null;
     setActiveAgentId(nextAgent?.id ?? null);
     setAgentDraft(nextAgent ? agentDraftFromProfile(nextAgent) : defaultAgentProfileInput);
+    setAgentSkillPreflight(null);
     setIsNewAgentDraft(false);
     setAgentError(null);
     setView("agents");
@@ -869,10 +903,13 @@ export function App() {
                 onCreateAgent={() => void handleCreateAgent()}
                 onDeleteAgent={(agent) => void handleDeleteAgent(agent)}
                 onDiscardDraft={discardAgentDraft}
-                onDraftChange={setAgentDraft}
+                onDraftChange={handleAgentDraftChange}
                 onOpenAgent={openAgentConfig}
                 onRefresh={() => void refreshAgentsSafely(true)}
+                onResolveAgentSkills={() => void handleResolveAgentSkills()}
                 onSaveAgent={() => void handleSaveAgent()}
+                skillPreflight={agentSkillPreflight}
+                skillPreflightLoading={agentSkillPreflightLoading}
                 installedSkills={installedSkills}
                 onTestAgent={handleTestAgent}
               />

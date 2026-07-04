@@ -1,6 +1,6 @@
-import { ArrowLeft, BrainCircuit, Check, MessageSquare, Plus, Trash2, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, BrainCircuit, Check, MessageSquare, Plus, RefreshCw, ShieldCheck, Trash2, X } from "lucide-react";
 import { toggleAgentBuilderId } from "../../../agent-builder";
-import type { AgentProfile, AgentProfileInput, AgentSkillBinding, SkillRegistryItem } from "../../../api";
+import type { AgentProfile, AgentProfileInput, AgentSkillBinding, AgentSkillPreflightResult, SkillRegistryItem } from "../../../api";
 import { AgentAvatar } from "../components/AgentAvatar";
 import { agentAvatarOptions } from "../lib/agent-avatar";
 
@@ -34,6 +34,39 @@ function bindingStatus(
   return { label: "绑定正常", tone: "ok" };
 }
 
+function preflightTone(skillPreflight: AgentSkillPreflightResult | null, loading: boolean): "idle" | "checking" | "ok" | "warning" {
+  if (loading) {
+    return "checking";
+  }
+  if (!skillPreflight) {
+    return "idle";
+  }
+  return skillPreflight.ok ? "ok" : "warning";
+}
+
+function preflightTitle(skillPreflight: AgentSkillPreflightResult | null, loading: boolean): string {
+  if (loading) {
+    return "检查中";
+  }
+  if (!skillPreflight) {
+    return "未检查";
+  }
+  return skillPreflight.ok ? "运行时可加载" : "运行时加载失败";
+}
+
+function preflightDetail(skillPreflight: AgentSkillPreflightResult | null, loading: boolean): string {
+  if (loading) {
+    return "正在询问 Agent service 是否能加载这些版本绑定。";
+  }
+  if (!skillPreflight) {
+    return "保存或测试前可先检查 Agent service 是否能加载当前绑定。";
+  }
+  if (skillPreflight.ok) {
+    return `${skillPreflight.skills.length} 个 Skill 已通过运行时解析。`;
+  }
+  return skillPreflight.issues[0]?.message || skillPreflight.message;
+}
+
 export function AgentConfigPage({
   activeAgent,
   draft,
@@ -41,10 +74,13 @@ export function AgentConfigPage({
   isNewDraft,
   saving,
   installedSkills,
+  skillPreflight,
+  skillPreflightLoading,
   onBack,
   onDeleteAgent,
   onDiscardDraft,
   onDraftChange,
+  onResolveAgentSkills,
   onSaveAgent,
   onTestAgent,
 }: {
@@ -54,10 +90,13 @@ export function AgentConfigPage({
   isNewDraft: boolean;
   saving: boolean;
   installedSkills: SkillRegistryItem[];
+  skillPreflight: AgentSkillPreflightResult | null;
+  skillPreflightLoading: boolean;
   onBack: () => void;
   onDeleteAgent: (agent: AgentProfile) => void;
   onDiscardDraft: () => void;
   onDraftChange: (draft: AgentProfileInput) => void;
+  onResolveAgentSkills: () => void;
   onSaveAgent: () => void;
   onTestAgent: (agent: AgentProfile) => void;
 }) {
@@ -66,6 +105,7 @@ export function AgentConfigPage({
   const bindingById = new Map(draft.skills.map((skill) => [skill.skillId, skill]));
   const selectedInstalledSkillCount = installedSkills.filter((skill) => selectedSkillSet.has(skill.id)).length;
   const unavailableBindings = draft.skills.filter((binding) => !installedSkillById.has(binding.skillId));
+  const runtimeTone = preflightTone(skillPreflight, skillPreflightLoading);
 
   function toggleSkill(skillId: string): void {
     const nextSkillIds = toggleAgentBuilderId(
@@ -224,6 +264,28 @@ export function AgentConfigPage({
             <div className="agent-config-panel-heading">
               <span>Skills</span>
               <strong>{selectedInstalledSkillCount} 已选</strong>
+            </div>
+            <div className={`agent-runtime-check agent-runtime-check--${runtimeTone}`}>
+              <span className="agent-runtime-check-icon">
+                {runtimeTone === "warning" ? (
+                  <AlertTriangle size={16} strokeWidth={2.4} aria-hidden="true" />
+                ) : (
+                  <ShieldCheck size={16} strokeWidth={2.4} aria-hidden="true" />
+                )}
+              </span>
+              <span className="agent-runtime-check-copy">
+                <strong>{preflightTitle(skillPreflight, skillPreflightLoading)}</strong>
+                <small>{preflightDetail(skillPreflight, skillPreflightLoading)}</small>
+              </span>
+              <button
+                className="agent-mini-action"
+                type="button"
+                onClick={onResolveAgentSkills}
+                disabled={saving || skillPreflightLoading}
+              >
+                <RefreshCw size={14} strokeWidth={2.4} aria-hidden="true" />
+                <span>{skillPreflightLoading ? "检查中" : "检查"}</span>
+              </button>
             </div>
             <div className="agent-skill-list">
               {installedSkills.length === 0 ? (

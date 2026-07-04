@@ -53,10 +53,13 @@ describe("AgentConfigPage", () => {
         isNewDraft={true}
         saving={false}
         installedSkills={installedSkills}
+        skillPreflight={null}
+        skillPreflightLoading={false}
         onBack={vi.fn()}
         onDeleteAgent={vi.fn()}
         onDiscardDraft={vi.fn()}
         onDraftChange={vi.fn()}
+        onResolveAgentSkills={vi.fn()}
         onSaveAgent={vi.fn()}
         onTestAgent={vi.fn()}
       />,
@@ -68,6 +71,8 @@ describe("AgentConfigPage", () => {
     expect(html).toContain("Failed to fetch");
     expect(html).toContain("锁定 v1.1.0");
     expect(html).toContain("版本缺失");
+    expect(html).toContain("未检查");
+    expect(html).toContain("保存或测试前可先检查");
   });
 
   it("keeps delete copy for persisted agents", () => {
@@ -79,10 +84,27 @@ describe("AgentConfigPage", () => {
         isNewDraft={false}
         saving={false}
         installedSkills={installedSkills}
+        skillPreflight={{
+          ok: false,
+          code: "AGENT_SKILL_LOAD_FAILED",
+          message: "agent skill binding could not be loaded",
+          agent: null,
+          issues: [
+            {
+              skillId: "missing-skill",
+              version: "1.0.0",
+              sourceType: "remote",
+              code: "SKILL_PACKAGE_NOT_FOUND",
+              message: "skill package not found",
+            },
+          ],
+        }}
+        skillPreflightLoading={false}
         onBack={vi.fn()}
         onDeleteAgent={vi.fn()}
         onDiscardDraft={vi.fn()}
         onDraftChange={vi.fn()}
+        onResolveAgentSkills={vi.fn()}
         onSaveAgent={vi.fn()}
         onTestAgent={vi.fn()}
       />,
@@ -96,6 +118,8 @@ describe("AgentConfigPage", () => {
     expect(html).toContain("删除");
     expect(html).not.toContain("丢弃草稿");
     expect(html).toContain("已卸载");
+    expect(html).toContain("运行时加载失败");
+    expect(html).toContain("skill package not found");
   });
 
   it("shows healthy and drifted version-locked skill bindings", () => {
@@ -114,10 +138,13 @@ describe("AgentConfigPage", () => {
         isNewDraft={false}
         saving={false}
         installedSkills={installedSkills}
+        skillPreflight={null}
+        skillPreflightLoading={false}
         onBack={vi.fn()}
         onDeleteAgent={vi.fn()}
         onDiscardDraft={vi.fn()}
         onDraftChange={vi.fn()}
+        onResolveAgentSkills={vi.fn()}
         onSaveAgent={vi.fn()}
         onTestAgent={vi.fn()}
       />,
@@ -139,15 +166,24 @@ describe("AgentConfigPage", () => {
         isNewDraft={false}
         saving={false}
         installedSkills={installedSkills}
+        skillPreflight={{
+          ok: true,
+          agent: null,
+          skills: [{ name: "代码工作区", sourceType: "builtin", path: "/skills/code-workspace/SKILL.md", contentLength: 180 }],
+        }}
+        skillPreflightLoading={false}
         onBack={vi.fn()}
         onDeleteAgent={vi.fn()}
         onDiscardDraft={vi.fn()}
         onDraftChange={vi.fn()}
+        onResolveAgentSkills={vi.fn()}
         onSaveAgent={vi.fn()}
         onTestAgent={vi.fn()}
       />,
     );
 
     expect(healthyHtml).toContain("绑定正常");
+    expect(healthyHtml).toContain("运行时可加载");
+    expect(healthyHtml).toContain("1 个 Skill 已通过运行时解析");
   });
 });
