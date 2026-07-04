@@ -17,7 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import type { AgentProfile, SkillPackageInput, SkillRegistryItem } from "../../../api";
+import type { AgentProfile, SkillAuditAction, SkillAuditEvent, SkillPackageInput, SkillRegistryItem } from "../../../api";
 
 const allCategories = "全部";
 const skillPackageExample = `{
@@ -57,6 +57,25 @@ function installedAtLabel(value: number | null): string {
     return "未安装";
   }
   return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
+
+function eventTimeLabel(value: number): string {
+  if (!value) {
+    return "未知时间";
+  }
+  return new Intl.DateTimeFormat("zh-CN", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+}
+
+function auditActionLabel(action: SkillAuditAction): string {
+  const labels: Record<SkillAuditAction, string> = {
+    download: "下载",
+    upload: "上传",
+    install: "安装",
+    update: "升级",
+    rollback: "回滚",
+    uninstall: "卸载",
+  };
+  return labels[action];
 }
 
 function agentBindingVersion(agent: AgentProfile, skillId: string): string {
@@ -102,12 +121,14 @@ export function shouldConfirmSkillImpact(skill: SkillRegistryItem, affectedAgent
 /** Render the local registry of skills that can be loaded into agents. */
 export function SkillHubPage({
   agents,
+  auditEvents,
   skills,
   onRollbackSkill,
   onSkillAction,
   onUploadPackage,
 }: {
   agents: AgentProfile[];
+  auditEvents: SkillAuditEvent[];
   skills: SkillRegistryItem[];
   onRollbackSkill: (skill: SkillRegistryItem) => void;
   onSkillAction: (skill: SkillRegistryItem) => void;
@@ -137,6 +158,9 @@ export function SkillHubPage({
   const selectedSkill = skills.find((skill) => skill.id === selectedSkillId) ?? filteredSkills[0] ?? null;
   const showDetailPanel = detailOpen && selectedSkill !== null;
   const selectedSkillAgents = selectedSkill ? agents.filter((agent) => agentUsesSkill(agent, selectedSkill.id)) : [];
+  const selectedSkillAuditEvents = selectedSkill
+    ? auditEvents.filter((event) => event.skillId === selectedSkill.id).slice(0, 5)
+    : [];
   const pendingSkill = pendingImpactAction ? skills.find((skill) => skill.id === pendingImpactAction.skillId) ?? null : null;
   const pendingSkillAgents = pendingSkill ? agents.filter((agent) => agentUsesSkill(agent, pendingSkill.id)) : [];
 
@@ -510,6 +534,24 @@ export function SkillHubPage({
                     </div>
                   ) : (
                     <span className="skillhub-detail-muted">当前没有 Agent 绑定这个 Skill</span>
+                  )}
+                </div>
+                <div className="skillhub-detail-section">
+                  <strong>审计日志</strong>
+                  {selectedSkillAuditEvents.length > 0 ? (
+                    <div className="skillhub-audit-list">
+                      {selectedSkillAuditEvents.map((event) => (
+                        <div className="skillhub-audit-item" key={event.id}>
+                          <span>{auditActionLabel(event.action)}</span>
+                          <strong>{versionLabel(event.version)}</strong>
+                          <small>
+                            {event.status} · {eventTimeLabel(event.at)}
+                          </small>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="skillhub-detail-muted">当前没有审计事件</span>
                   )}
                 </div>
                 {pendingSkill?.id === selectedSkill.id && pendingImpactAction ? (

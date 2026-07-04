@@ -8,6 +8,7 @@ import {
   fetchAgents,
   fetchHealth,
   fetchProfile,
+  fetchSkillAuditEvents,
   fetchSkillRegistrySettings,
   fetchSkills,
   fetchSession,
@@ -389,6 +390,22 @@ describe("web-console api client", () => {
           ],
         });
       }
+      if (method === "GET" && url.pathname === "/api/skills/audit") {
+        return jsonResponse({
+          ok: true,
+          events: [
+            {
+              id: "audit-1",
+              action: "update",
+              skillId: "quality-gate",
+              skillName: "质量闸门",
+              version: "1.0.0",
+              status: "installed",
+              at: 1782691300000,
+            },
+          ],
+        });
+      }
       if (method === "GET" && url.pathname === "/api/skills/registry") {
         return jsonResponse({
           ok: true,
@@ -474,6 +491,15 @@ describe("web-console api client", () => {
         installed: true,
         installedVersion: "1.2.0",
         availableVersion: "1.2.0",
+      },
+    ]);
+    await expect(fetchSkillAuditEvents()).resolves.toMatchObject([
+      {
+        id: "audit-1",
+        action: "update",
+        skillId: "quality-gate",
+        version: "1.0.0",
+        status: "installed",
       },
     ]);
     await expect(fetchSkillRegistrySettings()).resolves.toEqual({

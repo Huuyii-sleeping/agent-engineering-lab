@@ -2,6 +2,8 @@ import { Inject, Injectable } from "@nestjs/common";
 import { LocalStoreService } from "../local-store.service.js";
 import type {
   RemoteSkillRegistry,
+  SkillAuditAction,
+  SkillAuditEvent,
   SkillInstallationRecord,
   SkillPackageInput,
   SkillRegistryItem,
@@ -15,6 +17,7 @@ import { SkillValidatorService } from "./skill-validator.service.js";
 
 const skillStoreKey = "skills";
 const defaultInstalledSkillIds = ["code-workspace", "memory-context"];
+const maxAuditEvents = 50;
 
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -88,6 +91,49 @@ function normalizeInstallationRecords(value: unknown): SkillInstallationRecord[]
   return [...byId.values()];
 }
 
+function normalizeAuditEvents(value: unknown): SkillAuditEvent[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((item) => {
+      const record = asObject(item);
+      const skillId = typeof record.skillId === "string" && record.skillId.trim() ? record.skillId.trim() : "";
+      const action = record.action;
+      if (
+        !skillId ||
+        (action !== "download" &&
+          action !== "upload" &&
+          action !== "install" &&
+          action !== "update" &&
+          action !== "rollback" &&
+          action !== "uninstall")
+      ) {
+        return null;
+      }
+      const status = record.status;
+      return {
+        id: typeof record.id === "string" && record.id.trim() ? record.id.trim() : `${record.at ?? 0}-${action}-${skillId}`,
+        action,
+        skillId,
+        skillName: typeof record.skillName === "string" && record.skillName.trim() ? record.skillName.trim().slice(0, 120) : skillId,
+        version: typeof record.version === "string" ? record.version.trim().slice(0, 40) : "",
+        status:
+          status === "available" ||
+          status === "downloaded" ||
+          status === "installed" ||
+          status === "updateAvailable" ||
+          status === "invalid"
+            ? status
+            : "downloaded",
+        at: typeof record.at === "number" && Number.isFinite(record.at) ? record.at : 0,
+      };
+    })
+    .filter((item): item is SkillAuditEvent => Boolean(item))
+    .sort((left, right) => right.at - left.at)
+    .slice(0, maxAuditEvents);
+}
+
 function replaceRecord(records: SkillInstallationRecord[], next: SkillInstallationRecord): SkillInstallationRecord[] {
   return [...records.filter((record) => record.skillId !== next.skillId), next];
 }
@@ -98,6 +144,7 @@ export function defaultSkillStoreState(): SkillStoreState {
     installedSkillIds: defaultInstalledSkillIds,
     installedSkills,
     previousInstalledSkills: [],
+    auditEvents: [],
     downloadedSkillIds: [],
     customSkillIds: [],
   };
@@ -114,6 +161,7 @@ export function normalizeSkillStoreState(value: unknown): SkillStoreState {
     installedSkillIds: normalizedInstalledSkills.map((item) => item.skillId),
     installedSkills: normalizedInstalledSkills,
     previousInstalledSkills: normalizeInstallationRecords(record.previousInstalledSkills),
+    auditEvents: normalizeAuditEvents(record.auditEvents),
     downloadedSkillIds: normalizeIds(record.downloadedSkillIds),
     customSkillIds: normalizeIds(record.customSkillIds),
   };
@@ -140,9 +188,35 @@ export class SkillInstallerService {
       installedSkillIds: [...new Set(installedSkills.map((record) => record.skillId))],
       installedSkills,
       previousInstalledSkills: normalizeInstallationRecords(state.previousInstalledSkills),
+      auditEvents: normalizeAuditEvents(state.auditEvents),
       downloadedSkillIds: [...new Set(state.downloadedSkillIds)],
       customSkillIds: [...new Set(state.customSkillIds)],
     });
+  }
+
+  /** Lists recent Skill lifecycle audit events. */
+  async listAuditEvents(): Promise<SkillAuditEvent[]> {
+    return (await this.readState()).auditEvents;
+  }
+
+  /** Appends a successful Skill lifecycle audit event. */
+  async appendAuditEvent(action: SkillAuditAction, skill: SkillRegistryItem): Promise<SkillAuditEvent> {
+    const state = await this.readState();
+    const at = Date.now();
+    const event: SkillAuditEvent = {
+      id: `${at}-${action}-${skill.id}`,
+      action,
+      skillId: skill.id,
+      skillName: skill.name,
+      version: skill.installedVersion || skill.version,
+      status: skill.status,
+      at,
+    };
+    await this.writeState({
+      ...state,
+      auditEvents: [event, ...state.auditEvents].slice(0, maxAuditEvents),
+    });
+    return event;
   }
 
   /** Downloads a remote skill package into the local remote store. */

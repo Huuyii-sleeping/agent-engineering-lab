@@ -65,6 +65,26 @@ describe("SkillHubPage", () => {
             updatedAt: 1782691200000,
           },
         ]}
+        auditEvents={[
+          {
+            id: "audit-1",
+            action: "update",
+            skillId: "code-workspace",
+            skillName: "代码工作区",
+            version: "1.2.0",
+            status: "installed",
+            at: 1782691300000,
+          },
+          {
+            id: "audit-2",
+            action: "install",
+            skillId: "quality-gate",
+            skillName: "质量闸门",
+            version: "0.9.0",
+            status: "installed",
+            at: 1782691200000,
+          },
+        ]}
         skills={[
           installedSkill,
           {
@@ -130,6 +150,8 @@ describe("SkillHubPage", () => {
     expect(html).toContain("研发 Agent");
     expect(html).toContain("锁定 v1.2.0");
     expect(html).not.toContain("发布 Agent");
+    expect(html).toContain("审计日志");
+    expect(html).toContain("升级");
     expect(html).toContain("回滚");
     expect(html).toContain("下载");
     expect(html).toContain("Private publish");

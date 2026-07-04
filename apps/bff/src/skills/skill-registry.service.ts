@@ -5,6 +5,8 @@ import type {
   RemoteRegistryState,
   RemoteSkillIndexItem,
   RemoteSkillRegistry,
+  SkillAuditAction,
+  SkillAuditEvent,
   SkillInstallationRecord,
   SkillManifest,
   SkillPackageInput,
@@ -294,6 +296,11 @@ export class SkillRegistryService {
     });
   }
 
+  /** Lists recent successful Skill lifecycle audit events. */
+  async listAuditEvents(): Promise<SkillAuditEvent[]> {
+    return this.installer.listAuditEvents();
+  }
+
   /** Downloads a remote skill package and returns its registry item. */
   async downloadSkill(skillId: string, version?: string): Promise<SkillRegistryItem | null> {
     const remoteRegistryState = await this.readRemoteRegistryState();
@@ -302,7 +309,8 @@ export class SkillRegistryService {
     if (!result.ok) {
       return null;
     }
-    return this.findSkill(skillId);
+    const skill = await this.findSkill(skillId);
+    return skill ? this.audit("download", skill) : null;
   }
 
   /** Stores a custom package and returns its registry item. */
@@ -315,14 +323,12 @@ export class SkillRegistryService {
       await this.syncRemoteRegistry();
     }
     const skill = await this.findSkill(result.skillPackage.manifest.id);
-    return skill ?? { errors: ["uploaded skill was not found after storing"] };
+    return skill ? this.audit("upload", skill) : { errors: ["uploaded skill was not found after storing"] };
   }
 
   /** Marks a downloaded, builtin, or custom skill as installed. */
   async installSkill(skillId: string, version?: string): Promise<SkillRegistryItem | null> {
-    const localSkills = await this.listLocalSkillItems();
-    const installed = await this.installer.installSkill(skillId, localSkills, version);
-    return installed ? this.findSkill(skillId) : null;
+    return this.installSkillWithAudit(skillId, version, "install");
   }
 
   /** Downloads and installs the newest remote version newer than the current installed version. */
@@ -344,19 +350,33 @@ export class SkillRegistryService {
     if (!downloaded.ok) {
       return null;
     }
-    return this.installSkill(skillId, target.version);
+    return this.installSkillWithAudit(skillId, target.version, "update");
   }
 
   /** Restores the previous installed version when it still exists locally. */
   async rollbackSkill(skillId: string): Promise<SkillRegistryItem | null> {
     const rolledBack = await this.installer.rollbackSkill(skillId, await this.listLocalSkillItems());
-    return rolledBack ? this.findSkill(skillId) : null;
+    const skill = rolledBack ? await this.findSkill(skillId) : null;
+    return skill ? this.audit("rollback", skill) : null;
   }
 
   /** Marks one skill as uninstalled. */
   async uninstallSkill(skillId: string): Promise<SkillRegistryItem | null> {
     await this.installer.uninstallSkill(skillId);
-    return this.findSkill(skillId);
+    const skill = await this.findSkill(skillId);
+    return skill ? this.audit("uninstall", skill) : null;
+  }
+
+  private async installSkillWithAudit(skillId: string, version: string | undefined, action: SkillAuditAction): Promise<SkillRegistryItem | null> {
+    const localSkills = await this.listLocalSkillItems();
+    const installed = await this.installer.installSkill(skillId, localSkills, version);
+    const skill = installed ? await this.findSkill(skillId) : null;
+    return skill ? this.audit(action, skill) : null;
+  }
+
+  private async audit(action: SkillAuditAction, skill: SkillRegistryItem): Promise<SkillRegistryItem> {
+    await this.installer.appendAuditEvent(action, skill);
+    return skill;
   }
 
   private async findSkill(skillId: string): Promise<SkillRegistryItem | null> {

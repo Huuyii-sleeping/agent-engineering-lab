@@ -1251,6 +1251,18 @@ describe("bff server", () => {
         },
       },
     });
+    await expect(requestJson(`${bffBaseUrl}/api/skills/audit`)).resolves.toMatchObject({
+      status: 200,
+      body: {
+        ok: true,
+        events: expect.arrayContaining([
+          expect.objectContaining({ action: "download", skillId: "remote-updatable", version: "1.0.0" }),
+          expect.objectContaining({ action: "install", skillId: "remote-updatable", version: "1.0.0" }),
+          expect.objectContaining({ action: "update", skillId: "remote-updatable", version: "1.1.0" }),
+          expect.objectContaining({ action: "rollback", skillId: "remote-updatable", version: "1.0.0" }),
+        ]),
+      },
+    });
   });
 
   it("configures and syncs an HTTP remote skill registry", async () => {

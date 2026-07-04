@@ -17,6 +17,12 @@ export class SkillsController {
     writeJson(res, 200, { ok: true, skills: await this.skillRegistryService.listSkills() });
   }
 
+  /** Lists recent successful Skill lifecycle audit events. */
+  @Get("audit")
+  async auditEvents(@Res() res: ServerResponse): Promise<void> {
+    writeJson(res, 200, { ok: true, events: await this.skillRegistryService.listAuditEvents() });
+  }
+
   /** Returns remote registry URL and sync status. */
   @Get("registry")
   async registry(@Res() res: ServerResponse): Promise<void> {

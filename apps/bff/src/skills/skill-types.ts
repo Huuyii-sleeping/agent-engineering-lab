@@ -11,6 +11,20 @@ export type SkillPackageVersion = "1.0";
 /** Lifecycle state for a skill package in the Skill Hub. */
 export type SkillStatus = "available" | "downloaded" | "installed" | "updateAvailable" | "invalid";
 
+/** Successful Skill lifecycle operations captured by the local audit log. */
+export type SkillAuditAction = "download" | "upload" | "install" | "update" | "rollback" | "uninstall";
+
+/** One persisted Skill lifecycle audit event. */
+export type SkillAuditEvent = {
+  id: string;
+  action: SkillAuditAction;
+  skillId: string;
+  skillName: string;
+  version: string;
+  status: SkillStatus;
+  at: number;
+};
+
 /** Versioned install marker persisted by the Skill Hub lifecycle store. */
 export type SkillInstallationRecord = {
   skillId: string;
@@ -121,6 +135,7 @@ export type SkillStoreState = {
   installedSkillIds: string[];
   installedSkills: SkillInstallationRecord[];
   previousInstalledSkills: SkillInstallationRecord[];
+  auditEvents: SkillAuditEvent[];
   downloadedSkillIds: string[];
   customSkillIds: string[];
 };

@@ -3247,6 +3247,45 @@ p {
   font-weight: 780;
 }
 
+.skillhub-audit-list {
+  display: grid;
+  gap: 8px;
+}
+
+.skillhub-audit-item {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 4px 8px;
+  border: 1px solid color-mix(in srgb, var(--skillhub-line) 54%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel-bg) 38%, transparent);
+  padding: 8px 10px;
+}
+
+.skillhub-audit-item span {
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.skillhub-audit-item strong {
+  overflow: hidden;
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skillhub-audit-item small {
+  grid-column: 1 / -1;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 780;
+}
+
 .skillhub-impact-confirmation {
   display: grid;
   gap: 10px;

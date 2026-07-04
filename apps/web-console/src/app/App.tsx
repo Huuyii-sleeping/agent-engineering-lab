@@ -13,6 +13,7 @@ import {
   fetchAgents,
   fetchHealth,
   fetchProfile,
+  fetchSkillAuditEvents,
   fetchSkills,
   fetchSession,
   fetchSessions,
@@ -36,6 +37,7 @@ import {
   type HealthStatus,
   type SessionDetail,
   type SessionSummary,
+  type SkillAuditEvent,
   type SkillRegistryItem,
   type SkillPackageInput,
   type UserProfile,
@@ -86,6 +88,7 @@ export function App() {
     typeof window === "undefined" ? readAgentBuilderConfig(null) : readAgentBuilderConfig(window.localStorage),
   );
   const [skillRegistry, setSkillRegistry] = useState<SkillRegistryItem[]>([]);
+  const [skillAuditEvents, setSkillAuditEvents] = useState<SkillAuditEvent[]>([]);
   const [agents, setAgents] = useState<AgentProfile[]>([]);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [agentDraft, setAgentDraft] = useState<AgentProfileInput>(defaultAgentProfileInput);
@@ -225,7 +228,13 @@ export function App() {
 
   async function refreshSkills(): Promise<void> {
     await syncSkillRegistry();
-    setSkillRegistry(await fetchSkills());
+    const [nextSkills, nextAuditEvents] = await Promise.all([fetchSkills(), fetchSkillAuditEvents()]);
+    setSkillRegistry(nextSkills);
+    setSkillAuditEvents(nextAuditEvents);
+  }
+
+  async function refreshSkillAuditEvents(): Promise<void> {
+    setSkillAuditEvents(await fetchSkillAuditEvents());
   }
 
   async function loadSession(sessionId: string, options: { silent?: boolean } = {}): Promise<void> {
@@ -426,6 +435,7 @@ export function App() {
             ? await uninstallSkill(skill.id)
             : await installSkill(skill.id);
       setSkillRegistry((current) => current.map((item) => (item.id === skill.id ? nextSkill : item)));
+      await refreshSkillAuditEvents();
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -436,6 +446,7 @@ export function App() {
     try {
       const nextSkill = await rollbackSkill(skill.id);
       setSkillRegistry((current) => current.map((item) => (item.id === skill.id ? nextSkill : item)));
+      await refreshSkillAuditEvents();
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -449,6 +460,7 @@ export function App() {
         const exists = current.some((skill) => skill.id === nextSkill.id);
         return exists ? current.map((skill) => (skill.id === nextSkill.id ? nextSkill : skill)) : [...current, nextSkill];
       });
+      await refreshSkillAuditEvents();
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -929,6 +941,7 @@ export function App() {
             ) : (
               <SkillHubPage
                 agents={agents}
+                auditEvents={skillAuditEvents}
                 skills={skillRegistry}
                 onRollbackSkill={(skill) => void handleRollbackSkill(skill)}
                 onSkillAction={(skill) => void handleSkillAction(skill)}

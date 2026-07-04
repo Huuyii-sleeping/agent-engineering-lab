@@ -149,6 +149,18 @@ export type SkillRegistryItem = {
   validationErrors: string[];
 };
 
+export type SkillAuditAction = "download" | "upload" | "install" | "update" | "rollback" | "uninstall";
+
+export type SkillAuditEvent = {
+  id: string;
+  action: SkillAuditAction;
+  skillId: string;
+  skillName: string;
+  version: string;
+  status: SkillStatus;
+  at: number;
+};
+
 /** JSON package accepted by the custom Skill Hub upload API. */
 export type SkillPackageInput = {
   skillPackageVersion?: "1.0";
@@ -471,6 +483,42 @@ export function normalizeSkillRegistryItem(value: unknown): SkillRegistryItem {
   };
 }
 
+function normalizeSkillAuditAction(value: unknown): SkillAuditAction {
+  return value === "download" ||
+    value === "upload" ||
+    value === "install" ||
+    value === "update" ||
+    value === "rollback" ||
+    value === "uninstall"
+    ? value
+    : "install";
+}
+
+function normalizeSkillStatus(value: unknown): SkillStatus {
+  return value === "available" ||
+    value === "downloaded" ||
+    value === "installed" ||
+    value === "updateAvailable" ||
+    value === "invalid"
+    ? value
+    : "downloaded";
+}
+
+/** Normalize a Skill lifecycle audit event before it is displayed in Skill Hub. */
+export function normalizeSkillAuditEvent(value: unknown): SkillAuditEvent {
+  const record = asObject(value);
+  const skillId = cleanText(record.skillId, "").slice(0, 80);
+  return {
+    id: cleanText(record.id, `${asNumber(record.at) ?? 0}-${skillId}`).slice(0, 140),
+    action: normalizeSkillAuditAction(record.action),
+    skillId,
+    skillName: cleanText(record.skillName, skillId || "未命名 Skill").slice(0, 120),
+    version: cleanOptionalText(record.version, 40),
+    status: normalizeSkillStatus(record.status),
+    at: asNumber(record.at) ?? 0,
+  };
+}
+
 /** Normalize remote registry settings before displaying them in Skill Hub. */
 export function normalizeRemoteRegistrySettings(value: unknown): RemoteRegistrySettings {
   const record = asObject(value);
@@ -738,6 +786,13 @@ export async function fetchSkills(): Promise<SkillRegistryItem[]> {
   const response = await requestJson<JsonObject>("/api/skills");
   const skills = Array.isArray(response.skills) ? response.skills : [];
   return skills.map(normalizeSkillRegistryItem).filter((skill) => skill.id);
+}
+
+/** Fetches recent Skill lifecycle audit events through the BFF business API. */
+export async function fetchSkillAuditEvents(): Promise<SkillAuditEvent[]> {
+  const response = await requestJson<JsonObject>("/api/skills/audit");
+  const events = Array.isArray(response.events) ? response.events : [];
+  return events.map(normalizeSkillAuditEvent).filter((event) => event.skillId);
 }
 
 /** Fetches the configured remote skill registry connection. */
