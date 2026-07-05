@@ -25,6 +25,7 @@ export type SkillStoreOptions = {
 
 export type StoredSkillPackage = ValidatedSkillPackage & {
   sourceType: SkillSourceType;
+  packageSha256: string;
 };
 
 function defaultSkillsRoot(): string {
@@ -77,6 +78,17 @@ function cleanPublisher(value: unknown): SkillPublisher {
 
 function sha256Hex(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function packageSha256(skillPackage: ValidatedSkillPackage): string {
+  return sha256Hex(
+    JSON.stringify({
+      skillPackageVersion: skillPackage.skillPackageVersion ?? "",
+      files: [...skillPackage.files]
+        .map((file) => ({ path: file.path, content: file.content }))
+        .sort((left, right) => left.path.localeCompare(right.path)),
+    }),
+  );
 }
 
 function safePackagePath(root: string, file: SkillPackageFile): string {
@@ -253,7 +265,7 @@ export class SkillStoreService {
         readFile(join(root, "skill.json"), "utf8"),
       ]);
       const validated = this.validator.validatePackage(this.validator.packageFromRequiredFiles(skillFile, metadataFile));
-      return validated.ok ? { ...validated.package, sourceType } : null;
+      return validated.ok ? { ...validated.package, sourceType, packageSha256: packageSha256(validated.package) } : null;
     } catch (error) {
       if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
         return null;

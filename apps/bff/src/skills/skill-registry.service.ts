@@ -7,6 +7,7 @@ import type {
   RemoteSkillRegistry,
   SkillAuditAction,
   SkillAuditEvent,
+  SkillHubReadiness,
   SkillInstallationRecord,
   SkillManifest,
   SkillPackageInput,
@@ -27,6 +28,12 @@ const localPublisher: SkillPublisher = {
   name: "Local Workspace",
   verified: true,
 };
+
+export class SkillLifecycleConflictError extends Error {
+  constructor(readonly current: { skillId: string; action: SkillAuditAction }) {
+    super(`skill lifecycle operation is already running: ${current.action} ${current.skillId}`);
+  }
+}
 
 function compareVersion(left: string, right: string): number {
   const leftParts = left.split(".").map((part) => Number(part) || 0);
@@ -75,7 +82,7 @@ function registryItemFromPackage(
     publisher: localPublisher,
     downloads: 0,
     rating: null,
-    packageSha256: "",
+    packageSha256: skillPackage.packageSha256,
     deprecated: false,
     status: installed ? "installed" : status,
     installed,
@@ -199,6 +206,8 @@ function normalizeRating(value: unknown): number | null {
 /** Aggregates builtin, remote, custom, and lifecycle state for Skill Hub. */
 @Injectable()
 export class SkillRegistryService {
+  private lifecycleOperation: { skillId: string; action: SkillAuditAction } | null = null;
+
   constructor(
     private readonly localStore: LocalStoreService,
     private readonly skillStore: SkillStoreService,
@@ -301,6 +310,35 @@ export class SkillRegistryService {
     return this.installer.listAuditEvents();
   }
 
+  /** Returns a production-readiness summary for SkillHub. */
+  async getReadiness(): Promise<SkillHubReadiness> {
+    const registry = await this.getRemoteRegistrySettings();
+    try {
+      const [skills, auditEvents] = await Promise.all([this.listSkills(), this.listAuditEvents()]);
+      const counts = {
+        total: skills.length,
+        installed: skills.filter((skill) => skill.installed).length,
+        updateAvailable: skills.filter((skill) => skill.status === "updateAvailable").length,
+        invalid: skills.filter((skill) => skill.status === "invalid").length,
+        failedAudit: auditEvents.filter((event) => !event.ok).length,
+      };
+      const degraded = Boolean(registry.lastSyncError) || counts.invalid > 0 || counts.failedAudit > 0;
+      return {
+        status: degraded ? "degraded" : "ready",
+        registry,
+        store: { readable: true, message: "" },
+        counts,
+      };
+    } catch (error) {
+      return {
+        status: "blocked",
+        registry,
+        store: { readable: false, message: error instanceof Error ? error.message : String(error) },
+        counts: { total: 0, installed: 0, updateAvailable: 0, invalid: 0, failedAudit: 0 },
+      };
+    }
+  }
+
   /** Records a failed Skill lifecycle operation for a concrete Skill id. */
   async auditFailure(action: SkillAuditAction, skillId: string, code: string, message: string): Promise<SkillAuditEvent> {
     return this.installer.appendAuditFailure(action, skillId, code, message);
@@ -308,68 +346,78 @@ export class SkillRegistryService {
 
   /** Downloads a remote skill package and returns its registry item. */
   async downloadSkill(skillId: string, version?: string): Promise<SkillRegistryItem | null> {
-    const remoteRegistryState = await this.readRemoteRegistryState();
-    const registry = await this.resolveRemoteRegistry(remoteRegistryState);
-    const result = await this.installer.downloadSkill(skillId, registry, remoteRegistryState.url, version);
-    if (!result.ok) {
-      return null;
-    }
-    const skill = await this.findSkill(skillId);
-    return skill ? this.audit("download", skill) : null;
+    return this.withLifecycleLock(skillId, "download", async () => {
+      const remoteRegistryState = await this.readRemoteRegistryState();
+      const registry = await this.resolveRemoteRegistry(remoteRegistryState);
+      const result = await this.installer.downloadSkill(skillId, registry, remoteRegistryState.url, version);
+      if (!result.ok) {
+        return null;
+      }
+      const skill = await this.findSkill(skillId);
+      return skill ? this.audit("download", skill) : null;
+    });
   }
 
   /** Stores a custom package and returns its registry item. */
   async uploadCustomSkill(input: SkillPackageInput): Promise<SkillRegistryItem | { errors: string[] }> {
-    const result = await this.installer.uploadCustomSkill(input);
-    if (!result.ok) {
-      return { errors: result.errors };
-    }
-    if ("publishedToRegistry" in result) {
-      await this.syncRemoteRegistry();
-    }
-    const skill = await this.findSkill(result.skillPackage.manifest.id);
-    return skill ? this.audit("upload", skill) : { errors: ["uploaded skill was not found after storing"] };
+    return this.withLifecycleLock("custom-upload", "upload", async () => {
+      const result = await this.installer.uploadCustomSkill(input);
+      if (!result.ok) {
+        return { errors: result.errors };
+      }
+      if ("publishedToRegistry" in result) {
+        await this.syncRemoteRegistry();
+      }
+      const skill = await this.findSkill(result.skillPackage.manifest.id);
+      return skill ? this.audit("upload", skill) : { errors: ["uploaded skill was not found after storing"] };
+    });
   }
 
   /** Marks a downloaded, builtin, or custom skill as installed. */
   async installSkill(skillId: string, version?: string): Promise<SkillRegistryItem | null> {
-    return this.installSkillWithAudit(skillId, version, "install");
+    return this.withLifecycleLock(skillId, "install", () => this.installSkillWithAudit(skillId, version, "install"));
   }
 
   /** Downloads and installs the newest remote version newer than the current installed version. */
   async updateSkill(skillId: string): Promise<SkillRegistryItem | null> {
-    const state = await this.installer.readState();
-    const current = state.installedSkills.find((record) => record.skillId === skillId);
-    if (!current) {
-      return null;
-    }
-    const remoteRegistryState = await this.readRemoteRegistryState();
-    const registry = await this.resolveRemoteRegistry(remoteRegistryState);
-    const target = registry.skills
-      .filter((entry) => entry.id === skillId && (!current.version || compareVersion(entry.version, current.version) > 0))
-      .sort((left, right) => compareVersion(right.version, left.version))[0];
-    if (!target) {
-      return null;
-    }
-    const downloaded = await this.installer.downloadSkill(skillId, { skills: [target] }, remoteRegistryState.url, target.version);
-    if (!downloaded.ok) {
-      return null;
-    }
-    return this.installSkillWithAudit(skillId, target.version, "update");
+    return this.withLifecycleLock(skillId, "update", async () => {
+      const state = await this.installer.readState();
+      const current = state.installedSkills.find((record) => record.skillId === skillId);
+      if (!current) {
+        return null;
+      }
+      const remoteRegistryState = await this.readRemoteRegistryState();
+      const registry = await this.resolveRemoteRegistry(remoteRegistryState);
+      const target = registry.skills
+        .filter((entry) => entry.id === skillId && (!current.version || compareVersion(entry.version, current.version) > 0))
+        .sort((left, right) => compareVersion(right.version, left.version))[0];
+      if (!target) {
+        return null;
+      }
+      const downloaded = await this.installer.downloadSkill(skillId, { skills: [target] }, remoteRegistryState.url, target.version);
+      if (!downloaded.ok) {
+        return null;
+      }
+      return this.installSkillWithAudit(skillId, target.version, "update");
+    });
   }
 
   /** Restores the previous installed version when it still exists locally. */
   async rollbackSkill(skillId: string): Promise<SkillRegistryItem | null> {
-    const rolledBack = await this.installer.rollbackSkill(skillId, await this.listLocalSkillItems());
-    const skill = rolledBack ? await this.findSkill(skillId) : null;
-    return skill ? this.audit("rollback", skill) : null;
+    return this.withLifecycleLock(skillId, "rollback", async () => {
+      const rolledBack = await this.installer.rollbackSkill(skillId, await this.listLocalSkillItems());
+      const skill = rolledBack ? await this.findSkill(skillId) : null;
+      return skill ? this.audit("rollback", skill) : null;
+    });
   }
 
   /** Marks one skill as uninstalled. */
   async uninstallSkill(skillId: string): Promise<SkillRegistryItem | null> {
-    await this.installer.uninstallSkill(skillId);
-    const skill = await this.findSkill(skillId);
-    return skill ? this.audit("uninstall", skill) : null;
+    return this.withLifecycleLock(skillId, "uninstall", async () => {
+      await this.installer.uninstallSkill(skillId);
+      const skill = await this.findSkill(skillId);
+      return skill ? this.audit("uninstall", skill) : null;
+    });
   }
 
   private async installSkillWithAudit(skillId: string, version: string | undefined, action: SkillAuditAction): Promise<SkillRegistryItem | null> {
@@ -382,6 +430,18 @@ export class SkillRegistryService {
   private async audit(action: SkillAuditAction, skill: SkillRegistryItem): Promise<SkillRegistryItem> {
     await this.installer.appendAuditEvent(action, skill);
     return skill;
+  }
+
+  private async withLifecycleLock<T>(skillId: string, action: SkillAuditAction, task: () => Promise<T>): Promise<T> {
+    if (this.lifecycleOperation) {
+      throw new SkillLifecycleConflictError(this.lifecycleOperation);
+    }
+    this.lifecycleOperation = { skillId, action };
+    try {
+      return await task();
+    } finally {
+      this.lifecycleOperation = null;
+    }
   }
 
   private async findSkill(skillId: string): Promise<SkillRegistryItem | null> {

@@ -3,9 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import type { SkillRegistryItem } from "../../../api";
 import {
   SkillHubPage,
+  filterSkillRegistry,
   isPrimarySkillActionDisabled,
   shouldConfirmSkillImpact,
   skillActionLabel,
+  validateSkillPackageInput,
   type SkillLifecycleOperationState,
 } from "./SkillHubPage";
 
@@ -52,6 +54,7 @@ function renderMinimalSkillHub({
     <SkillHubPage
       agents={[]}
       auditEvents={[]}
+      readiness={null}
       registrySettings={null}
       registryRefreshing={registryRefreshing}
       skillOperationInFlight={skillOperationInFlight}
@@ -122,6 +125,18 @@ describe("SkillHubPage", () => {
             at: 1782691200000,
           },
         ]}
+        readiness={{
+          status: "ready",
+          registry: {
+            url: "https://registry.example.com/index.json",
+            managedByService: false,
+            lastSyncedAt: 1782691400000,
+            lastSyncError: "",
+            skillCount: 2,
+          },
+          store: { readable: true, message: "" },
+          counts: { total: 2, installed: 1, updateAvailable: 1, invalid: 0, failedAudit: 1 },
+        }}
         registrySettings={{
           url: "https://registry.example.com/index.json",
           managedByService: false,
@@ -171,8 +186,14 @@ describe("SkillHubPage", () => {
 
     expect(html).toContain("Production Skill Hub");
     expect(html).toContain("Hub readiness");
-    expect(html).toContain("Registry synced");
+    expect(html).toContain("Production ready");
     expect(html).toContain("刷新 registry");
+    expect(html).toContain("Hub overview");
+    expect(html).toContain("Status filters");
+    expect(html).toContain("Source filters");
+    expect(html).toContain("Maturity filters");
+    expect(html).toContain("Recent operations");
+    expect(html).toContain("代码工作区");
     expect(html).toContain("<strong>1</strong>已安装");
     expect(html).toContain("<strong>1</strong>可升级");
     expect(html).toContain("<strong>1</strong>失败事件");
@@ -214,6 +235,64 @@ describe("SkillHubPage", () => {
     expect(html).toContain("&quot;path&quot;: &quot;skill.json&quot;");
   });
 
+  it("filters skills by status source maturity and loaded state", () => {
+    const remoteBetaSkill: SkillRegistryItem = {
+      ...installedSkill,
+      id: "browser-automation",
+      name: "浏览器自动化",
+      category: "自动化",
+      maturity: "beta",
+      registrySource: "official",
+      sourceType: "remote",
+      status: "available",
+      installed: false,
+      installedVersion: "",
+      installedAt: null,
+    };
+    const invalidPrivateSkill: SkillRegistryItem = {
+      ...installedSkill,
+      id: "private-invalid",
+      name: "私有异常 Skill",
+      registrySource: "private",
+      sourceType: "custom",
+      status: "invalid",
+      installed: false,
+      validationErrors: ["missing SKILL.md"],
+    };
+    const skills = [installedSkill, remoteBetaSkill, invalidPrivateSkill];
+
+    expect(
+      filterSkillRegistry(skills, {
+        query: "",
+        category: "全部",
+        status: "available",
+        source: "全部来源",
+        maturity: "全部成熟度",
+        loadedOnly: false,
+      }).map((skill) => skill.id),
+    ).toEqual(["browser-automation"]);
+    expect(
+      filterSkillRegistry(skills, {
+        query: "",
+        category: "全部",
+        status: "全部状态",
+        source: "official",
+        maturity: "beta",
+        loadedOnly: false,
+      }).map((skill) => skill.id),
+    ).toEqual(["browser-automation"]);
+    expect(
+      filterSkillRegistry(skills, {
+        query: "",
+        category: "全部",
+        status: "全部状态",
+        source: "全部来源",
+        maturity: "全部成熟度",
+        loadedOnly: true,
+      }).map((skill) => skill.id),
+    ).toEqual(["code-workspace"]);
+  });
+
   it("labels and confirms operations that can affect bound agents", () => {
     expect(skillActionLabel(installedSkill)).toBe("卸载");
     expect(skillActionLabel({ ...installedSkill, status: "updateAvailable" })).toBe("升级");
@@ -251,5 +330,23 @@ describe("SkillHubPage", () => {
     expect(html).toContain("不可用");
     expect(html).toContain("missing SKILL.md");
     expect(html).toContain("disabled=\"\"");
+  });
+
+  it("validates custom skill package structure before upload", () => {
+    expect(validateSkillPackageInput(null)).toBe("Skill package 必须是包含 files 的 JSON 对象。");
+    expect(validateSkillPackageInput({ files: [] })).toBe("Skill package 必须包含非空 files 数组。");
+    expect(validateSkillPackageInput({ files: [{ path: "", content: "x" }] })).toBe("每个文件都必须包含非空 path。");
+    expect(validateSkillPackageInput({ files: [{ path: "SKILL.md", content: "" }] })).toBe("SKILL.md 必须包含非空 content。");
+    expect(validateSkillPackageInput({ files: [{ path: "SKILL.md", content: "# Skill" }] })).toBe(
+      "Skill package 必须包含 skill.json。",
+    );
+    expect(
+      validateSkillPackageInput({
+        files: [
+          { path: "./SKILL.md", content: "# Skill" },
+          { path: "skill.json", content: "{}" },
+        ],
+      }),
+    ).toBeNull();
   });
 });

@@ -134,6 +134,24 @@ export type RemoteRegistryState = Omit<RemoteRegistrySettings, "managedByService
   cachedRegistry: RemoteSkillRegistry;
 };
 
+export type SkillHubReadinessStatus = "ready" | "degraded" | "blocked";
+
+export type SkillHubReadiness = {
+  status: SkillHubReadinessStatus;
+  registry: RemoteRegistrySettings;
+  store: {
+    readable: boolean;
+    message: string;
+  };
+  counts: {
+    total: number;
+    installed: number;
+    updateAvailable: number;
+    invalid: number;
+    failedAudit: number;
+  };
+};
+
 export type SkillStoreState = {
   installedSkillIds: string[];
   installedSkills: SkillInstallationRecord[];

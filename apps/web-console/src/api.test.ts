@@ -8,6 +8,7 @@ import {
   fetchAgents,
   fetchHealth,
   fetchProfile,
+  fetchSkillHubReadiness,
   fetchSkillAuditEvents,
   fetchSkillRegistrySettings,
   fetchSkills,
@@ -421,6 +422,23 @@ describe("web-console api client", () => {
           },
         });
       }
+      if (method === "GET" && url.pathname === "/api/skills/readiness") {
+        return jsonResponse({
+          ok: true,
+          readiness: {
+            status: "degraded",
+            registry: {
+              url: "https://registry.example.com/index.json",
+              managedByService: false,
+              lastSyncedAt: 1782147600000,
+              lastSyncError: "remote timeout",
+              skillCount: 4,
+            },
+            store: { readable: true, message: "" },
+            counts: { total: 4, installed: 2, updateAvailable: 1, invalid: 1, failedAudit: 3 },
+          },
+        });
+      }
       if (method === "POST" && url.pathname === "/api/skills/registry/sync") {
         return jsonResponse({
           ok: true,
@@ -518,6 +536,12 @@ describe("web-console api client", () => {
     await expect(syncSkillRegistry()).resolves.toMatchObject({
       lastSyncedAt: 1782147900000,
       skillCount: 6,
+    });
+    await expect(fetchSkillHubReadiness()).resolves.toMatchObject({
+      status: "degraded",
+      registry: { lastSyncError: "remote timeout" },
+      store: { readable: true },
+      counts: { installed: 2, updateAvailable: 1, invalid: 1, failedAudit: 3 },
     });
     await expect(downloadSkill("remote-prd-review")).resolves.toMatchObject({
       id: "remote-prd-review",

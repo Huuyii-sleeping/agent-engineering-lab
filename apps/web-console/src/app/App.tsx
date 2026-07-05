@@ -13,6 +13,7 @@ import {
   fetchAgents,
   fetchHealth,
   fetchProfile,
+  fetchSkillHubReadiness,
   fetchSkillAuditEvents,
   fetchSkills,
   fetchSession,
@@ -38,6 +39,7 @@ import {
   type SessionDetail,
   type SessionSummary,
   type SkillAuditEvent,
+  type SkillHubReadiness,
   type SkillRegistryItem,
   type RemoteRegistrySettings,
   type SkillPackageInput,
@@ -90,6 +92,7 @@ export function App() {
   );
   const [skillRegistry, setSkillRegistry] = useState<SkillRegistryItem[]>([]);
   const [skillAuditEvents, setSkillAuditEvents] = useState<SkillAuditEvent[]>([]);
+  const [skillHubReadiness, setSkillHubReadiness] = useState<SkillHubReadiness | null>(null);
   const [skillRegistrySettings, setSkillRegistrySettings] = useState<RemoteRegistrySettings | null>(null);
   const [skillRegistryRefreshing, setSkillRegistryRefreshing] = useState(false);
   const [skillOperationInFlight, setSkillOperationInFlight] = useState<SkillLifecycleOperationState | null>(null);
@@ -240,8 +243,13 @@ export function App() {
     setSkillRegistryRefreshing(true);
     try {
       const nextRegistrySettings = await syncSkillRegistry();
-      const [nextSkills, nextAuditEvents] = await Promise.all([fetchSkills(), fetchSkillAuditEvents()]);
+      const [nextSkills, nextAuditEvents, nextReadiness] = await Promise.all([
+        fetchSkills(),
+        fetchSkillAuditEvents(),
+        fetchSkillHubReadiness(),
+      ]);
       setSkillRegistrySettings(nextRegistrySettings);
+      setSkillHubReadiness(nextReadiness);
       setSkillRegistry(nextSkills);
       setSkillAuditEvents(nextAuditEvents);
     } finally {
@@ -997,6 +1005,7 @@ export function App() {
               <SkillHubPage
                 agents={agents}
                 auditEvents={skillAuditEvents}
+                readiness={skillHubReadiness}
                 registrySettings={skillRegistrySettings}
                 registryRefreshing={skillRegistryRefreshing}
                 skillOperationInFlight={skillOperationInFlight}

@@ -201,6 +201,67 @@ async function startMockSkillRegistry(): Promise<{ registryUrl: string }> {
   return { registryUrl: `${await listen(server)}/registry.json` };
 }
 
+async function startSlowSkillRegistry(): Promise<{ registryUrl: string; releasePackage: () => void }> {
+  let baseUrl = "";
+  let releasePackage: () => void = () => {};
+  const packageRaw = JSON.stringify({
+    files: [
+      {
+        path: "SKILL.md",
+        content: "---\nname: slow-remote\ndescription: Use when testing concurrent lifecycle locks.\n---\n\n# Slow Remote\n",
+      },
+      {
+        path: "skill.json",
+        content: JSON.stringify({
+          id: "slow-remote",
+          name: "Slow Remote",
+          summary: "延迟下载的 skill。",
+          category: "远端",
+          provider: "Registry",
+          version: "1.0.0",
+          runtime: "Skill runtime",
+          permissions: ["测试"],
+          updatedAt: "2026-06-22",
+          maturity: "stable",
+          tags: ["slow"],
+          entry: "SKILL.md",
+        }),
+      },
+    ],
+  });
+  const server = createServer(async (req, res) => {
+    const url = new URL(req.url ?? "/", "http://127.0.0.1");
+    if (req.method === "GET" && url.pathname === "/registry.json") {
+      json(res, 200, {
+        skills: [
+          {
+            id: "slow-remote",
+            version: "1.0.0",
+            packageUrl: `${baseUrl}/slow.package.json`,
+            packageSha256: sha256Hex(packageRaw),
+            source: "official",
+            publisher: { id: "registry", name: "Registry", verified: true },
+            downloads: 1,
+            rating: null,
+            metadata: { name: "Slow Remote", summary: "延迟下载的 skill。", category: "远端" },
+          },
+        ],
+      });
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/slow.package.json") {
+      await new Promise<void>((resolve) => {
+        releasePackage = resolve;
+      });
+      json(res, 200, JSON.parse(packageRaw));
+      return;
+    }
+    json(res, 404, { ok: false });
+  });
+  baseUrl = await listen(server);
+  return { registryUrl: `${baseUrl}/registry.json`, releasePackage: () => releasePackage() };
+}
+
 async function startMockSkillRegistryService(adminToken?: string): Promise<{ baseUrl: string; downloads: string[]; adminAuthorizations: string[] }> {
   const downloads: string[] = [];
   const adminAuthorizations: string[] = [];
@@ -762,8 +823,26 @@ describe("bff server", () => {
         ok: true,
         skills: expect.arrayContaining([
           expect.objectContaining({ id: "code-workspace", name: "代码工作区", installed: true }),
-          expect.objectContaining({ id: "quality-gate", name: "质量闸门", installed: false, sourceType: "builtin", status: "downloaded" }),
+          expect.objectContaining({
+            id: "quality-gate",
+            name: "质量闸门",
+            installed: false,
+            sourceType: "builtin",
+            status: "downloaded",
+            packageSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+          }),
         ]),
+      },
+    });
+    await expect(requestJson(`${bffBaseUrl}/api/skills/readiness`)).resolves.toMatchObject({
+      status: 200,
+      body: {
+        ok: true,
+        readiness: {
+          status: "ready",
+          store: { readable: true },
+          counts: { total: 2, installed: 1, updateAvailable: 0, invalid: 0, failedAudit: 0 },
+        },
       },
     });
     await expect(requestJson(`${bffBaseUrl}/api/skills/quality-gate/install`, { method: "POST" })).resolves.toMatchObject({
@@ -1318,6 +1397,31 @@ describe("bff server", () => {
     await expect(requestJson(`${bffBaseUrl}/api/skills/remote-http/download`, { method: "POST" })).resolves.toMatchObject({
       status: 200,
       body: { ok: true, skill: { id: "remote-http", sourceType: "remote", status: "downloaded" } },
+    });
+  });
+
+  it("rejects concurrent skill lifecycle operations while one is running", async () => {
+    const agent = await startMockAgent();
+    const remote = await startSlowSkillRegistry();
+    const tempDir = await mkdtemp(join(tmpdir(), "agent-bff-skillhub-lock-"));
+    tempDirs.push(tempDir);
+    const bffBaseUrl = await startBff(agent.baseUrl, {
+      skillsRoot: join(tempDir, "empty-builtin"),
+      remoteRegistryUrl: remote.registryUrl,
+    });
+
+    const firstDownload = requestJson(`${bffBaseUrl}/api/skills/slow-remote/download`, { method: "POST" });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    await expect(requestJson(`${bffBaseUrl}/api/skills/slow-remote/download`, { method: "POST" })).resolves.toMatchObject({
+      status: 409,
+      body: { ok: false, error: { code: "SKILL_LIFECYCLE_BUSY" } },
+    });
+
+    remote.releasePackage();
+    await expect(firstDownload).resolves.toMatchObject({
+      status: 200,
+      body: { ok: true, skill: { id: "slow-remote", status: "downloaded" } },
     });
   });
 

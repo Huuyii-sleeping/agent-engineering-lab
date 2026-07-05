@@ -179,6 +179,22 @@ export type RemoteRegistrySettings = {
   skillCount: number;
 };
 
+export type SkillHubReadiness = {
+  status: "ready" | "degraded" | "blocked";
+  registry: RemoteRegistrySettings;
+  store: {
+    readable: boolean;
+    message: string;
+  };
+  counts: {
+    total: number;
+    installed: number;
+    updateAvailable: number;
+    invalid: number;
+    failedAudit: number;
+  };
+};
+
 /** Result returned after sending a user message to the active session. */
 export type SendMessageResult = {
   ok: boolean;
@@ -537,6 +553,28 @@ export function normalizeRemoteRegistrySettings(value: unknown): RemoteRegistryS
   };
 }
 
+export function normalizeSkillHubReadiness(value: unknown): SkillHubReadiness {
+  const record = asObject(value);
+  const store = asObject(record.store);
+  const counts = asObject(record.counts);
+  const status = record.status === "blocked" || record.status === "degraded" || record.status === "ready" ? record.status : "blocked";
+  return {
+    status,
+    registry: normalizeRemoteRegistrySettings(record.registry),
+    store: {
+      readable: asBoolean(store.readable),
+      message: cleanOptionalText(store.message, 240),
+    },
+    counts: {
+      total: Math.max(0, Math.floor(cleanNumber(counts.total, 0))),
+      installed: Math.max(0, Math.floor(cleanNumber(counts.installed, 0))),
+      updateAvailable: Math.max(0, Math.floor(cleanNumber(counts.updateAvailable, 0))),
+      invalid: Math.max(0, Math.floor(cleanNumber(counts.invalid, 0))),
+      failedAudit: Math.max(0, Math.floor(cleanNumber(counts.failedAudit, 0))),
+    },
+  };
+}
+
 function normalizeMessage(value: unknown): ChatMessage | null {
   const record = asObject(value);
   const role = asString(record.role);
@@ -811,6 +849,12 @@ export async function fetchSkillRegistrySettings(): Promise<RemoteRegistrySettin
 export async function syncSkillRegistry(): Promise<RemoteRegistrySettings> {
   const response = await requestJson<JsonObject>("/api/skills/registry/sync", { method: "POST" });
   return normalizeRemoteRegistrySettings(response.registry);
+}
+
+/** Fetches BFF-computed SkillHub production readiness. */
+export async function fetchSkillHubReadiness(): Promise<SkillHubReadiness> {
+  const response = await requestJson<JsonObject>("/api/skills/readiness");
+  return normalizeSkillHubReadiness(response.readiness);
 }
 
 /** Installs one local skill through the BFF business API. */
