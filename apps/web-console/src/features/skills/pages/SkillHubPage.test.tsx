@@ -5,6 +5,7 @@ import {
   SkillHubPage,
   filterSkillRegistry,
   isPrimarySkillActionDisabled,
+  parseSkillSearchQuery,
   shouldConfirmSkillImpact,
   skillActionLabel,
   validateSkillPackageInput,
@@ -185,20 +186,17 @@ describe("SkillHubPage", () => {
     );
 
     expect(html).toContain("Production Skill Hub");
-    expect(html).toContain("Hub readiness");
-    expect(html).toContain("Production ready");
-    expect(html).toContain("刷新 registry");
-    expect(html).toContain("Hub overview");
-    expect(html).toContain("Status filters");
-    expect(html).toContain("Source filters");
-    expect(html).toContain("Maturity filters");
-    expect(html).toContain("Recent operations");
+    expect(html).not.toContain("Hub readiness");
+    expect(html).not.toContain("Production ready");
+    expect(html).not.toContain("刷新 registry");
+    expect(html).not.toContain("Hub overview");
+    expect(html).not.toContain("Status filters");
+    expect(html).not.toContain("Source filters");
+    expect(html).not.toContain("Maturity filters");
+    expect(html).not.toContain("Recent operations");
     expect(html).toContain("代码工作区");
-    expect(html).toContain("<strong>1</strong>已安装");
-    expect(html).toContain("<strong>1</strong>可升级");
-    expect(html).toContain("<strong>1</strong>失败事件");
-    expect(html).toContain("Skill filters");
-    expect(html).toContain("搜索 skill、来源或标签");
+    expect(html).toContain("ES 搜索");
+    expect(html).toContain("source:local");
     expect(html).toContain("Local workspace");
     expect(html).toContain("Release Registry");
     expect(html).toContain("Official");
@@ -211,18 +209,22 @@ describe("SkillHubPage", () => {
     expect(html).not.toContain("http://127.0.0.1:3190/skills");
     expect(html).toContain("已安装");
     expect(html).toContain("详情");
+    expect(html).toContain("aria-expanded=\"false\"");
+    expect(html).toContain("aria-controls=\"skillhub-detail-code-workspace\"");
+    expect(html).toContain("skillhub-detail-popover");
+    expect(html).not.toContain("skillhub-detail-tooltip");
     expect(html).toContain("Skill detail");
+    expect(html).not.toContain("skillhub-detail-panel");
     expect(html).toContain("当前版本");
     expect(html).toContain("已安装版本");
     expect(html).toContain("上一版本");
     expect(html).toContain("可回滚到 v1.1.0");
-    expect(html).toContain("回滚到 v1.1.0");
     expect(html).toContain("未发现校验错误");
     expect(html).toContain("使用中的 Agent");
     expect(html).toContain("1 个 Agent 正在绑定");
     expect(html).toContain("研发 Agent");
     expect(html).toContain("锁定 v1.2.0");
-    expect(html).not.toContain("发布 Agent");
+    expect(html).toContain("发布 Agent");
     expect(html).toContain("审计日志");
     expect(html).toContain("升级");
     expect(html).toContain("回滚失败");
@@ -233,6 +235,17 @@ describe("SkillHubPage", () => {
     expect(html).toContain("查看上传标准格式");
     expect(html).toContain("&quot;path&quot;: &quot;SKILL.md&quot;");
     expect(html).toContain("&quot;path&quot;: &quot;skill.json&quot;");
+  });
+
+  it("parses ES-style search tokens", () => {
+    expect(parseSkillSearchQuery("网页 tag:web source:local category:执行 status:installed maturity:stable")).toEqual({
+      terms: ["网页"],
+      tag: "web",
+      source: "local",
+      category: "执行",
+      status: "installed",
+      maturity: "stable",
+    });
   });
 
   it("filters skills by status source maturity and loaded state", () => {
@@ -291,6 +304,26 @@ describe("SkillHubPage", () => {
         loadedOnly: true,
       }).map((skill) => skill.id),
     ).toEqual(["code-workspace"]);
+    expect(
+      filterSkillRegistry(skills, {
+        query: "source:official tag:missing",
+        category: "全部",
+        status: "全部状态",
+        source: "全部来源",
+        maturity: "全部成熟度",
+        loadedOnly: false,
+      }).map((skill) => skill.id),
+    ).toEqual([]);
+    expect(
+      filterSkillRegistry(skills, {
+        query: "source:local tag:code",
+        category: "全部",
+        status: "全部状态",
+        source: "全部来源",
+        maturity: "全部成熟度",
+        loadedOnly: false,
+      }).map((skill) => skill.id),
+    ).toEqual(["code-workspace"]);
   });
 
   it("labels and confirms operations that can affect bound agents", () => {
@@ -315,11 +348,11 @@ describe("SkillHubPage", () => {
     expect(html).toContain("处理中");
   });
 
-  it("renders pending registry refresh state", () => {
+  it("does not render the removed registry refresh summary", () => {
     const html = renderMinimalSkillHub({ registryRefreshing: true });
 
-    expect(html).toContain("同步中");
-    expect(html).toContain("disabled=\"\"");
+    expect(html).not.toContain("同步中");
+    expect(html).not.toContain("刷新 registry");
   });
 
   it("disables invalid skill primary actions", () => {

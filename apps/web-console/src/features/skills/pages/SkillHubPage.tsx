@@ -5,20 +5,16 @@ import {
   CircleHelp,
   Download,
   Hash,
-  HeartPulse,
   Info,
   Layers3,
   PackageCheck,
-  RefreshCw,
   RotateCcw,
   Search,
   ShieldCheck,
-  SlidersHorizontal,
   Star,
   Upload,
-  X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import type {
   AgentProfile,
   RemoteRegistrySettings,
@@ -33,9 +29,6 @@ const allCategories = "全部";
 const allStatuses = "全部状态";
 const allSources = "全部来源";
 const allMaturities = "全部成熟度";
-const lifecycleStatuses: SkillRegistryItem["status"][] = ["available", "downloaded", "installed", "updateAvailable", "invalid"];
-const registrySources: SkillRegistryItem["registrySource"][] = ["official", "verified", "community", "private", "local"];
-const maturityLevels: SkillRegistryItem["maturity"][] = ["stable", "beta"];
 const skillPackageExample = `{
   "files": [
     {
@@ -55,6 +48,15 @@ export type SkillImpactActionKind = "primary" | "rollback";
 type PendingSkillImpactAction = {
   skillId: string;
   kind: SkillImpactActionKind;
+};
+
+type SkillSearchTokens = {
+  terms: string[];
+  category?: string;
+  source?: string;
+  status?: string;
+  maturity?: string;
+  tag?: string;
 };
 
 export type SkillLifecycleOperationState = {
@@ -96,51 +98,6 @@ function eventTimeLabel(value: number): string {
   return new Intl.DateTimeFormat("zh-CN", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
 }
 
-function registryReadinessLabel(registrySettings: RemoteRegistrySettings | null): string {
-  if (!registrySettings) {
-    return "等待同步";
-  }
-  return registrySettings.lastSyncError ? "需要关注" : "Registry synced";
-}
-
-function readinessStatusLabel(readiness: SkillHubReadiness | null, registrySettings: RemoteRegistrySettings | null): string {
-  if (!readiness) {
-    return registryReadinessLabel(registrySettings);
-  }
-  const labels: Record<SkillHubReadiness["status"], string> = {
-    ready: "Production ready",
-    degraded: "需要关注",
-    blocked: "不可用",
-  };
-  return labels[readiness.status];
-}
-
-function readinessDetailLabel(readiness: SkillHubReadiness | null, registrySettings: RemoteRegistrySettings | null): string {
-  if (!readiness) {
-    return registryDetailLabel(registrySettings);
-  }
-  if (!readiness.store.readable) {
-    return readiness.store.message || "本地 Skill store 不可读。";
-  }
-  if (readiness.registry.lastSyncError) {
-    return readiness.registry.lastSyncError;
-  }
-  return registryDetailLabel(readiness.registry);
-}
-
-function registryDetailLabel(registrySettings: RemoteRegistrySettings | null): string {
-  if (!registrySettings) {
-    return "正在等待 registry 状态。";
-  }
-  if (registrySettings.lastSyncError) {
-    return registrySettings.lastSyncError;
-  }
-  if (!registrySettings.lastSyncedAt) {
-    return "尚未同步 registry。";
-  }
-  return `上次同步 ${eventTimeLabel(registrySettings.lastSyncedAt)}`;
-}
-
 function auditActionLabel(action: SkillAuditAction): string {
   const labels: Record<SkillAuditAction, string> = {
     download: "下载",
@@ -164,21 +121,6 @@ function sourceLabel(source: SkillRegistryItem["registrySource"]): string {
   return labels[source];
 }
 
-function statusLabel(status: SkillRegistryItem["status"]): string {
-  const labels: Record<SkillRegistryItem["status"], string> = {
-    available: "可下载",
-    downloaded: "已下载",
-    installed: "已安装",
-    updateAvailable: "可升级",
-    invalid: "不可用",
-  };
-  return labels[status];
-}
-
-function maturityLabel(maturity: SkillRegistryItem["maturity"]): string {
-  return maturity === "stable" ? "Stable" : "Beta";
-}
-
 function agentBindingVersion(agent: AgentProfile, skillId: string): string {
   const binding = agent.skills.find((skill) => skill.skillId === skillId);
   return binding?.version || "";
@@ -186,6 +128,51 @@ function agentBindingVersion(agent: AgentProfile, skillId: string): string {
 
 function agentUsesSkill(agent: AgentProfile, skillId: string): boolean {
   return agent.skills.some((skill) => skill.skillId === skillId) || agent.skillIds.includes(skillId);
+}
+
+function normalizeSearchToken(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+/** Parses the SkillHub search box into keyword terms plus ES-style field tokens. */
+export function parseSkillSearchQuery(query: string): SkillSearchTokens {
+  const tokens: SkillSearchTokens = { terms: [] };
+  const parts = query.match(/"[^"]+"|\S+/g) ?? [];
+  for (const rawPart of parts) {
+    const part = rawPart.replace(/^"|"$/g, "");
+    const separator = part.indexOf(":");
+    if (separator <= 0) {
+      tokens.terms.push(normalizeSearchToken(part));
+      continue;
+    }
+    const key = normalizeSearchToken(part.slice(0, separator));
+    const value = normalizeSearchToken(part.slice(separator + 1));
+    if (!value) {
+      continue;
+    }
+    if (key === "category" || key === "cat") {
+      tokens.category = value;
+      continue;
+    }
+    if (key === "source" || key === "src") {
+      tokens.source = value;
+      continue;
+    }
+    if (key === "status") {
+      tokens.status = value;
+      continue;
+    }
+    if (key === "maturity") {
+      tokens.maturity = value;
+      continue;
+    }
+    if (key === "tag") {
+      tokens.tag = value;
+      continue;
+    }
+    tokens.terms.push(normalizeSearchToken(part));
+  }
+  return tokens;
 }
 
 /** Returns the user-facing action label for a Skill lifecycle operation. */
@@ -247,19 +234,40 @@ export function validateSkillPackageInput(input: unknown): string | null {
 
 /** Applies the visible SkillHub search and filter state to registry items. */
 export function filterSkillRegistry(skills: SkillRegistryItem[], filters: SkillHubFilterState): SkillRegistryItem[] {
+  const parsedQuery = parseSkillSearchQuery(filters.query);
   return skills.filter((skill) => {
-    const keyword = filters.query.trim().toLowerCase();
+    const haystack = `${skill.name} ${skill.summary} ${skill.description} ${skill.provider} ${skill.publisher.name} ${skill.registrySource} ${skill.runtime} ${skill.status} ${skill.category} ${skill.maturity} ${skill.tags.join(" ")}`
+      .toLowerCase();
     const matchesKeyword =
-      !keyword ||
-      `${skill.name} ${skill.summary} ${skill.provider} ${skill.publisher.name} ${skill.registrySource} ${skill.runtime} ${skill.tags.join(" ")}`
-        .toLowerCase()
-        .includes(keyword);
+      parsedQuery.terms.length === 0 || parsedQuery.terms.every((term) => haystack.includes(term));
     const matchesCategory = filters.category === allCategories || skill.category === filters.category;
     const matchesStatus = filters.status === allStatuses || skill.status === filters.status;
     const matchesSource = filters.source === allSources || skill.registrySource === filters.source;
     const matchesMaturity = filters.maturity === allMaturities || skill.maturity === filters.maturity;
+    const matchesQueryCategory =
+      !parsedQuery.category || normalizeSearchToken(skill.category).includes(parsedQuery.category);
+    const matchesQuerySource =
+      !parsedQuery.source || normalizeSearchToken(skill.registrySource).includes(parsedQuery.source);
+    const matchesQueryStatus =
+      !parsedQuery.status || normalizeSearchToken(skill.status).includes(parsedQuery.status);
+    const matchesQueryMaturity =
+      !parsedQuery.maturity || normalizeSearchToken(skill.maturity).includes(parsedQuery.maturity);
+    const matchesQueryTag =
+      !parsedQuery.tag || skill.tags.some((tag) => normalizeSearchToken(tag).includes(parsedQuery.tag ?? ""));
     const matchesLoaded = !filters.loadedOnly || skill.installed;
-    return matchesKeyword && matchesCategory && matchesStatus && matchesSource && matchesMaturity && matchesLoaded;
+    return (
+      matchesKeyword &&
+      matchesCategory &&
+      matchesStatus &&
+      matchesSource &&
+      matchesMaturity &&
+      matchesQueryCategory &&
+      matchesQuerySource &&
+      matchesQueryStatus &&
+      matchesQueryMaturity &&
+      matchesQueryTag &&
+      matchesLoaded
+    );
   });
 }
 
@@ -278,12 +286,8 @@ export function shouldConfirmSkillImpact(skill: SkillRegistryItem, affectedAgent
 export function SkillHubPage({
   agents,
   auditEvents,
-  readiness,
-  registrySettings,
-  registryRefreshing,
   skillOperationInFlight,
   skills,
-  onRefreshRegistry,
   onRollbackSkill,
   onSkillAction,
   onUploadPackage,
@@ -301,58 +305,23 @@ export function SkillHubPage({
   onUploadPackage: (input: SkillPackageInput) => void;
 }) {
   const [query, setQuery] = useState("");
-  const [activeCategory, setActiveCategory] = useState(allCategories);
-  const [activeStatus, setActiveStatus] = useState(allStatuses);
-  const [activeSource, setActiveSource] = useState(allSources);
-  const [activeMaturity, setActiveMaturity] = useState(allMaturities);
   const [showLoadedOnly, setShowLoadedOnly] = useState(false);
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [customPackageText, setCustomPackageText] = useState("");
   const [customPackageError, setCustomPackageError] = useState<string | null>(null);
-  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
-  const [detailOpen, setDetailOpen] = useState(true);
   const [pendingImpactAction, setPendingImpactAction] = useState<PendingSkillImpactAction | null>(null);
-  const installedCount = readiness?.counts.installed ?? skills.filter((skill) => skill.installed).length;
-  const updateAvailableCount = readiness?.counts.updateAvailable ?? skills.filter((skill) => skill.status === "updateAvailable").length;
-  const failedAuditCount = readiness?.counts.failedAudit ?? auditEvents.filter((event) => !event.ok).length;
-  const readinessTone = readiness
-    ? readiness.status === "ready"
-      ? "ok"
-      : "warning"
-    : !registrySettings
-      ? "waiting"
-      : registrySettings.lastSyncError
-        ? "warning"
-        : "ok";
+  const [openDetailSkillId, setOpenDetailSkillId] = useState<string | null>(null);
   const hasSkillOperationInFlight = skillOperationInFlight !== null;
-  const categories = useMemo(() => [allCategories, ...new Set(skills.map((skill) => skill.category))], [skills]);
   const filteredSkills = filterSkillRegistry(skills, {
     query,
-    category: activeCategory,
-    status: activeStatus,
-    source: activeSource,
-    maturity: activeMaturity,
+    category: allCategories,
+    status: allStatuses,
+    source: allSources,
+    maturity: allMaturities,
     loadedOnly: showLoadedOnly,
   });
-  const selectedSkill = skills.find((skill) => skill.id === selectedSkillId) ?? filteredSkills[0] ?? null;
-  const showDetailPanel = detailOpen && selectedSkill !== null;
-  const selectedSkillAgents = selectedSkill ? agents.filter((agent) => agentUsesSkill(agent, selectedSkill.id)) : [];
-  const selectedSkillAuditEvents = selectedSkill
-    ? auditEvents.filter((event) => event.skillId === selectedSkill.id).slice(0, 5)
-    : [];
   const pendingSkill = pendingImpactAction ? skills.find((skill) => skill.id === pendingImpactAction.skillId) ?? null : null;
   const pendingSkillAgents = pendingSkill ? agents.filter((agent) => agentUsesSkill(agent, pendingSkill.id)) : [];
-  const sourceOverview = registrySources.map((source) => ({
-    key: source,
-    label: sourceLabel(source),
-    count: skills.filter((skill) => skill.registrySource === source).length,
-  }));
-  const statusOverview = lifecycleStatuses.map((status) => ({
-    key: status,
-    label: statusLabel(status),
-    count: skills.filter((skill) => skill.status === status).length,
-  }));
-  const recentAuditEvents = auditEvents.slice(0, 6);
 
   function compactNumber(value: number): string {
     return new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 }).format(value);
@@ -374,11 +343,6 @@ export function SkillHubPage({
     }
   }
 
-  function openSkillDetail(skill: SkillRegistryItem): void {
-    setSelectedSkillId(skill.id);
-    setDetailOpen(true);
-  }
-
   function requestSkillAction(skill: SkillRegistryItem): void {
     if (isPrimarySkillActionDisabled(skill)) {
       return;
@@ -388,8 +352,6 @@ export function SkillHubPage({
     }
     const affectedAgents = agents.filter((agent) => agentUsesSkill(agent, skill.id));
     if (shouldConfirmSkillImpact(skill, affectedAgents.length, "primary")) {
-      setSelectedSkillId(skill.id);
-      setDetailOpen(true);
       setPendingImpactAction({ skillId: skill.id, kind: "primary" });
       return;
     }
@@ -402,8 +364,6 @@ export function SkillHubPage({
     }
     const affectedAgents = agents.filter((agent) => agentUsesSkill(agent, skill.id));
     if (shouldConfirmSkillImpact(skill, affectedAgents.length, "rollback")) {
-      setSelectedSkillId(skill.id);
-      setDetailOpen(true);
       setPendingImpactAction({ skillId: skill.id, kind: "rollback" });
       return;
     }
@@ -441,72 +401,16 @@ export function SkillHubPage({
         </div>
       </section>
 
-      <section className={`skillhub-readiness skillhub-readiness--${readinessTone}`} aria-label="SkillHub 健康摘要">
-        <div className="skillhub-readiness-main">
-          <HeartPulse size={18} strokeWidth={2.4} aria-hidden="true" />
-          <div>
-            <span>Hub readiness</span>
-            <strong>{readinessStatusLabel(readiness, registrySettings)}</strong>
-            <small>{readinessDetailLabel(readiness, registrySettings)}</small>
-          </div>
-        </div>
-        <div className="skillhub-readiness-metrics">
-          <span>
-            <strong>{installedCount}</strong>
-            已安装
-          </span>
-          <span>
-            <strong>{updateAvailableCount}</strong>
-            可升级
-          </span>
-          <span>
-            <strong>{failedAuditCount}</strong>
-            失败事件
-          </span>
-        </div>
-        <button className="skillhub-refresh-action" type="button" disabled={registryRefreshing} onClick={onRefreshRegistry}>
-          <RefreshCw size={15} strokeWidth={2.4} aria-hidden="true" />
-          <span>{registryRefreshing ? "同步中" : "刷新 registry"}</span>
-        </button>
-      </section>
-
-      <section className="skillhub-overview" aria-label="SkillHub 分布概览">
-        <div className="skillhub-overview-heading">
-          <strong>Hub overview</strong>
-          <span>{skills.length} 个 Skill across sources and lifecycle states</span>
-        </div>
-        <div className="skillhub-overview-group" aria-label="来源分布">
-          {sourceOverview
-            .filter((item) => item.count > 0)
-            .map((item) => (
-              <span key={item.key}>
-                {item.label}
-                <strong>{item.count}</strong>
-              </span>
-            ))}
-        </div>
-        <div className="skillhub-overview-group" aria-label="状态分布">
-          {statusOverview
-            .filter((item) => item.count > 0)
-            .map((item) => (
-              <span key={item.key}>
-                {item.label}
-                <strong>{item.count}</strong>
-              </span>
-            ))}
-        </div>
-      </section>
-
       <section className="skillhub-workbench" aria-label="Skill 注册表">
         <aside className="skillhub-filter-panel" aria-label="Skill 筛选">
           <div className="skillhub-filter-topline">
-            <div className="skillhub-filter-heading">
-              <SlidersHorizontal size={16} strokeWidth={2.3} aria-hidden="true" />
-              <strong>Skill filters</strong>
-            </div>
             <div className="skillhub-search">
               <Search size={16} strokeWidth={2.2} aria-hidden="true" />
-              <input value={query} placeholder="搜索 skill、来源或标签" onChange={(event) => setQuery(event.currentTarget.value)} />
+              <input
+                value={query}
+                placeholder='ES 搜索：网页研究 tag:web source:local status:installed'
+                onChange={(event) => setQuery(event.currentTarget.value)}
+              />
             </div>
             <button
               className={`skillhub-loaded-toggle ${showLoadedOnly ? "skillhub-loaded-toggle--active" : ""}`}
@@ -518,100 +422,12 @@ export function SkillHubPage({
               <span>只看已安装</span>
             </button>
           </div>
-          <div className="skillhub-category-list" aria-label="Skill 分类">
-            {categories.map((category) => (
-              <button
-                className={`skillhub-category ${activeCategory === category ? "skillhub-category--active" : ""}`}
-                key={category}
-                type="button"
-                aria-pressed={activeCategory === category}
-                onClick={() => setActiveCategory(category)}
-              >
-                <span>{category}</span>
-                <small>
-                  {category === allCategories
-                    ? skills.length
-                    : skills.filter((skill) => skill.category === category).length}
-                </small>
-              </button>
-            ))}
-          </div>
-          <div className="skillhub-filter-groups" aria-label="生产筛选">
-            <div className="skillhub-filter-group">
-              <strong>Status filters</strong>
-              <div>
-                <button
-                  className={`skillhub-filter-chip ${activeStatus === allStatuses ? "skillhub-filter-chip--active" : ""}`}
-                  type="button"
-                  aria-pressed={activeStatus === allStatuses}
-                  onClick={() => setActiveStatus(allStatuses)}
-                >
-                  {allStatuses}
-                </button>
-                {lifecycleStatuses.map((status) => (
-                  <button
-                    className={`skillhub-filter-chip ${activeStatus === status ? "skillhub-filter-chip--active" : ""}`}
-                    type="button"
-                    key={status}
-                    aria-pressed={activeStatus === status}
-                    onClick={() => setActiveStatus(status)}
-                  >
-                    {statusLabel(status)}
-                    <small>{skills.filter((skill) => skill.status === status).length}</small>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="skillhub-filter-group">
-              <strong>Source filters</strong>
-              <div>
-                <button
-                  className={`skillhub-filter-chip ${activeSource === allSources ? "skillhub-filter-chip--active" : ""}`}
-                  type="button"
-                  aria-pressed={activeSource === allSources}
-                  onClick={() => setActiveSource(allSources)}
-                >
-                  {allSources}
-                </button>
-                {registrySources.map((source) => (
-                  <button
-                    className={`skillhub-filter-chip ${activeSource === source ? "skillhub-filter-chip--active" : ""}`}
-                    type="button"
-                    key={source}
-                    aria-pressed={activeSource === source}
-                    onClick={() => setActiveSource(source)}
-                  >
-                    {sourceLabel(source)}
-                    <small>{skills.filter((skill) => skill.registrySource === source).length}</small>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="skillhub-filter-group">
-              <strong>Maturity filters</strong>
-              <div>
-                <button
-                  className={`skillhub-filter-chip ${activeMaturity === allMaturities ? "skillhub-filter-chip--active" : ""}`}
-                  type="button"
-                  aria-pressed={activeMaturity === allMaturities}
-                  onClick={() => setActiveMaturity(allMaturities)}
-                >
-                  {allMaturities}
-                </button>
-                {maturityLevels.map((maturity) => (
-                  <button
-                    className={`skillhub-filter-chip ${activeMaturity === maturity ? "skillhub-filter-chip--active" : ""}`}
-                    type="button"
-                    key={maturity}
-                    aria-pressed={activeMaturity === maturity}
-                    onClick={() => setActiveMaturity(maturity)}
-                  >
-                    {maturityLabel(maturity)}
-                    <small>{skills.filter((skill) => skill.maturity === maturity).length}</small>
-                  </button>
-                ))}
-              </div>
-            </div>
+          <div className="skillhub-search-hints" aria-label="搜索示例">
+            <span>支持普通关键词，也支持字段搜索</span>
+            <code>category:执行</code>
+            <code>source:local</code>
+            <code>tag:web</code>
+            <code>status:installed</code>
           </div>
           <div className="skillhub-upload-panel" aria-label="发布私有 Skill">
             <div className="skillhub-panel-title skillhub-panel-title--with-tooltip">
@@ -656,43 +472,23 @@ export function SkillHubPage({
               </div>
             ) : null}
           </div>
-          <div className="skillhub-operations-panel" aria-label="近期 Skill 操作">
-            <div className="skillhub-panel-title">
-              <span>
-                <RefreshCw size={15} strokeWidth={2.4} aria-hidden="true" />
-                <strong>Recent operations</strong>
-              </span>
-              <small>{auditEvents.length} 条</small>
-            </div>
-            {recentAuditEvents.length > 0 ? (
-              <div className="skillhub-audit-list">
-                {recentAuditEvents.map((event) => (
-                  <div className={`skillhub-audit-item ${event.ok ? "" : "skillhub-audit-item--failed"}`} key={event.id}>
-                    <span>{event.ok ? auditActionLabel(event.action) : `${auditActionLabel(event.action)}失败`}</span>
-                    <strong>{event.skillName}</strong>
-                    <small>
-                      {event.ok ? event.status : event.code || "FAILED"} · {eventTimeLabel(event.at)}
-                    </small>
-                    {!event.ok && event.message ? <em>{event.message}</em> : null}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <span className="skillhub-detail-muted">暂无近期操作</span>
-            )}
-          </div>
         </aside>
 
         <section className="skillhub-registry" aria-label="可用 Skill">
           <div className="skillhub-registry-bar">
             <span>{filteredSkills.length} 个结果</span>
-            <small>{activeCategory === allCategories ? "全部分类" : activeCategory}</small>
+            <small>{query.trim() ? "搜索结果" : "全部 Skill"}</small>
           </div>
 
-          <div className={`skillhub-registry-body ${showDetailPanel ? "skillhub-registry-body--with-detail" : ""}`}>
+          <div className="skillhub-registry-body">
             <div className="skillhub-grid">
               {filteredSkills.map((skill) => {
                 const installed = skill.installed;
+                const skillAgents = agents.filter((agent) => agentUsesSkill(agent, skill.id));
+                const skillAuditEvents = auditEvents.filter((event) => event.skillId === skill.id).slice(0, 3);
+                const pendingActionForSkill = pendingSkill?.id === skill.id ? pendingImpactAction : null;
+                const detailPopoverId = `skillhub-detail-${skill.id}`;
+                const detailOpen = openDetailSkillId === skill.id;
                 return (
                   <article className={`skillhub-card ${installed ? "skillhub-card--downloaded" : ""}`} key={skill.id}>
                   <div className="skillhub-card-top">
@@ -749,15 +545,139 @@ export function SkillHubPage({
                       <span>可回滚到 v{skill.previousInstalledVersion}</span>
                     </div>
                   ) : null}
-                  <button
-                    className="skillhub-detail-action"
-                    type="button"
-                    aria-pressed={detailOpen && selectedSkill?.id === skill.id}
-                    onClick={() => openSkillDetail(skill)}
-                  >
-                    <Info size={15} strokeWidth={2.4} aria-hidden="true" />
-                    <span>详情</span>
-                  </button>
+                  <div className="skillhub-card-detail">
+                    <button
+                      className="skillhub-detail-action"
+                      type="button"
+                      aria-controls={detailPopoverId}
+                      aria-expanded={detailOpen}
+                      onClick={() => setOpenDetailSkillId((current) => (current === skill.id ? null : skill.id))}
+                    >
+                      <Info size={15} strokeWidth={2.4} aria-hidden="true" />
+                      <span>详情</span>
+                    </button>
+                    <div
+                      className={`skillhub-detail-popover ${detailOpen ? "skillhub-detail-popover--open" : ""}`}
+                      id={detailPopoverId}
+                      aria-label={`${skill.name} 详情`}
+                    >
+                      <div className="skillhub-detail-header">
+                        <span>Skill detail</span>
+                        <strong>{skill.name}</strong>
+                      </div>
+                      <p>{skill.description || skill.summary}</p>
+                      <dl className="skillhub-detail-list">
+                        <div>
+                          <dt>当前版本</dt>
+                          <dd>{versionLabel(skill.version)}</dd>
+                        </div>
+                        <div>
+                          <dt>已安装版本</dt>
+                          <dd>{installedVersionLabel(skill)}</dd>
+                        </div>
+                        <div>
+                          <dt>上一版本</dt>
+                          <dd>{versionLabel(skill.previousInstalledVersion)}</dd>
+                        </div>
+                        <div>
+                          <dt>安装时间</dt>
+                          <dd>{installedAtLabel(skill.installedAt)}</dd>
+                        </div>
+                        <div>
+                          <dt>Package hash</dt>
+                          <dd>{skill.packageSha256 || "未提供 hash"}</dd>
+                        </div>
+                      </dl>
+                      <div className="skillhub-detail-section">
+                        <strong>权限</strong>
+                        <div className="skillhub-detail-pills">
+                          {skill.permissions.map((permission) => (
+                            <span key={permission}>{permission}</span>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="skillhub-detail-section">
+                        <strong>校验</strong>
+                        {skill.validationErrors.length > 0 ? (
+                          <ul className="skillhub-detail-errors">
+                            {skill.validationErrors.map((error) => (
+                              <li key={error}>
+                                <AlertTriangle size={14} strokeWidth={2.4} aria-hidden="true" />
+                                <span>{error}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <span className="skillhub-detail-muted">未发现校验错误</span>
+                        )}
+                      </div>
+                      <div className="skillhub-detail-section">
+                        <strong>使用中的 Agent</strong>
+                        {skillAgents.length > 0 ? (
+                          <div className="skillhub-agent-impact-list">
+                            <span>{skillAgents.length} 个 Agent 正在绑定</span>
+                            {skillAgents.map((agent) => {
+                              const version = agentBindingVersion(agent, skill.id);
+                              return (
+                                <div className="skillhub-agent-impact-item" key={agent.id}>
+                                  <strong>{agent.name}</strong>
+                                  <small>{version ? `锁定 ${versionLabel(version)}` : "未锁定版本"}</small>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <span className="skillhub-detail-muted">当前没有 Agent 绑定这个 Skill</span>
+                        )}
+                      </div>
+                      <div className="skillhub-detail-section">
+                        <strong>审计日志</strong>
+                        {skillAuditEvents.length > 0 ? (
+                          <div className="skillhub-audit-list">
+                            {skillAuditEvents.map((event) => (
+                              <div className={`skillhub-audit-item ${event.ok ? "" : "skillhub-audit-item--failed"}`} key={event.id}>
+                                <span>{event.ok ? auditActionLabel(event.action) : `${auditActionLabel(event.action)}失败`}</span>
+                                <strong>{versionLabel(event.version)}</strong>
+                                <small>
+                                  {event.ok ? event.status : event.code || "FAILED"} · {eventTimeLabel(event.at)}
+                                </small>
+                                {!event.ok && event.message ? <em>{event.message}</em> : null}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="skillhub-detail-muted">当前没有审计事件</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {pendingActionForSkill ? (
+                    <div className="skillhub-impact-confirmation" role="alert">
+                      <div>
+                        <strong>确认{pendingActionForSkill.kind === "rollback" ? "回滚" : skillActionLabel(skill)}</strong>
+                        <span>{pendingSkillAgents.length} 个 Agent 会受到影响</span>
+                      </div>
+                      <div className="skillhub-impact-confirmation-list">
+                        {pendingSkillAgents.map((agent) => {
+                          const version = agentBindingVersion(agent, skill.id);
+                          return (
+                            <span key={agent.id}>
+                              {agent.name}
+                              <small>{version ? versionLabel(version) : "未锁定版本"}</small>
+                            </span>
+                          );
+                        })}
+                      </div>
+                      <div className="skillhub-impact-confirmation-actions">
+                        <button type="button" onClick={() => setPendingImpactAction(null)}>
+                          取消
+                        </button>
+                        <button type="button" onClick={confirmPendingImpactAction}>
+                          确认{pendingActionForSkill.kind === "rollback" ? "回滚" : skillActionLabel(skill)}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                   <button
                     className="skillhub-action"
                     type="button"
@@ -805,179 +725,6 @@ export function SkillHubPage({
                 </div>
               ) : null}
             </div>
-            {showDetailPanel ? (
-              <aside className="skillhub-detail-panel" aria-label={`${selectedSkill.name} 详情`}>
-                <div className="skillhub-detail-header">
-                  <div>
-                    <span>Skill detail</span>
-                    <h2>{selectedSkill.name}</h2>
-                  </div>
-                  <button className="skillhub-detail-close" type="button" aria-label="关闭 Skill 详情" onClick={() => setDetailOpen(false)}>
-                    <X size={16} strokeWidth={2.4} aria-hidden="true" />
-                  </button>
-                </div>
-                <div className="skillhub-detail-badges">
-                  <span>{sourceLabel(selectedSkill.registrySource)}</span>
-                  <span>{selectedSkill.status}</span>
-                  <span>{selectedSkill.maturity === "stable" ? "Stable" : "Beta"}</span>
-                </div>
-                <p>{selectedSkill.description || selectedSkill.summary}</p>
-                <dl className="skillhub-detail-list">
-                  <div>
-                    <dt>当前版本</dt>
-                    <dd>{versionLabel(selectedSkill.version)}</dd>
-                  </div>
-                  <div>
-                    <dt>已安装版本</dt>
-                    <dd>{installedVersionLabel(selectedSkill)}</dd>
-                  </div>
-                  <div>
-                    <dt>可用版本</dt>
-                    <dd>{versionLabel(selectedSkill.availableVersion || selectedSkill.version)}</dd>
-                  </div>
-                  <div>
-                    <dt>上一版本</dt>
-                    <dd>{versionLabel(selectedSkill.previousInstalledVersion)}</dd>
-                  </div>
-                  <div>
-                    <dt>安装时间</dt>
-                    <dd>{installedAtLabel(selectedSkill.installedAt)}</dd>
-                  </div>
-                  <div>
-                    <dt>入口文件</dt>
-                    <dd>{selectedSkill.entry}</dd>
-                  </div>
-                  <div>
-                    <dt>Package hash</dt>
-                    <dd>{selectedSkill.packageSha256 || "未提供 hash"}</dd>
-                  </div>
-                </dl>
-                <div className="skillhub-detail-section">
-                  <strong>权限</strong>
-                  <div className="skillhub-detail-pills">
-                    {selectedSkill.permissions.map((permission) => (
-                      <span key={permission}>{permission}</span>
-                    ))}
-                  </div>
-                </div>
-                <div className="skillhub-detail-section">
-                  <strong>标签</strong>
-                  <div className="skillhub-detail-pills">
-                    {selectedSkill.tags.map((tag) => (
-                      <span key={tag}>{tag}</span>
-                    ))}
-                  </div>
-                </div>
-                <div className="skillhub-detail-section">
-                  <strong>校验</strong>
-                  {selectedSkill.validationErrors.length > 0 ? (
-                    <ul className="skillhub-detail-errors">
-                      {selectedSkill.validationErrors.map((error) => (
-                        <li key={error}>
-                          <AlertTriangle size={14} strokeWidth={2.4} aria-hidden="true" />
-                          <span>{error}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <span className="skillhub-detail-muted">未发现校验错误</span>
-                  )}
-                </div>
-                <div className="skillhub-detail-section">
-                  <strong>使用中的 Agent</strong>
-                  {selectedSkillAgents.length > 0 ? (
-                    <div className="skillhub-agent-impact-list">
-                      <span>{selectedSkillAgents.length} 个 Agent 正在绑定</span>
-                      {selectedSkillAgents.map((agent) => {
-                        const version = agentBindingVersion(agent, selectedSkill.id);
-                        return (
-                          <div className="skillhub-agent-impact-item" key={agent.id}>
-                            <strong>{agent.name}</strong>
-                            <small>{version ? `锁定 ${versionLabel(version)}` : "未锁定版本"}</small>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <span className="skillhub-detail-muted">当前没有 Agent 绑定这个 Skill</span>
-                  )}
-                </div>
-                <div className="skillhub-detail-section">
-                  <strong>审计日志</strong>
-                  {selectedSkillAuditEvents.length > 0 ? (
-                    <div className="skillhub-audit-list">
-                      {selectedSkillAuditEvents.map((event) => (
-                        <div className={`skillhub-audit-item ${event.ok ? "" : "skillhub-audit-item--failed"}`} key={event.id}>
-                          <span>{event.ok ? auditActionLabel(event.action) : `${auditActionLabel(event.action)}失败`}</span>
-                          <strong>{versionLabel(event.version)}</strong>
-                          <small>
-                            {event.ok ? event.status : event.code || "FAILED"} · {eventTimeLabel(event.at)}
-                          </small>
-                          {!event.ok && event.message ? <em>{event.message}</em> : null}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="skillhub-detail-muted">当前没有审计事件</span>
-                  )}
-                </div>
-                {pendingSkill?.id === selectedSkill.id && pendingImpactAction ? (
-                  <div className="skillhub-impact-confirmation" role="alert">
-                    <div>
-                      <strong>确认{pendingImpactAction.kind === "rollback" ? "回滚" : skillActionLabel(selectedSkill)}</strong>
-                      <span>{pendingSkillAgents.length} 个 Agent 会受到影响</span>
-                    </div>
-                    <div className="skillhub-impact-confirmation-list">
-                      {pendingSkillAgents.map((agent) => {
-                        const version = agentBindingVersion(agent, selectedSkill.id);
-                        return (
-                          <span key={agent.id}>
-                            {agent.name}
-                            <small>{version ? versionLabel(version) : "未锁定版本"}</small>
-                          </span>
-                        );
-                      })}
-                    </div>
-                    <div className="skillhub-impact-confirmation-actions">
-                      <button type="button" onClick={() => setPendingImpactAction(null)}>
-                        取消
-                      </button>
-                      <button type="button" onClick={confirmPendingImpactAction}>
-                        确认{pendingImpactAction.kind === "rollback" ? "回滚" : skillActionLabel(selectedSkill)}
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-                <div className="skillhub-detail-actions">
-                  <button
-                    className="skillhub-action"
-                    type="button"
-                    aria-busy={isSkillOperationRunning(selectedSkill, "primary")}
-                    disabled={hasSkillOperationInFlight || isPrimarySkillActionDisabled(selectedSkill)}
-                    onClick={() => requestSkillAction(selectedSkill)}
-                  >
-                    <PackageCheck size={15} strokeWidth={2.4} aria-hidden="true" />
-                    <span>{primaryOperationLabel(selectedSkill)}</span>
-                  </button>
-                  {selectedSkill.installed && selectedSkill.previousInstalledVersion ? (
-                    <button
-                      className="skillhub-rollback-action"
-                      type="button"
-                      aria-busy={isSkillOperationRunning(selectedSkill, "rollback")}
-                      disabled={hasSkillOperationInFlight}
-                      onClick={() => requestRollbackSkill(selectedSkill)}
-                    >
-                      <RotateCcw size={15} strokeWidth={2.4} aria-hidden="true" />
-                      <span>
-                        {isSkillOperationRunning(selectedSkill, "rollback")
-                          ? "处理中"
-                          : `回滚到 ${versionLabel(selectedSkill.previousInstalledVersion)}`}
-                      </span>
-                    </button>
-                  ) : null}
-                </div>
-              </aside>
-            ) : null}
           </div>
         </section>
       </section>
