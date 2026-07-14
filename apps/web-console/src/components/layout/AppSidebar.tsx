@@ -1,4 +1,5 @@
-import { BrainCircuit, Check, MoreVertical, Pencil, Pin, Plus, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { Check, MoreVertical, Pencil, Pin, Plus, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { BrandMark } from "../BrandMark";
 import { navItems, sidebarSettings } from "../../app/navigation";
 import type { SessionSummary } from "../../api";
 import type { SessionMetadataMap } from "../../session-metadata";
@@ -56,9 +57,9 @@ export function AppSidebar({
     <aside className="sidebar" aria-hidden={isCollapsed} aria-label="本地控制台导航">
       <div className="profile-row">
         <div className="brand-mark" aria-hidden="true">
-          <BrainCircuit size={21} strokeWidth={2.4} />
+          <BrandMark size={21} />
         </div>
-        <strong>AI Studio</strong>
+        <strong>Orbit</strong>
       </div>
 
       <nav className="primary-nav" aria-label="功能导航">

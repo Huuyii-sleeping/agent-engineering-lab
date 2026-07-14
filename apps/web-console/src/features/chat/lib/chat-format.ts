@@ -22,7 +22,7 @@ export function messageText(message: ChatMessage): string {
 
 export function roleLabel(role: ChatMessage["role"]): string {
   if (role === "assistant") {
-    return "AI Studio";
+    return "Orbit";
   }
   if (role === "user") {
     return "我";

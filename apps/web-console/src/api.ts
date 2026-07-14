@@ -235,7 +235,7 @@ const agentStreamEventTypes = ["bridge.ready", "session.created", "chat.started"
 
 export const defaultUserProfile: UserProfile = {
   displayName: "本地用户",
-  description: "AI Studio operator",
+  description: "Orbit operator",
 };
 
 export const defaultAgentProfileInput: AgentProfileInput = {

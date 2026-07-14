@@ -2,7 +2,6 @@ import {
   ArrowLeft,
   Bell,
   BookOpen,
-  BrainCircuit,
   CheckCircle2,
   ChevronRight,
   ChevronUp,
@@ -24,6 +23,7 @@ import {
   UserRound,
   Wrench,
 } from "lucide-react";
+import { BrandMark } from "../components/BrandMark";
 import { sidebarSettings } from "../app/navigation";
 import type { StreamState } from "../app/types";
 import type { HealthStatus, UserProfile } from "../api";
@@ -72,7 +72,7 @@ export function SettingsPage({
         </button>
         <div className="settings-title">
           <h1>个人设置</h1>
-          <span>AI Studio 本地控制台</span>
+          <span>Orbit 本地控制台</span>
         </div>
       </header>
 
@@ -80,10 +80,10 @@ export function SettingsPage({
         <aside className="settings-rail">
           <div className="settings-rail-brand">
             <span aria-hidden="true">
-              <BrainCircuit size={20} strokeWidth={2.3} />
+              <BrandMark size={20} />
             </span>
             <div>
-              <strong>AI Studio</strong>
+              <strong>Orbit</strong>
               <small>Local workspace</small>
             </div>
           </div>
@@ -234,11 +234,11 @@ export function SettingsPage({
                 <p className="settings-group-title">关于</p>
                 <div className="settings-list">
                   <div className="settings-row">
-                    <span className="settings-row-icon settings-row-icon--blue">
-                      <BrainCircuit size={18} strokeWidth={2.2} aria-hidden="true" />
+                    <span className="settings-row-icon">
+                      <BrandMark size={18} />
                     </span>
                     <span className="settings-row-copy">
-                      <strong>AI Studio</strong>
+                      <strong>Orbit</strong>
                       <small>
                         {profile.displayName} · {profile.description}
                       </small>
@@ -250,7 +250,7 @@ export function SettingsPage({
                       <Info size={18} strokeWidth={2.2} aria-hidden="true" />
                     </span>
                     <span className="settings-row-copy">
-                      <strong>关于 AI Studio</strong>
+                      <strong>关于 Orbit</strong>
                     </span>
                     <span className="settings-row-action">待开发</span>
                     <ChevronRight size={17} strokeWidth={2.2} aria-hidden="true" />

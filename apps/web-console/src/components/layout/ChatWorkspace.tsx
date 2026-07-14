@@ -70,7 +70,7 @@ export function ChatWorkspace({
             )}
           </button>
           <div className="conversation-title">
-            <h1>{activeSession ? sessionTitleFor(activeSession) : "AI Studio"}</h1>
+            <h1>{activeSession ? sessionTitleFor(activeSession) : "Orbit"}</h1>
             <span className={`conversation-state conversation-state--${conversationRuntimeState}`}>
               {conversationRuntimeState}
             </span>
