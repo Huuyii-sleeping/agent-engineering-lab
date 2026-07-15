@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
+  agentSkillCatalog,
   readAgentBuilderConfig,
   writeAgentBuilderConfig,
   type AgentBuilderConfig,
@@ -63,19 +64,23 @@ import { resolveActiveSessionId } from "../session-selection";
 import { settingsSectionFromHash, type SettingsSection } from "../settings-route";
 import { getNextTheme, readStoredTheme, writeStoredTheme, type ThemeMode } from "../theme";
 import { AppSidebar } from "../components/layout/AppSidebar";
-import { ChatWorkspace } from "../components/layout/ChatWorkspace";
 import type { AppView, LoadState, SessionSummaryTitleMap, StreamState } from "./types";
 import { agentDraftFromProfile } from "../features/agents/lib/agent-profile";
 import {
   sortSessionsByRecent,
   sortSessionsForSidebar,
+  streamLabel,
 } from "../features/chat/lib/chat-format";
-import { AgentManagerPage } from "../features/agents/pages/AgentManagerPage";
-import { AgentBuilderPage } from "../features/agents/pages/AgentBuilderPage";
-import { AgentWorkspaceTree } from "../features/agents/components/AgentWorkspaceTree";
 import { LandingPage } from "../pages/LandingPage";
-import { SettingsPage } from "../pages/SettingsPage";
-import { SkillHubPage, type SkillLifecycleOperationState } from "../features/skills/pages/SkillHubPage";
+import { WorkspaceTopBar } from "../components/workspace/WorkspaceTopBar";
+import { ChatView } from "../components/workspace/views/ChatView";
+import { AgentView } from "../components/workspace/views/AgentView";
+import { SkillsView } from "../components/workspace/views/SkillsView";
+import { BuilderView } from "../components/workspace/views/BuilderView";
+import { SettingsView } from "../components/workspace/views/SettingsView";
+
+/** Skill 生命周期操作状态（原定义于 Skill Hub 页面，抽到此处以解耦视图组件）。 */
+export type SkillLifecycleOperationState = { skillId: string; kind: "primary" | "rollback" };
 
 export function App() {
   const initialSettingsSection = typeof window === "undefined" ? null : settingsSectionFromHash(window.location.hash);
@@ -85,7 +90,7 @@ export function App() {
   const [theme, setTheme] = useState<ThemeMode>(() =>
     typeof window === "undefined" ? "dark" : readStoredTheme(window.localStorage),
   );
-  const [view, setView] = useState<AppView>(initialSettingsSection ? "settings" : "agents");
+  const [view, setView] = useState<AppView>(initialSettingsSection ? "settings" : "agent");
   const [settingsSection, setSettingsSection] = useState<SettingsSection>(initialSettingsSection ?? "profile");
   const [builderConfig, setBuilderConfig] = useState<AgentBuilderConfig>(() =>
     typeof window === "undefined" ? readAgentBuilderConfig(null) : readAgentBuilderConfig(window.localStorage),
@@ -123,6 +128,8 @@ export function App() {
   );
   const [error, setError] = useState<string | null>(null);
   const [agentError, setAgentError] = useState<string | null>(null);
+  const [topQuery, setTopQuery] = useState("");
+  const [skillUploadOpen, setSkillUploadOpen] = useState(false);
   const activeSessionIdRef = useRef<string | null>(null);
   const streamingSessionIdRef = useRef<string | null>(null);
   const skillRegistryRefreshingRef = useRef(false);
@@ -151,11 +158,10 @@ export function App() {
   const messages = activeSession?.messages ?? [];
   const activeSessionSummaryTitle = activeSession ? summarizeSessionTitle(activeSession.messages) : null;
   const isSettingsView = view === "settings";
-  const isAgentManagerView = view === "agents";
-  const isAgentConfigView = view === "agent-config";
-  const isAgentSurfaceView = isAgentManagerView || isAgentConfigView;
-  const isAgentWorkspaceView = isAgentSurfaceView || view === "skills" || view === "builder";
+  const isAgentView = view === "agent";
+  const isSkillsView = view === "skills";
   const isBuilderView = view === "builder";
+  const isChatView = view === "chat";
   const isLandingRoute = route === "landing";
   const conversationRuntimeState = loadState === "loading" ? "loading" : isBusy ? "running" : activeSessionId ? "completed" : "idle";
 
@@ -436,7 +442,7 @@ export function App() {
     }
   }
 
-  function openWorkspace(initialView: AppView = "agents"): void {
+  function openWorkspace(initialView: AppView = "agent"): void {
     setRoute("workspace");
     setView(initialView);
     if (window.location.pathname !== appRoutePath("workspace") || window.location.hash) {
@@ -582,7 +588,7 @@ export function App() {
 
   function openAgentConfig(agent: AgentProfile): void {
     selectAgent(agent);
-    setView("agent-config");
+    setView("agent");
   }
 
   function handleCreateAgent(): void {
@@ -593,7 +599,7 @@ export function App() {
     });
     setAgentSkillPreflight(null);
     setIsNewAgentDraft(true);
-    setView("agent-config");
+    setView("agent");
     setAgentError(null);
   }
 
@@ -631,7 +637,7 @@ export function App() {
       setAgentDraft(agentDraftFromProfile(agent));
       setAgentSkillPreflight(null);
       setIsNewAgentDraft(false);
-      setView("agent-config");
+      setView("agent");
       setAgentError(null);
     } catch (err) {
       setAgentError(err instanceof Error ? err.message : String(err));
@@ -651,7 +657,7 @@ export function App() {
       setAgentDraft(nextAgent ? agentDraftFromProfile(nextAgent) : defaultAgentProfileInput);
       setAgentSkillPreflight(null);
       setIsNewAgentDraft(false);
-      setView("agents");
+      setView("agent");
       setAgentError(null);
     } catch (err) {
       setAgentError(err instanceof Error ? err.message : String(err));
@@ -667,7 +673,7 @@ export function App() {
     setAgentSkillPreflight(null);
     setIsNewAgentDraft(false);
     setAgentError(null);
-    setView("agents");
+    setView("agent");
   }
 
   function handleTestAgent(agent: AgentProfile): void {
@@ -904,144 +910,164 @@ export function App() {
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
   }, []);
 
+  const topMeta: { title: string; sub: string; primary: string; onPrimary: () => void } = (() => {
+    switch (view) {
+      case "chat":
+        return {
+          title: activeSession?.title ?? (activeAgent ? `与 ${activeAgent.name} 对话` : "测试聊天"),
+          sub: `${streamLabel(streamState)} · ${health?.status === "ok" ? "运行时已就绪" : "运行时异常"}`,
+          primary: "新建会话",
+          onPrimary: () => void handleCreateSession(),
+        };
+      case "agent":
+        return {
+          title: "Agent 管理",
+          sub: `${agents.length} 个草稿 · ${installedSkillCount} 个已安装技能`,
+          primary: "新建 Agent",
+          onPrimary: () => void handleCreateAgent(),
+        };
+      case "skills":
+        return {
+          title: "技能市场",
+          sub: `${skillRegistry.length} 个技能 · ${installedSkillCount} 已安装 · ${skillRegistry.filter((s) => s.status === "updateAvailable").length} 可更新`,
+          primary: "上传技能包",
+          onPrimary: () => setSkillUploadOpen(true),
+        };
+      case "builder":
+        return {
+          title: "Agent Builder",
+          sub: "可视化构建 · 本地持久化",
+          primary: "保存草稿",
+          onPrimary: () => updateBuilderConfig(builderConfig),
+        };
+      case "settings":
+        return {
+          title: "设置",
+          sub: "个人资料 · 偏好 · 系统",
+          primary: "保存更改",
+          onPrimary: () => void saveProfile(),
+        };
+      default:
+        return { title: "", sub: "", primary: "", onPrimary: () => {} };
+    }
+  })();
+
   if (isLandingRoute) {
-    return <LandingPage onStart={() => openWorkspace("agents")} />;
+    return <LandingPage onStart={() => openWorkspace("agent")} />;
   }
 
   return (
-    <div className={`app-shell ${isSidebarCollapsed ? "app-shell--sidebar-collapsed" : ""} ${isSettingsView || isAgentWorkspaceView ? "app-shell--settings" : ""}`}>
-      {!isSettingsView && !isAgentWorkspaceView ? (
+    <div className="orbit-studio">
+      <div className="shell">
         <AppSidebar
-          activeSessionId={activeSessionId}
-          areAllVisibleSessionsSelected={areAllVisibleSessionsSelected}
-          isCollapsed={isSidebarCollapsed}
-          isSessionBatchMode={isSessionBatchMode}
-          openSessionMenuId={openSessionMenuId}
-          selectedSessionCount={selectedSessionCount}
-          selectedSessionIds={selectedSessionIds}
-          sessionMetadata={sessionMetadata}
-          visibleSessions={visibleSessions}
-          onBatchHideSessions={handleBatchHideSessions}
-          onClearSelectedSessions={clearSelectedSessions}
-          onCreateSession={() => void handleCreateSession()}
-          onHideSession={handleHideSession}
-          onOpenSettings={openSettings}
-          onRenameSession={handleRenameSession}
-          onSelectAllVisibleSessions={selectAllVisibleSessions}
-          onSelectSession={(sessionId) => {
-            setView("chat");
-            setActiveSessionId(sessionId);
-          }}
-          onToggleBatchMode={toggleSessionBatchMode}
-          onTogglePinned={handleTogglePinned}
-          onToggleSessionMenu={(sessionId) => setOpenSessionMenuId((current) => (current === sessionId ? null : sessionId))}
-          onToggleSessionSelection={toggleSessionSelection}
-          sessionTitleFor={sessionTitleFor}
+        view={view}
+        health={health}
+        sessions={visibleSessions}
+        activeSessionId={activeSessionId}
+        sessionMetadata={sessionMetadata}
+        sessionTitleFor={sessionTitleFor}
+        agents={agents}
+        activeAgentId={activeAgentId}
+        installedSkills={installedSkills}
+        onNavigate={setView}
+        onSelectSession={(sessionId) => {
+          setView("chat");
+          setActiveSessionId(sessionId);
+        }}
+        onSelectAgent={selectAgent}
+        onOpenSettings={openSettings}
+      />
+      <main className="main">
+        <WorkspaceTopBar
+          title={topMeta.title}
+          sub={topMeta.sub}
+          primary={topMeta.primary}
+          query={topQuery}
+          onQueryChange={setTopQuery}
+          onPrimary={topMeta.onPrimary}
         />
-      ) : null}
-
-      {isSettingsView ? (
-        <SettingsPage
-          activeSection={settingsSection}
-          health={health}
-          sessionCount={sessions.length}
-          streamState={streamState}
-          theme={theme}
-          editingProfile={editingProfile}
-          profile={profile}
-          profileDraft={profileDraft}
-          onBack={backToChat}
-          onCancelProfileEdit={cancelProfileEdit}
-          onProfileDraftChange={setProfileDraft}
-          onSaveProfile={() => void saveProfile()}
-          onSectionChange={setSettingsSection}
-          onToggleProfileEdit={toggleProfileEdit}
-          onThemeToggle={handleThemeToggle}
-        />
-      ) : isAgentWorkspaceView ? (
-        <main className="agent-workspace-shell">
-          <AgentWorkspaceTree
-            activeAgentId={activeAgentId}
-            activeView={view}
-            agents={agents}
-            downloadedSkillCount={installedSkillCount}
-            saving={agentSaving}
-            onCreateAgent={() => void handleCreateAgent()}
-            onOpenAgent={openAgentConfig}
-            onOpenBuilder={() => setView("builder")}
-            onOpenChat={() => setView("chat")}
-            onOpenDrafts={discardAgentDraft}
-            onOpenSkillHub={() => setView("skills")}
-            onRefreshAgents={() => void refreshAgentsSafely(true)}
+        <div className="view">
+          <ChatView
+            active={isChatView}
+            activeAgent={activeAgent}
+            activeSession={activeSession}
+            activeSessionId={activeSessionId}
+            messages={messages}
+            draft={draft}
+            canSend={canSend}
+            isBusy={isBusy}
+            error={error}
+            streamState={streamState}
+            health={health}
+            textareaRef={textareaRef}
+            onDraftChange={setDraft}
+            onSend={(event) => void handleSend(event)}
+            onComposerKeyDown={handleComposerKeyDown}
+            onCreateSession={() => void handleCreateSession()}
+            onBootstrap={() => void bootstrap()}
           />
-          <section className="agent-workspace-content" aria-label="Agent 工作台内容">
-            {isAgentSurfaceView ? (
-              <AgentManagerPage
-                agents={agents}
-                activeAgent={activeAgent}
-                draft={agentDraft}
-                error={agentError}
-                isNewDraft={isNewAgentDraft}
-                loading={loadState === "loading"}
-                saving={agentSaving}
-                mode={isAgentConfigView ? "config" : "drafts"}
-                onBackToDrafts={discardAgentDraft}
-                onCreateAgent={() => void handleCreateAgent()}
-                onDeleteAgent={(agent) => void handleDeleteAgent(agent)}
-                onDiscardDraft={discardAgentDraft}
-                onDraftChange={handleAgentDraftChange}
-                onOpenAgent={openAgentConfig}
-                onRefresh={() => void refreshAgentsSafely(true)}
-                onResolveAgentSkills={() => void handleResolveAgentSkills()}
-                onSaveAgent={() => void handleSaveAgent()}
-                skillPreflight={agentSkillPreflight}
-                skillPreflightLoading={agentSkillPreflightLoading}
-                installedSkills={installedSkills}
-                onTestAgent={handleTestAgent}
-              />
-            ) : isBuilderView ? (
-              <AgentBuilderPage config={builderConfig} onConfigChange={updateBuilderConfig} />
-            ) : (
-              <SkillHubPage
-                agents={agents}
-                auditEvents={skillAuditEvents}
-                readiness={skillHubReadiness}
-                registrySettings={skillRegistrySettings}
-                registryRefreshing={skillRegistryRefreshing}
-                skillOperationInFlight={skillOperationInFlight}
-                skills={skillRegistry}
-                onRefreshRegistry={() => void handleRefreshSkillRegistry()}
-                onRollbackSkill={(skill) => void handleRollbackSkill(skill)}
-                onSkillAction={(skill) => void handleSkillAction(skill)}
-                onUploadPackage={(input) => void handleUploadSkillPackage(input)}
-              />
-            )}
-          </section>
-        </main>
-      ) : (
-        <ChatWorkspace
-          activeAgent={activeAgent}
-          activeSession={activeSession}
-          activeSessionId={activeSessionId}
-          canSend={canSend}
-          conversationRuntimeState={conversationRuntimeState}
-          draft={draft}
-          error={error}
-          isBusy={isBusy}
-          isSidebarCollapsed={isSidebarCollapsed}
-          messages={messages}
-          streamState={streamState}
-          textareaRef={textareaRef}
-          onBackToAgent={() => setView(activeAgent ? "agent-config" : "agents")}
-          onBootstrap={() => void bootstrap()}
-          onComposerKeyDown={handleComposerKeyDown}
-          onCreateSession={() => void handleCreateSession()}
-          onDraftChange={setDraft}
-          onSend={(event) => void handleSend(event)}
-          onToggleSidebar={() => setIsSidebarCollapsed((current) => !current)}
-          sessionTitleFor={sessionTitleFor}
-        />
-      )}
+          <AgentView
+            active={isAgentView}
+            agents={agents}
+            activeAgentId={activeAgentId}
+            onSelectAgent={selectAgent}
+            draft={agentDraft}
+            activeAgent={activeAgent}
+            isNewDraft={isNewAgentDraft}
+            error={agentError}
+            saving={agentSaving}
+            installedSkills={installedSkills}
+            skillPreflight={agentSkillPreflight}
+            skillPreflightLoading={agentSkillPreflightLoading}
+            onDraftChange={handleAgentDraftChange}
+            onResolveAgentSkills={() => void handleResolveAgentSkills()}
+            onSaveAgent={() => void handleSaveAgent()}
+            onDiscardDraft={discardAgentDraft}
+            onDeleteAgent={(agent) => void handleDeleteAgent(agent)}
+            onNewAgent={() => void handleCreateAgent()}
+            onRefresh={() => void refreshAgentsSafely(true)}
+          />
+          <SkillsView
+            active={isSkillsView}
+            skills={skillRegistry}
+            agents={agents}
+            auditEvents={skillAuditEvents}
+            query={topQuery}
+            registryRefreshing={skillRegistryRefreshing}
+            uploadOpen={skillUploadOpen}
+            onUploadOpenChange={setSkillUploadOpen}
+            onSkillAction={(skill) => void handleSkillAction(skill)}
+            onRollbackSkill={(skill) => void handleRollbackSkill(skill)}
+            onUploadPackage={(input) => void handleUploadSkillPackage(input)}
+            onRefreshRegistry={() => void handleRefreshSkillRegistry()}
+          />
+          <BuilderView
+            active={isBuilderView}
+            config={builderConfig}
+            onConfigChange={updateBuilderConfig}
+            onSaveDraft={() => updateBuilderConfig(builderConfig)}
+          />
+          <SettingsView
+            active={isSettingsView}
+            activeSection={settingsSection}
+            health={health}
+            sessionCount={sessions.length}
+            streamState={streamState}
+            theme={theme}
+            editingProfile={editingProfile}
+            profile={profile}
+            profileDraft={profileDraft}
+            onBack={backToChat}
+            onCancelProfileEdit={cancelProfileEdit}
+            onProfileDraftChange={setProfileDraft}
+            onSaveProfile={() => void saveProfile()}
+            onSectionChange={setSettingsSection}
+            onToggleProfileEdit={toggleProfileEdit}
+            onThemeToggle={handleThemeToggle}
+          />
+        </div>
+      </main>
+      </div>
     </div>
   );
 }

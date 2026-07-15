@@ -4,8 +4,8 @@ import type { LucideIcon } from "lucide-react";
 
 export type LoadState = "idle" | "loading" | "sending";
 export type StreamState = "connecting" | "connected" | "disconnected";
-export type AppView = "agents" | "agent-config" | "chat" | "skills" | "builder" | "settings";
-export type WorkspaceTab = Exclude<AppView, "settings" | "agents" | "agent-config">;
+export type AppView = "agent" | "skills" | "builder" | "chat" | "settings";
+export type WorkspaceTab = Exclude<AppView, "settings">;
 
 export type NavItem = {
   label: string;
