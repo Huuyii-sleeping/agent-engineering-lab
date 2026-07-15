@@ -99,38 +99,43 @@ export function SettingsView({
                   <UserRound aria-hidden="true" />
                 </span>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 15, fontWeight: 650 }}>{profile.displayName}</div>
+                  <div style={{ fontSize: 15, fontWeight: 650 }}>{editingProfile ? profileDraft.displayName || "未命名" : profile.displayName}</div>
                   <div style={{ fontSize: 12.5, color: "var(--text-muted)", fontFamily: "var(--ff-mono)" }}>
-                    {profile.description}
+                    {editingProfile ? profileDraft.description : profile.description}
                   </div>
                 </div>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={onToggleProfileEdit}>
-                  {editingProfile ? "取消" : "编辑"}
+                  {editingProfile ? "完成" : "更换头像"}
                 </button>
               </div>
 
+              <div className="field" style={{ marginTop: 18 }}>
+                <label>昵称</label>
+                <input
+                  className="input"
+                  value={profileDraft.displayName}
+                  disabled={!editingProfile}
+                  onChange={(e) => onProfileDraftChange({ ...profileDraft, displayName: e.target.value })}
+                />
+              </div>
+              <div className="field">
+                <label>简介</label>
+                <textarea
+                  className="input"
+                  value={profileDraft.description}
+                  disabled={!editingProfile}
+                  onChange={(e) => onProfileDraftChange({ ...profileDraft, description: e.target.value })}
+                />
+              </div>
               {editingProfile ? (
-                <>
-                  <div className="field" style={{ marginTop: 18 }}>
-                    <label>昵称</label>
-                    <input
-                      className="input"
-                      value={profileDraft.displayName}
-                      onChange={(e) => onProfileDraftChange({ ...profileDraft, displayName: e.target.value })}
-                    />
-                  </div>
-                  <div className="field">
-                    <label>简介</label>
-                    <textarea
-                      className="input"
-                      value={profileDraft.description}
-                      onChange={(e) => onProfileDraftChange({ ...profileDraft, description: e.target.value })}
-                    />
-                  </div>
+                <div style={{ display: "flex", gap: 10 }}>
                   <button type="button" className="btn btn-primary btn-sm" onClick={onSaveProfile}>
                     保存更改
                   </button>
-                </>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={onCancelProfileEdit}>
+                    取消
+                  </button>
+                </div>
               ) : null}
             </div>
           ) : null}

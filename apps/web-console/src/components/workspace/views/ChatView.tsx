@@ -52,6 +52,7 @@ export function ChatView({
   onBootstrap: () => void;
 }) {
   const boundSkills = activeAgent?.skills.map((skill) => skill.skillId) ?? [];
+  const streamTone = streamState === "connected" ? "ok" : "warn";
 
   return (
     <section className={`view-pad ${active ? "" : "view-hide"}`} data-view="chat">
@@ -82,20 +83,60 @@ export function ChatView({
             </div>
           ) : (
             messages.map((message, index) => {
+              if (message.role === "tool") {
+                return (
+                  <div className="tool" key={`tool-${index}`}>
+                    <div className="tool-h">
+                      <span className="nm">{message.name ?? "工具调用"}</span>
+                      <span className="st">
+                        <span className="d" /> 完成
+                      </span>
+                    </div>
+                    <div className="tool-b">{message.content}</div>
+                  </div>
+                );
+              }
+
               const av = messageAvatar(message);
+              const isSubEmpty = av.cls === "msg-av sub" && !message.content?.trim();
+              if (isSubEmpty) {
+                return (
+                  <div className="handoff" key={`handoff-${index}`}>
+                    <div className={av.cls}>{av.text}</div>
+                    <div>
+                      <div className="who">已委派 {av.name} 子代理接管</div>
+                      <div className="desc">{message.content?.trim() || "已接管任务，正在并行编排执行。"}</div>
+                    </div>
+                  </div>
+                );
+              }
+
+              const isStreamingPlaceholder =
+                message.role === "assistant" && message.name === "streaming" && !message.content?.trim() && isBusy;
+              const showNameTag =
+                message.name && message.name !== "streaming" && message.name !== "Orbit" ? (
+                  <span className="t">{message.name}</span>
+                ) : null;
+
               return (
                 <div className="msg" key={`${message.role}-${index}`}>
                   <div className={av.cls}>{av.text}</div>
                   <div className="msg-body">
                     <div className="msg-name">
                       {av.name}
-                      {message.name && message.name !== "streaming" && message.name !== "Orbit" ? (
-                        <span className="t">{message.name}</span>
-                      ) : null}
+                      {showNameTag}
                     </div>
-                    <div className="bubble" style={{ whiteSpace: "pre-wrap" }}>
-                      {message.content}
-                    </div>
+                    {isStreamingPlaceholder ? (
+                      <div className="typing">
+                        <i />
+                        <i />
+                        <i />
+                      </div>
+                    ) : (
+                      <div className="bubble" style={{ whiteSpace: "pre-wrap" }}>
+                        {message.content}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -153,9 +194,15 @@ export function ChatView({
                 <span className="d" />
                 工具调用权限已授予
               </div>
-              <div className="mini" style={{ color: "var(--text-muted)" }}>
-                <span className="d" style={{ background: "var(--text-muted)" }} />
-                SSE 连接 {streamLabel(streamState)}
+              <div
+                className="mini"
+                style={streamTone === "ok" ? undefined : { color: "var(--warn)" }}
+              >
+                <span
+                  className="d"
+                  style={{ background: streamTone === "ok" ? "var(--accent)" : "var(--warn)" }}
+                />
+                SSE {streamLabel(streamState)}
               </div>
             </div>
           </div>

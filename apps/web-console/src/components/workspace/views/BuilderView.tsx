@@ -20,6 +20,15 @@ export function BuilderView({
       2) *
       100,
   );
+  const readinessMissing: string[] = [];
+  if (selectedSkills.length === 0) readinessMissing.push("至少选择 1 项技能");
+  if (selectedSopSteps.length === 0) readinessMissing.push("至少选择 1 个 SOP 步骤");
+  const readinessHint =
+    readinessScore >= 100
+      ? "配置完整，可保存为本地草稿。"
+      : readinessMissing.length > 0
+        ? `缺少：${readinessMissing.join("、")}。`
+        : "继续补充技能或编排步骤可提升就绪度。";
 
   function toggleSkill(skillId: string): void {
     onConfigChange({
@@ -122,7 +131,7 @@ export function BuilderView({
               <i style={{ width: `${readinessScore}%` }} />
             </div>
             <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 10, lineHeight: 1.6 }}>
-              选择技能与 SOP 步骤以提升就绪度，完成后即可保存为草稿。
+              {readinessHint}
             </div>
             <button type="button" className="btn btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 12 }} onClick={onSaveDraft}>
               <Plus aria-hidden="true" /> 保存草稿

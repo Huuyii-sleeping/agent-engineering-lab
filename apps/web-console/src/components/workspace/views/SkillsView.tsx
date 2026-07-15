@@ -115,6 +115,13 @@ export function SkillsView({
       </div>
 
       <div className="hub">
+        {registryRefreshing ? (
+          <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+            <span className="pill">
+              <span className="d" /> 正在同步技能仓库…
+            </span>
+          </div>
+        ) : null}
         <div>
           <div className="filter">
             <div className="filter-h">来源</div>

@@ -141,9 +141,15 @@ export function AgentView({
                 </span>
                 <div>
                   <div className="nm">{draft.name || "未命名 Agent"}</div>
-                  <span className="pill green">
-                    <span className="d" /> {isNewDraft ? "草稿" : "已就绪"}
-                  </span>
+                  {isNewDraft ? (
+                    <span className="pill">
+                      <span className="d" /> 草稿
+                    </span>
+                  ) : (
+                    <span className="pill green">
+                      <span className="d" /> 已就绪
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -188,7 +194,7 @@ export function AgentView({
                           <span className="nm">{skill.name}</span>
                           {selected ? (
                             <span className="ok">
-                              <span className="d" /> 已绑定
+                              <span className="d" /> 可加载
                             </span>
                           ) : (
                             <span className="warn">
@@ -260,6 +266,15 @@ export function AgentView({
                     <Plus aria-hidden="true" /> 添加动作
                   </button>
                 </div>
+              </div>
+
+              <div className="field">
+                <label>系统提示</label>
+                <textarea
+                  className="input"
+                  value={draft.systemPrompt}
+                  onChange={(e) => onDraftChange({ ...draft, systemPrompt: e.target.value })}
+                />
               </div>
 
               <div style={{ display: "flex", gap: 10, marginTop: 18, flexWrap: "wrap" }}>
