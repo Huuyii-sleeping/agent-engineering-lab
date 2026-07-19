@@ -20,7 +20,6 @@ import {
   fetchSession,
   fetchSessions,
   installSkill,
-  rollbackSkill,
   updateSkill,
   updateAgentProfile,
   resolveAgentSkills,
@@ -76,6 +75,7 @@ import { WorkspaceTopBar } from "../components/workspace/WorkspaceTopBar";
 import { ChatView } from "../components/workspace/views/ChatView";
 import { AgentView } from "../components/workspace/views/AgentView";
 import { SkillsView } from "../components/workspace/views/SkillsView";
+import { mockSkills, mockSkillAgents, mockSkillAuditEvents } from "../mockSkillHub";
 import { BuilderView } from "../components/workspace/views/BuilderView";
 import { SettingsView } from "../components/workspace/views/SettingsView";
 
@@ -217,7 +217,12 @@ export function App() {
   }
 
   async function refreshAgents(selectFirst = false): Promise<AgentProfile[]> {
-    const nextAgents = await fetchAgents();
+    let nextAgents = await fetchAgents();
+    // Dev preview only: when the live BFF has no agents, fall back to mock agents so the
+    // Skill Hub "used by" section is populated. Does not affect the Agent tab design (empty state).
+    if (process.env.NODE_ENV !== "production" && nextAgents.length === 0) {
+      nextAgents = mockSkillAgents;
+    }
     setAgents(nextAgents);
     const nextActiveAgent = nextAgents.find((agent) => agent.id === activeAgentId) ?? (selectFirst ? nextAgents[0] ?? null : null);
     if (nextActiveAgent) {
@@ -247,6 +252,16 @@ export function App() {
     }
     skillRegistryRefreshingRef.current = true;
     setSkillRegistryRefreshing(true);
+    // Dev preview: skip all BFF calls so Skill Hub renders with mock data even without a live BFF.
+    if (process.env.NODE_ENV !== "production") {
+      const { normalizeSkillRegistryItem, normalizeSkillAuditEvent } = await import("../api");
+      setSkillRegistry(mockSkills.map(normalizeSkillRegistryItem).filter((s) => s.id));
+      setSkillAuditEvents(mockSkillAuditEvents.map(normalizeSkillAuditEvent).filter((e) => e.skillId));
+      setSkillHubReadiness({ status: "ready", registry: { url: "", managedByService: false, lastSyncedAt: null, lastSyncError: "", skillCount: mockSkills.length }, store: { readable: true, message: "dev mock" } });
+      skillRegistryRefreshingRef.current = false;
+      setSkillRegistryRefreshing(false);
+      return;
+    }
     try {
       const nextRegistrySettings = await syncSkillRegistry();
       const [nextSkills, nextAuditEvents, nextReadiness] = await Promise.all([
@@ -481,11 +496,55 @@ export function App() {
     }
   }
 
-  async function handleSkillAction(skill: SkillRegistryItem): Promise<void> {
+  async function handleSkillAction(skill: SkillRegistryItem, version: string = skill.availableVersion || skill.version): Promise<void> {
     const operation: SkillLifecycleOperationState = { skillId: skill.id, kind: "primary" };
     if (!beginSkillOperation(operation)) {
       return;
     }
+
+    // Dev preview: with no live BFF, simulate install / update / uninstall locally so the UI reacts.
+    if (process.env.NODE_ENV !== "production") {
+      setSkillRegistry((current) =>
+        current.map((item) => {
+          if (item.id !== skill.id) return item;
+          if (skill.installed) {
+            return {
+              ...item,
+              installed: false,
+              status: "available" as const,
+              installedVersion: "",
+              previousInstalledVersion: item.installedVersion,
+            };
+          }
+          return {
+            ...item,
+            installed: true,
+            status: "installed" as const,
+            installedVersion: version,
+            previousInstalledVersion: item.installedVersion || "",
+            availableVersion: version,
+          };
+        }),
+      );
+      setSkillAuditEvents((current) => [
+        {
+          id: `local-${Date.now()}`,
+          action: skill.installed ? "uninstall" : "install",
+          ok: true,
+          code: "OK",
+          message: "dev 模拟",
+          skillId: skill.id,
+          skillName: skill.name,
+          version,
+          status: skill.installed ? "available" : "installed",
+          at: Date.now(),
+        },
+        ...current,
+      ]);
+      endSkillOperation(operation);
+      return;
+    }
+
     try {
       const nextSkill =
         skill.status === "available"
@@ -495,23 +554,6 @@ export function App() {
           : skill.installed
             ? await uninstallSkill(skill.id)
             : await installSkill(skill.id);
-      setSkillRegistry((current) => current.map((item) => (item.id === skill.id ? nextSkill : item)));
-      await refreshSkillAuditEvents();
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      endSkillOperation(operation);
-    }
-  }
-
-  async function handleRollbackSkill(skill: SkillRegistryItem): Promise<void> {
-    const operation: SkillLifecycleOperationState = { skillId: skill.id, kind: "rollback" };
-    if (!beginSkillOperation(operation)) {
-      return;
-    }
-    try {
-      const nextSkill = await rollbackSkill(skill.id);
       setSkillRegistry((current) => current.map((item) => (item.id === skill.id ? nextSkill : item)));
       await refreshSkillAuditEvents();
       setError(null);
@@ -1036,8 +1078,7 @@ export function App() {
             registryRefreshing={skillRegistryRefreshing}
             uploadOpen={skillUploadOpen}
             onUploadOpenChange={setSkillUploadOpen}
-            onSkillAction={(skill) => void handleSkillAction(skill)}
-            onRollbackSkill={(skill) => void handleRollbackSkill(skill)}
+            onSkillAction={(skill, version) => void handleSkillAction(skill, version)}
             onUploadPackage={(input) => void handleUploadSkillPackage(input)}
             onRefreshRegistry={() => void handleRefreshSkillRegistry()}
           />

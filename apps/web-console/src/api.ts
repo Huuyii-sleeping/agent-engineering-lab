@@ -1,3 +1,6 @@
+/** Dev-only mock data for the Skill Hub view (no live BFF needed). */
+import { mockSkills, mockSkillAuditEvents } from "./mockSkillHub";
+
 /** Role names returned by the agent service transcript API. */
 export type ChatRole = "system" | "user" | "assistant" | "tool";
 
@@ -149,6 +152,8 @@ export type SkillRegistryItem = {
   availableVersion: string;
   previousInstalledVersion: string;
   validationErrors: string[];
+  /** Installable versions offered at install time (e.g. a version picker). */
+  versions: string[];
 };
 
 export type SkillAuditAction = "download" | "upload" | "install" | "update" | "rollback" | "uninstall";
@@ -513,6 +518,10 @@ export function normalizeSkillRegistryItem(value: unknown): SkillRegistryItem {
     availableVersion: cleanOptionalText(record.availableVersion, 40),
     previousInstalledVersion: cleanOptionalText(record.previousInstalledVersion, 40),
     validationErrors: cleanStringList(record.validationErrors, 12, 180),
+    versions:
+      Array.isArray(record.versions) && record.versions.length > 0
+        ? record.versions.map((v) => cleanOptionalText(v, 40)).filter(Boolean).slice(0, 16)
+        : [cleanText(record.version, "0.0.0")],
   };
 }
 
@@ -841,6 +850,10 @@ export async function resolveAgentSkills(agent: AgentRuntimeContext): Promise<Ag
 
 /** Fetches local skill registry items through the BFF business API. */
 export async function fetchSkills(): Promise<SkillRegistryItem[]> {
+  if (process.env.NODE_ENV !== "production") {
+    // Dev preview: show mock skills so the Skill Hub layout can be reviewed without a live BFF.
+    return mockSkills.map(normalizeSkillRegistryItem).filter((skill) => skill.id);
+  }
   const response = await requestJson<JsonObject>("/api/skills");
   const skills = Array.isArray(response.skills) ? response.skills : [];
   return skills.map(normalizeSkillRegistryItem).filter((skill) => skill.id);
@@ -848,6 +861,9 @@ export async function fetchSkills(): Promise<SkillRegistryItem[]> {
 
 /** Fetches recent Skill lifecycle audit events through the BFF business API. */
 export async function fetchSkillAuditEvents(): Promise<SkillAuditEvent[]> {
+  if (process.env.NODE_ENV !== "production") {
+    return mockSkillAuditEvents.map(normalizeSkillAuditEvent).filter((event) => event.skillId);
+  }
   const response = await requestJson<JsonObject>("/api/skills/audit");
   const events = Array.isArray(response.events) ? response.events : [];
   return events.map(normalizeSkillAuditEvent).filter((event) => event.skillId);
