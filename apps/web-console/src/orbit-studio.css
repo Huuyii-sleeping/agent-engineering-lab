@@ -1505,3 +1505,201 @@
 :root[data-theme="light"] .orbit-studio .health-dot {
   background: var(--accent);
 }
+
+/* ===== Agent 草稿：卡片网格 + 详情配置页 ===== */
+.orbit-studio .ag-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+.orbit-studio .ag-grid--center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 320px;
+}
+.orbit-studio .ag-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--panel-bg) 50%, transparent);
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease;
+  text-align: left;
+  color: inherit;
+  font-family: inherit;
+  position: relative;
+  overflow: hidden;
+}
+.orbit-studio .ag-card:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  background: color-mix(in srgb, var(--panel-bg) 72%, transparent);
+}
+/* left accent bar — per-agent color */
+.orbit-studio .ag-card-accent {
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: 3px;
+  border-radius: 2px 0 0 2px;
+}
+.orbit-studio .ag-card-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--panel-bg-strong) 70%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-soft);
+}
+.orbit-studio .ag-card-body {
+  flex: 1;
+  min-width: 0;
+}
+.orbit-studio .ag-card-name {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text-main);
+  margin-bottom: 4px;
+}
+.orbit-studio .ag-card-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.orbit-studio .ag-card-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+.orbit-studio .ag-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-soft);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel-bg-strong) 60%, transparent);
+  border: 1px solid var(--border-subtle);
+}
+/* scenario tag — colored per agent */
+.orbit-studio .ag-tag {
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.3px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid;
+}
+.orbit-studio .ag-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 60px 20px;
+  color: var(--text-muted);
+  text-align: center;
+}
+.orbit-studio .ag-empty b {
+  color: var(--text-soft);
+  font-size: 15px;
+  font-weight: 680;
+}
+.orbit-studio .ag-empty span {
+  font-size: 13px;
+}
+
+/* detail head */
+.orbit-studio .ag-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 18px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* detail sections */
+.orbit-studio .ag-section {
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--panel-bg) 44%, transparent);
+  padding: 20px 22px;
+  margin-bottom: 14px;
+}
+.orbit-studio .ag-s-h {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 16px;
+}
+.orbit-studio .check-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* detail actions bar */
+.orbit-studio .ag-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* ── Agent theme color picker ─────────────────────────────── */
+.orbit-studio .color-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.orbit-studio .color-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+
+.orbit-studio .color-swatch:hover {
+  transform: translateY(-1px);
+}
+
+.orbit-studio .color-swatch.is-active {
+  border-color: var(--text-primary);
+  box-shadow: 0 0 0 2px var(--panel-bg), 0 0 0 3px var(--text-primary);
+}
+
+.orbit-studio .color-swatch--auto {
+  width: auto;
+  min-width: 48px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--panel-bg);
+}
+
+.orbit-studio .color-swatch--auto.is-active {
+  color: var(--text-primary);
+}

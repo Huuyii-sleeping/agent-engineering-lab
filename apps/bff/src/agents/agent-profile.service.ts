@@ -24,6 +24,8 @@ export type AgentProfile = {
   skills: AgentSkillBinding[];
   actions: string[];
   systemPrompt: string;
+  /** Optional user-picked accent color as a `#rrggbb` hex string; empty means auto (hash-based). */
+  color: string;
   createdAt: number;
   updatedAt: number;
 };
@@ -57,6 +59,7 @@ const defaultAgentProfile: Omit<AgentProfile, "id" | "createdAt" | "updatedAt"> 
   ],
   actions: ["分析需求", "执行任务", "验证结果"],
   systemPrompt: "你是一个严谨的本地工作台 agent，优先明确目标、执行验证，并给出可复查的结果。",
+  color: "",
 };
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -92,6 +95,15 @@ function cleanStringList(value: unknown, limit: number, itemLimit: number): stri
 function cleanAvatarId(value: unknown): string {
   const avatarIds = new Set(["brain", "bot", "code", "compass"]);
   return typeof value === "string" && avatarIds.has(value) ? value : defaultAgentProfile.avatarId;
+}
+
+/** Normalizes an accent color to a lowercase `#rrggbb` hex string, or "" (auto) when invalid. */
+function cleanColor(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const next = value.trim().toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(next) ? next : "";
 }
 
 function cleanTimestamp(value: unknown, fallback: number): number {
@@ -176,6 +188,7 @@ export function normalizeAgentProfile(value: unknown, fallbackId: string = rando
     skills,
     actions: cleanStringList(record.actions, 24, 80),
     systemPrompt: cleanOptionalText(record.systemPrompt, 1600) || defaultAgentProfile.systemPrompt,
+    color: cleanColor(record.color),
     createdAt,
     updatedAt: cleanTimestamp(record.updatedAt, createdAt),
   };

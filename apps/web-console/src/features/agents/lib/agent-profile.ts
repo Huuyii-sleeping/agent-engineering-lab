@@ -11,6 +11,7 @@ export function agentDraftFromProfile(agent: AgentProfile): AgentProfileInput {
     skills: agent.skills,
     actions: agent.actions,
     systemPrompt: agent.systemPrompt,
+    color: agent.color,
   };
 }
 
