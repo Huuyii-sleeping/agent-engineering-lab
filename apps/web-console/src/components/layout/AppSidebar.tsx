@@ -1,4 +1,4 @@
-import { Boxes, Bot, Circle, Hammer, LayoutGrid, List, MessageSquare, Settings } from "lucide-react";
+import { Boxes, Bot, Circle, LayoutGrid, List, MessageSquare, Settings, Workflow } from "lucide-react";
 import { BrandMark } from "../BrandMark";
 import type { AppView } from "../../app/types";
 import type { HealthStatus, SessionSummary, AgentProfile, SkillRegistryItem } from "../../api";
@@ -24,7 +24,7 @@ type SidebarProps = {
 const workspaceNav: { label: string; view: AppView; icon: typeof LayoutGrid; badge?: number }[] = [
   { label: "Agent 草稿", view: "agent", icon: LayoutGrid },
   { label: "Skill Hub", view: "skills", icon: Boxes },
-  { label: "Agent Builder", view: "builder", icon: Hammer },
+  { label: "SOP Builder", view: "builder", icon: Workflow },
   { label: "测试聊天", view: "chat", icon: MessageSquare },
 ];
 

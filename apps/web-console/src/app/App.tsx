@@ -1,11 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
-  agentSkillCatalog,
-  readAgentBuilderConfig,
-  writeAgentBuilderConfig,
-  type AgentBuilderConfig,
-} from "../agent-builder";
-import {
   createAgentProfile,
   createAgentEventStream,
   createSession,
@@ -76,7 +70,7 @@ import { ChatView } from "../components/workspace/views/ChatView";
 import { AgentView } from "../components/workspace/views/AgentView";
 import { SkillsView } from "../components/workspace/views/SkillsView";
 import { mockSkills, mockSkillAgents, mockSkillAuditEvents } from "../mockSkillHub";
-import { BuilderView } from "../components/workspace/views/BuilderView";
+import { SopBuilderView } from "../components/workspace/views/SopBuilderView";
 import { SettingsView } from "../components/workspace/views/SettingsView";
 
 /** Skill 生命周期操作状态（原定义于 Skill Hub 页面，抽到此处以解耦视图组件）。 */
@@ -92,9 +86,6 @@ export function App() {
   );
   const [view, setView] = useState<AppView>(initialSettingsSection ? "settings" : "agent");
   const [settingsSection, setSettingsSection] = useState<SettingsSection>(initialSettingsSection ?? "profile");
-  const [builderConfig, setBuilderConfig] = useState<AgentBuilderConfig>(() =>
-    typeof window === "undefined" ? readAgentBuilderConfig(null) : readAgentBuilderConfig(window.localStorage),
-  );
   const [skillRegistry, setSkillRegistry] = useState<SkillRegistryItem[]>([]);
   const [skillAuditEvents, setSkillAuditEvents] = useState<SkillAuditEvent[]>([]);
   const [skillHubReadiness, setSkillHubReadiness] = useState<SkillHubReadiness | null>(null);
@@ -463,11 +454,6 @@ export function App() {
     if (window.location.pathname !== appRoutePath("workspace") || window.location.hash) {
       window.history.pushState("", document.title, appRoutePath("workspace"));
     }
-  }
-
-  function updateBuilderConfig(config: AgentBuilderConfig): void {
-    setBuilderConfig(config);
-    writeAgentBuilderConfig(window.localStorage, config);
   }
 
   async function handleRefreshSkillRegistry(): Promise<void> {
@@ -977,10 +963,10 @@ export function App() {
         };
       case "builder":
         return {
-          title: "Agent Builder",
-          sub: "可视化构建 · 本地持久化",
-          primary: "保存草稿",
-          onPrimary: () => updateBuilderConfig(builderConfig),
+          title: "SOP Builder",
+          sub: "流程编排 · 本地持久化",
+          primary: "",
+          onPrimary: () => {},
         };
       case "settings":
         return {
@@ -1082,11 +1068,9 @@ export function App() {
             onUploadPackage={(input) => void handleUploadSkillPackage(input)}
             onRefreshRegistry={() => void handleRefreshSkillRegistry()}
           />
-          <BuilderView
+          <SopBuilderView
             active={isBuilderView}
-            config={builderConfig}
-            onConfigChange={updateBuilderConfig}
-            onSaveDraft={() => updateBuilderConfig(builderConfig)}
+            query={topQuery}
           />
           <SettingsView
             active={isSettingsView}

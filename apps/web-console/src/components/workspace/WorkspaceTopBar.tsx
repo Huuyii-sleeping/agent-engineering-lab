@@ -30,10 +30,12 @@ export function WorkspaceTopBar({
           onChange={(event) => onQueryChange(event.currentTarget.value)}
         />
       </label>
-      <button type="button" className="btn btn-primary" onClick={onPrimary}>
-        <Plus aria-hidden="true" />
-        <span>{primary}</span>
-      </button>
+      {primary ? (
+        <button type="button" className="btn btn-primary" onClick={onPrimary}>
+          <Plus aria-hidden="true" />
+          <span>{primary}</span>
+        </button>
+      ) : null}
     </header>
   );
 }

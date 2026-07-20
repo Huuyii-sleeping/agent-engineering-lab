@@ -1841,3 +1841,608 @@
 .orbit-studio .color-swatch--auto.is-active {
   color: var(--text-primary);
 }
+
+/* ===== SOP Builder ===== */
+.orbit-studio .view-pad.builder-canvas {
+  max-width: none;
+  height: calc(100dvh - 108px);
+  display: flex;
+  flex-direction: column;
+}
+.orbit-studio .sop-wrap {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.orbit-studio .sop-pal {
+  width: 188px;
+  flex: 0 0 auto;
+  border-right: 1px solid var(--border-subtle);
+  padding: 14px;
+  overflow-y: auto;
+  background: color-mix(in srgb, var(--panel-bg) 50%, transparent);
+}
+.orbit-studio .sop-pal-h {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+}
+.orbit-studio .sop-pal-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 4px 0 12px;
+}
+.orbit-studio .sop-pal-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--panel-bg);
+  cursor: grab;
+  user-select: none;
+  transition: border-color 150ms ease, transform 150ms ease;
+}
+.orbit-studio .sop-pal-item:hover {
+  transform: translateY(-1px);
+  border-color: var(--text-secondary);
+}
+.orbit-studio .sop-pal-item:active {
+  cursor: grabbing;
+}
+.orbit-studio .sop-pal-ic {
+  display: flex;
+}
+.orbit-studio .sop-pal-nm {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+.orbit-studio .sop-pal-ds {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+.orbit-studio .sop-workspace {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.orbit-studio .sop-workspace-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+.orbit-studio .sop-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+.orbit-studio .sop-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-height: 54px;
+  padding: 9px 14px;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--app-bg) 80%, transparent);
+}
+.orbit-studio .sop-name {
+  height: 34px;
+  width: clamp(160px, 22vw, 240px);
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--composer-bg);
+  color: var(--text-primary);
+  font-size: 13.5px;
+  font-weight: 650;
+  outline: none;
+}
+.orbit-studio .sop-name:focus {
+  border-color: var(--text-secondary);
+}
+.orbit-studio .sop-sum {
+  height: 34px;
+  flex: 1 1 200px;
+  min-width: 160px;
+  padding: 0 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--composer-bg);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  outline: none;
+}
+.orbit-studio .sop-sum:focus {
+  border-color: var(--text-secondary);
+}
+.orbit-studio .sop-top-sp {
+  flex: 1 1 8px;
+}
+.orbit-studio .sop-top-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.orbit-studio .sop-canvas {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+}
+.orbit-studio .sop-canvas .react-flow {
+  width: 100%;
+  height: 100%;
+}
+.orbit-studio .sop-insp {
+  width: 264px;
+  flex: 0 0 auto;
+  border-left: 1px solid var(--border-subtle);
+  padding: 14px;
+  overflow-y: auto;
+  background: color-mix(in srgb, var(--panel-bg) 50%, transparent);
+}
+.orbit-studio .sop-insp-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+.orbit-studio .sop-insp-h .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.orbit-studio .sop-field {
+  display: block;
+  margin-bottom: 12px;
+}
+.orbit-studio .sop-field > span {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-bottom: 5px;
+  font-weight: 600;
+}
+.orbit-studio .sop-field input,
+.orbit-studio .sop-field textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--composer-bg);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-family: var(--ff);
+  outline: none;
+  resize: vertical;
+}
+.orbit-studio .sop-field input:focus,
+.orbit-studio .sop-field textarea:focus {
+  border-color: var(--text-secondary);
+}
+.orbit-studio .sop-del {
+  width: 100%;
+  justify-content: center;
+  margin-top: 4px;
+}
+.orbit-studio .sop-insp-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+.orbit-studio .sop-valid {
+  margin-bottom: 12px;
+}
+.orbit-studio .sop-valid-ok,
+.orbit-studio .sop-valid-err {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.orbit-studio .sop-valid-ok {
+  color: #22c55e;
+}
+.orbit-studio .sop-valid-err {
+  color: #f59e0b;
+}
+.orbit-studio .sop-valid-item {
+  font-size: 12px;
+  line-height: 1.55;
+  padding: 5px 9px;
+  border-radius: 7px;
+  margin-bottom: 5px;
+}
+.orbit-studio .sop-valid-item.err {
+  color: #fca5a5;
+  background: rgba(244, 63, 94, 0.10);
+}
+.orbit-studio .sop-valid-item.warn {
+  color: #fcd34d;
+  background: rgba(245, 158, 11, 0.10);
+}
+.orbit-studio .sop-node {
+  position: relative;
+  width: 168px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--panel-bg);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+  font-family: var(--ff);
+}
+.orbit-studio .sop-node.on {
+  box-shadow: 0 0 0 2px var(--text-primary), 0 6px 18px rgba(0, 0, 0, 0.32);
+}
+.orbit-studio .sop-node-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.orbit-studio .sop-node-label {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--text-primary);
+  margin-top: 5px;
+}
+.orbit-studio .sop-node-tag {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: 2px 7px;
+  font-family: var(--ff-mono);
+}
+.orbit-studio .sop-node-note {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.orbit-studio .sop-branch {
+  position: absolute;
+  bottom: -8px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.orbit-studio .sop-branch--t {
+  left: 30%;
+  transform: translateX(-50%);
+}
+.orbit-studio .sop-branch--f {
+  left: 70%;
+  transform: translateX(-50%);
+}
+.orbit-studio .react-flow__controls {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.orbit-studio .react-flow__controls-button {
+  background: var(--panel-bg);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+.orbit-studio .react-flow__controls-button:hover {
+  background: var(--surface-hover);
+}
+.orbit-studio .react-flow__controls-button svg {
+  fill: currentColor;
+}
+.orbit-studio .react-flow__minimap {
+  background: var(--panel-bg);
+  border-radius: 8px;
+}
+.orbit-studio .react-flow__edge-text {
+  fill: var(--text-secondary);
+  font-size: 11px;
+}
+.orbit-studio .react-flow__edge-textbg {
+  fill: var(--panel-bg);
+}
+.orbit-studio .react-flow__attribution {
+  background: transparent;
+  font-size: 10px;
+}
+
+/* ================================================================ */
+/*  SOP Builder — 连线 / Handle / 对齐线 / 配置面板增强            */
+/* ====================================================-========= */
+
+/* ---- Handle：飞书画板风格 — 小实心圆点，无任何特效 ---- */
+/* 飞书画板的锚点特征：实心小圆、低饱和蓝灰、静默无交互特效 */
+/* 连接点：默认隐藏——未选中的模块不展示连线功能 */
+.orbit-studio .sop-h {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  /* 低饱和蓝灰（接近飞书 #64748b / slate-500） */
+  background: #64748b;
+  /* 实心无边框，模仿飞书画板的小圆点锚点 */
+  border: none;
+  /* 只切换可见性，不覆盖 React Flow 的 translate 定位，保证视觉圆心与锚点一致。 */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, background 120ms ease;
+}
+/* 鼠标悬停到模块上、或模块被选中（点击）时才显示四边连接点。
+ * 关键：悬停即显示并置为可交互，这样「按下圆点」的瞬间 Handle 已可点，
+ * 连线能在一手势内发起（否则按下时 Handle 还不可交互，会被当成拖动节点）。 */
+.orbit-studio .react-flow__node.selected .sop-h,
+.orbit-studio .react-flow__node:hover .sop-h,
+.orbit-studio .sop-h.connectingfrom,
+.orbit-studio .sop-h.connectingto {
+  opacity: 1;
+  pointer-events: all;
+}
+
+/* 条件节点的「是/否」标签：悬停或选中时显示，与连接点状态一致 */
+.orbit-studio .sop-branch {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.orbit-studio .react-flow__node.selected .sop-branch,
+.orbit-studio .react-flow__node:hover .sop-branch {
+  opacity: 1;
+}
+
+/* ---- 自定义边的交互样式 ---- */
+/* 边整体可点击区域（React Flow 自带 20px 命中区，这里把指针改明显） */
+.orbit-studio .react-flow__edge {
+  cursor: pointer;
+}
+.orbit-studio .react-flow__edge-path {
+  stroke-dasharray: none;
+  transition: stroke 120ms ease, stroke-width 120ms ease;
+}
+/* 选中态描边（自定义边内部已用白色，这里兜底） */
+.orbit-studio .react-flow__edge.selected .react-flow__edge-path {
+  stroke: #ffffff;
+}
+.orbit-studio .sop-edge-arrow {
+  pointer-events: none;
+}
+.orbit-studio .sop-edge-label {
+  position: absolute;
+  padding: 3px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel-bg) 94%, transparent);
+  color: var(--text-secondary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 1.2;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* 边的标签气泡：圆角胶囊，暗色适配 */
+.orbit-studio .react-flow__edge-text {
+  fill: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+.orbit-studio .react-flow__edge-textbg {
+  fill: var(--panel-bg);
+}
+
+/* ---- 连线预览动画（拖拽中）---- */
+.orbit-studio .react-flow__connection-line,
+.orbit-studio .sop-connection-line {
+  stroke: #22c55e;
+  stroke-width: 2.2;
+  stroke-dasharray: 6 4;
+  animation: sop-connect-pulse 1.2s ease-in-out infinite;
+}
+@keyframes sop-connect-pulse {
+  0% { stroke-opacity: 0.5; }
+  50% { stroke-opacity: 1; }
+  100% { stroke-opacity: 0.5; }
+}
+
+/* React Flow v12 的连接状态类只改变颜色，不改变定位 transform。 */
+.orbit-studio .sop-h:hover,
+.orbit-studio .sop-h.connectingfrom {
+  background: #64748b !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+.orbit-studio .sop-h.connectingto.valid {
+  background: #22c55e !important;
+}
+
+/* ---- 网格背景优化（无限画布感）---- */
+.orbit-studio .react-flow__background {
+  opacity: 1;
+}
+/* 缩放控件暗色适配 */
+.orbit-studio .react-flow__controls {
+  box-shadow: 0 6px 18px rgba(0,0,0,.3);
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+}
+.orbit-studio .react-flow__controls-button {
+  background: var(--panel-bg);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+.orbit-studio .react-flow__controls-button:hover {
+  background: var(--surface-hover, rgba(255,255,255,.06));
+}
+.orbit-studio .react-flow__controls-button svg {
+  fill: currentColor;
+}
+
+/* ---- 小地图优化 ---- */
+.orbit-studio .react-flow__minimap {
+  background: var(--panel-bg);
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+}
+
+/* ---- 对齐辅助线 SVG 容器 ---- */
+.sop-align-svg {
+  position: absolute !important;
+  pointer-events: none !important;
+}
+.orbit-studio .sop-align-line {
+  stroke: #38bdf8;
+  vector-effect: non-scaling-stroke;
+}
+.orbit-studio .sop-align-line.center {
+  stroke-width: 1.35;
+  filter: drop-shadow(0 0 3px rgba(56, 189, 248, 0.45));
+}
+.orbit-studio .sop-align-line.edge {
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  opacity: 0.82;
+}
+.orbit-studio .sop-align-lock {
+  fill: #38bdf8;
+  stroke: #07131c;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 4px rgba(56, 189, 248, 0.65));
+}
+
+/* ================================================================ */
+/*  增强配置面板样式                                                 */
+/* ================================================================ */
+
+/* 只读信息行 */
+.orbit-studio .sop-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 0;
+}
+.orbit-studio .sop-info-label {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.orbit-studio .sop-info-val {
+  font-size: 12px;
+  color: var(--text-primary);
+  font-weight: 650;
+}
+.orbit-studio .sop-info-mono {
+  font-family: var(--ff-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+/* 分隔线 */
+.orbit-studio .sop-sep {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 10px 0 12px;
+}
+
+/* 字段组标题 */
+.orbit-studio .sop-field-group-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--accent, #22c55e);
+  margin-bottom: 10px;
+  letter-spacing: 0.03em;
+}
+
+/* select 下拉框适配暗色 */
+.orbit-studio .sop-field select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--composer-bg);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-family: var(--ff);
+  outline: none;
+  appearance: auto;
+  cursor: pointer;
+}
+.orbit-studio .sop-field select:focus {
+  border-color: var(--text-secondary);
+}
+
+/* 操作按钮行（复制+删除并排）*/
+.orbit-studio .sop-action-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+.orbit-studio .sop-action-row .btn {
+  flex: 1;
+  justify-content: center;
+}
+
+/* ---- JSON 编辑器面板 ---- */
+.orbit-studio .sop-json-desc {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+.orbit-studio .sop-json-editor {
+  width: 100%;
+  min-height: 240px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: rgba(0,0,0,0.35);
+  color: var(--text-primary);
+  font-family: var(--ff-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11.5px;
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+  tab-size: 2;
+}
+.orbit-studio .sop-json-editor:focus {
+  border-color: var(--text-secondary);
+}
+.orbit-studio .sop-json-close {
+  margin-left: auto !important;
+  font-size: 14px;
+  opacity: 0.5;
+}
+.orbit-studio .sop-json-close:hover { opacity: 1; }
+
+/* JSON 导入按钮（隐藏原生 input） */
+.orbit-studio .sop-json-upload {
+  cursor: pointer;
+}
+.orbit-studio .sop-json-upload input[type="file"] {
+  display: none;
+}
+
+/* ---- 多选框选样式增强 ---- */
+.orbit-studio .react-flow__selection {
+  border: 1.5px dashed rgba(255,255,255,0.35) !important;
+  background: rgba(255,255,255,0.04) !important;
+}
