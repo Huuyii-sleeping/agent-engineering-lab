@@ -422,7 +422,7 @@
 .orbit-studio .btn {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   height: 36px;
   padding: 0 15px;
   border-radius: 9px;
@@ -1926,58 +1926,141 @@
   display: flex;
 }
 .orbit-studio .sop-top {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  min-height: 54px;
-  padding: 9px 14px;
+  position: relative;
+  display: grid;
+  min-height: 96px;
   flex: 0 0 auto;
   border-bottom: 1px solid var(--border-subtle);
-  background: color-mix(in srgb, var(--app-bg) 80%, transparent);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 5%, transparent), transparent 40%),
+    color-mix(in srgb, var(--app-bg) 88%, var(--panel-bg));
+  box-shadow: 0 14px 34px color-mix(in srgb, #000 22%, transparent);
+  z-index: 5;
+}
+.orbit-studio .sop-top-primary {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(280px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px 8px;
+}
+.orbit-studio .sop-back-action,
+.orbit-studio .sop-icon-action,
+.orbit-studio .sop-validate-action,
+.orbit-studio .sop-save-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease, transform 150ms ease;
+}
+.orbit-studio .sop-back-action {
+  height: 34px;
+  gap: 6px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--panel-bg) 54%, transparent);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 750;
+}
+.orbit-studio .sop-back-action:hover,
+.orbit-studio .sop-icon-action:hover:not(:disabled),
+.orbit-studio .sop-validate-action:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+  transform: translateY(-1px);
+}
+.orbit-studio .sop-back-action svg,
+.orbit-studio .sop-icon-action svg,
+.orbit-studio .sop-validate-action svg,
+.orbit-studio .sop-save-action svg {
+  width: 14px;
+  height: 14px;
+}
+.orbit-studio .sop-flow-identity {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  min-height: 42px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--composer-bg) 68%, transparent);
+  padding: 5px 10px 5px 7px;
+}
+.orbit-studio .sop-flow-mark {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border-subtle));
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.orbit-studio .sop-flow-mark svg {
+  width: 14px;
+  height: 14px;
+}
+.orbit-studio .sop-flow-copy {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(120px, 0.54fr) minmax(180px, 1fr);
+  align-items: center;
 }
 .orbit-studio .sop-name {
-  height: 34px;
-  width: clamp(160px, 22vw, 240px);
-  padding: 0 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  background: var(--composer-bg);
+  min-width: 0;
+  height: 28px;
+  width: 100%;
+  border: 0;
+  background: transparent;
   color: var(--text-primary);
-  font-size: 13.5px;
-  font-weight: 650;
+  font-size: 13px;
+  font-weight: 800;
   outline: none;
 }
 .orbit-studio .sop-name:focus {
-  border-color: var(--text-secondary);
+  color: var(--accent);
 }
 .orbit-studio .sop-sum {
-  height: 34px;
-  flex: 1 1 200px;
-  min-width: 160px;
-  padding: 0 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  background: var(--composer-bg);
+  min-width: 0;
+  height: 28px;
+  width: 100%;
+  border: 0;
+  border-left: 1px solid var(--border-subtle);
+  background: transparent;
   color: var(--text-secondary);
-  font-size: 12.5px;
+  padding: 0 0 0 12px;
+  font-size: 11.5px;
   outline: none;
 }
 .orbit-studio .sop-sum:focus {
-  border-color: var(--text-secondary);
+  color: var(--text-main);
 }
 .orbit-studio .sop-top-sp {
-  flex: 1 1 8px;
+  flex: 1 0 8px;
 }
 .orbit-studio .sop-top-actions {
   display: flex;
+  min-width: 0;
   align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 8px;
+  gap: 7px;
+  overflow-x: auto;
+  border-top: 1px solid color-mix(in srgb, var(--border-subtle) 72%, transparent);
+  padding: 7px 12px 9px;
+  scrollbar-width: none;
+}
+.orbit-studio .sop-top-actions::-webkit-scrollbar {
+  display: none;
 }
 .orbit-studio .sop-tool-mode {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 4px;
   padding: 3px;
@@ -1988,7 +2071,8 @@
 .orbit-studio .sop-tool-mode .btn {
   height: 28px;
   border-color: transparent;
-  padding: 0 9px;
+  padding: 0 8px;
+  font-size: 11.5px;
 }
 .orbit-studio .sop-tool-mode .btn.is-active {
   border-color: color-mix(in srgb, var(--accent) 42%, var(--border-strong));
@@ -1997,30 +2081,108 @@
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent);
 }
 .orbit-studio .sop-editor-status {
-  max-width: 180px;
+  display: inline-flex;
+  min-width: 0;
+  max-width: 148px;
+  height: 30px;
+  align-items: center;
+  gap: 6px;
   overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel-bg) 46%, transparent);
+  padding: 0 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--ff-mono);
-  font-size: 10.5px;
+  font-size: 9.5px;
   color: var(--text-muted);
 }
-.orbit-studio .sop-editor-status.ready { color: #22c55e; }
-.orbit-studio .sop-editor-status.error { color: #f59e0b; }
-.orbit-studio .sop-editor-status.validating { color: #38bdf8; }
+.orbit-studio .sop-editor-status strong {
+  overflow: hidden;
+  color: var(--text-soft);
+  font-weight: 750;
+  text-overflow: ellipsis;
+}
+.orbit-studio .sop-status-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--text-muted);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-muted) 12%, transparent);
+}
+.orbit-studio .sop-status-separator {
+  width: 1px;
+  height: 12px;
+  flex: 0 0 auto;
+  background: var(--border-strong);
+}
+.orbit-studio .sop-editor-status.ready .sop-status-dot { background: #22c55e; box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.12); }
+.orbit-studio .sop-editor-status.error .sop-status-dot { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.12); }
+.orbit-studio .sop-editor-status.validating .sop-status-dot { background: #38bdf8; box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12); }
 .orbit-studio .sop-node-search {
   display: flex;
+  flex: 0 0 126px;
   align-items: center;
   gap: 5px;
-  height: 30px;
+  height: 32px;
   padding: 0 6px 0 9px;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   color: var(--text-muted);
-  background: var(--composer-bg);
+  background: color-mix(in srgb, var(--composer-bg) 78%, transparent);
 }
-.orbit-studio .sop-node-search input { width: 92px; border: 0; outline: 0; color: var(--text-primary); background: transparent; font-size: 11.5px; }
+.orbit-studio .sop-node-search svg { width: 13px; height: 13px; flex: 0 0 auto; }
+.orbit-studio .sop-node-search input { min-width: 0; width: 66px; border: 0; outline: 0; color: var(--text-primary); background: transparent; font-size: 11.5px; }
 .orbit-studio .sop-node-search button { border: 0; border-radius: 5px; color: var(--text-secondary); background: var(--surface-hover); font-size: 10px; cursor: pointer; }
+.orbit-studio .sop-action-cluster {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+  height: 32px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--composer-bg) 62%, transparent);
+  padding: 3px;
+}
+.orbit-studio .sop-icon-action {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border-color: transparent;
+  border-radius: 6px;
+  background: transparent;
+  padding: 0;
+}
+.orbit-studio .sop-icon-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.34;
+}
+.orbit-studio .sop-validate-action,
+.orbit-studio .sop-save-action {
+  flex: 0 0 auto;
+  height: 32px;
+  gap: 6px;
+  border-radius: 9px;
+  padding: 0 11px;
+  font-size: 11.5px;
+  font-weight: 800;
+}
+.orbit-studio .sop-validate-action {
+  background: color-mix(in srgb, var(--panel-bg) 54%, transparent);
+}
+.orbit-studio .sop-save-action {
+  border-color: color-mix(in srgb, #fff 68%, var(--border-strong));
+  background: #f4f4f5;
+  color: #111114;
+  box-shadow: 0 8px 22px rgba(255, 255, 255, 0.08);
+}
+.orbit-studio .sop-save-action:hover {
+  background: #fff;
+  transform: translateY(-1px);
+}
 .orbit-studio .sop-canvas {
   flex: 1 1 auto;
   min-height: 0;

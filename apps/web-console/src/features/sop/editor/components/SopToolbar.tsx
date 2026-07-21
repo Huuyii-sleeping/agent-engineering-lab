@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowLeft, ArrowRight, Check, Download, FileJson, Focus, Hand, Lock, MousePointer2, Redo2, Search, TriangleAlert, Undo2, Upload } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, Check, Download, FileJson, Focus, GitBranch, Hand, Lock, MousePointer2, Redo2, Search, TriangleAlert, Undo2, Upload } from "lucide-react";
 
 function downloadText(filename: string, text: string) {
   const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
@@ -39,13 +39,32 @@ export function SopToolbar(props: {
 }) {
   return (
     <div className="sop-top">
-      <button type="button" className="btn btn-ghost btn-sm" onClick={props.onBack}><ArrowLeft aria-hidden="true" />返回列表</button>
-      <input className="sop-name" value={props.name} placeholder="流程名称" onChange={(event) => props.onNameChange(event.target.value)} />
-      <input className="sop-sum" value={props.summary} placeholder="一句话描述" onChange={(event) => props.onSummaryChange(event.target.value)} />
-      <span className={`sop-editor-status ${props.debugState.status}`} title={props.debugState.message}>rev +{props.dirtyRevision} · {props.debugState.message ?? "待编辑"}</span>
-      <div className="sop-node-search"><Search width={13} /><input value={props.searchQuery} placeholder="搜索节点" onChange={(event) => props.onSearchChange(event.target.value)} /><button type="button" onClick={props.onFocusSearch}>{props.searchCount}</button></div>
-      <div className="sop-top-sp" />
+      <div className="sop-top-primary">
+        <button type="button" className="sop-back-action" onClick={props.onBack}>
+          <ArrowLeft aria-hidden="true" />
+          <span>返回</span>
+        </button>
+        <div className="sop-flow-identity">
+          <span className="sop-flow-mark" aria-hidden="true"><GitBranch /></span>
+          <div className="sop-flow-copy">
+            <input aria-label="流程名称" className="sop-name" value={props.name} placeholder="流程名称" onChange={(event) => props.onNameChange(event.target.value)} />
+            <input aria-label="流程描述" className="sop-sum" value={props.summary} placeholder="一句话描述" onChange={(event) => props.onSummaryChange(event.target.value)} />
+          </div>
+        </div>
+        <span className={`sop-editor-status ${props.debugState.status}`} title={props.debugState.message}>
+          <span className="sop-status-dot" aria-hidden="true" />
+          <span>rev {props.dirtyRevision}</span>
+          <span className="sop-status-separator" aria-hidden="true" />
+          <strong>{props.debugState.message ?? "待编辑"}</strong>
+        </span>
+      </div>
+
       <div className="sop-top-actions">
+        <div className="sop-node-search">
+          <Search aria-hidden="true" />
+          <input aria-label="搜索节点" value={props.searchQuery} placeholder="搜索节点" onChange={(event) => props.onSearchChange(event.target.value)} />
+          <button type="button" aria-label={`${props.searchCount} 个搜索结果`} onClick={props.onFocusSearch}>{props.searchCount}</button>
+        </div>
         <div className="sop-tool-mode" role="group" aria-label="画布交互模式">
           <button
             type="button"
@@ -62,24 +81,29 @@ export function SopToolbar(props: {
             data-testid="sop-pan-mode"
             onClick={() => props.onInteractionModeChange("pan")}
             title="按住左键拖动画布（H）"
-          ><Hand aria-hidden="true" />拖动画布</button>
+          ><Hand aria-hidden="true" />平移</button>
         </div>
-        <button type="button" className="btn btn-ghost btn-sm" disabled={!props.canUndo} onClick={props.onUndo} title="撤销"><Undo2 /></button>
-        <button type="button" className="btn btn-ghost btn-sm" disabled={!props.canRedo} onClick={props.onRedo} title="重做"><Redo2 /></button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => void props.onLayout("LR")} title="横向布局"><ArrowRight /></button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => void props.onLayout("TB")} title="纵向布局"><ArrowDown /></button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={props.onFitSelection} title="定位选中"><Focus /></button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={props.onTogglePin} title="固定或取消固定"><Lock /></button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={props.onValidate}><TriangleAlert aria-hidden="true" />校验流程</button>
-        <button type="button" className="btn btn-primary btn-sm" onClick={props.onSave}><Check aria-hidden="true" />保存草稿</button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={props.onExportJson}><FileJson width={14} height={14} aria-hidden="true" />JSON</button>
-        <label className="btn btn-ghost btn-sm sop-json-upload"><Upload width={14} height={14} aria-hidden="true" />导入<input type="file" accept=".json,application/json" onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (!file) return;
-          void file.text().then(props.onImportText);
-          event.target.value = "";
-        }} /></label>
-        {props.legacyBackup ? <button type="button" className="btn btn-ghost btn-sm" onClick={() => downloadText(`sop-v1-backup-${Date.now()}.json`, props.legacyBackup!)} title="下载迁移前的只读 v1 草稿"><Download width={14} height={14} aria-hidden="true" />v1 备份</button> : null}
+        <div className="sop-action-cluster" role="group" aria-label="编辑与布局工具">
+          <button type="button" className="sop-icon-action" disabled={!props.canUndo} onClick={props.onUndo} aria-label="撤销" title="撤销"><Undo2 /></button>
+          <button type="button" className="sop-icon-action" disabled={!props.canRedo} onClick={props.onRedo} aria-label="重做" title="重做"><Redo2 /></button>
+          <button type="button" className="sop-icon-action" onClick={() => void props.onLayout("LR")} aria-label="横向布局" title="横向布局"><ArrowRight /></button>
+          <button type="button" className="sop-icon-action" onClick={() => void props.onLayout("TB")} aria-label="纵向布局" title="纵向布局"><ArrowDown /></button>
+          <button type="button" className="sop-icon-action" onClick={props.onFitSelection} aria-label="定位选中" title="定位选中"><Focus /></button>
+          <button type="button" className="sop-icon-action" onClick={props.onTogglePin} aria-label="固定或取消固定" title="固定或取消固定"><Lock /></button>
+        </div>
+        <div className="sop-top-sp" />
+        <div className="sop-action-cluster" role="group" aria-label="流程文件工具">
+          <button type="button" className="sop-icon-action" onClick={props.onExportJson} aria-label="查看 JSON" title="查看 JSON"><FileJson aria-hidden="true" /></button>
+          <label className="sop-icon-action sop-json-upload" aria-label="导入 JSON" title="导入 JSON"><Upload aria-hidden="true" /><input type="file" accept=".json,application/json" onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (!file) return;
+            void file.text().then(props.onImportText);
+            event.target.value = "";
+          }} /></label>
+          {props.legacyBackup ? <button type="button" className="sop-icon-action" onClick={() => downloadText(`sop-v1-backup-${Date.now()}.json`, props.legacyBackup!)} aria-label="下载 v1 备份" title="下载迁移前的只读 v1 草稿"><Download aria-hidden="true" /></button> : null}
+        </div>
+        <button type="button" className="sop-validate-action" onClick={props.onValidate}><TriangleAlert aria-hidden="true" />检查</button>
+        <button type="button" className="sop-save-action" onClick={props.onSave}><Check aria-hidden="true" />保存草稿</button>
       </div>
     </div>
   );
