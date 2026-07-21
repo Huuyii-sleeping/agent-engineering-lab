@@ -8,7 +8,7 @@ import {
   type Edge,
   type Node,
 } from "@xyflow/react";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { WorkflowDraft } from "@orbit/workflow-core";
 import { SopConnectionLine, SopEdge } from "../../components/SopEdge";
 import { SopNodeView } from "../../components/SopNodeView";
@@ -31,7 +31,20 @@ export function SopCanvasShell({ initial, legacyBackup, onSave, onBack }: {
   onBack: () => void;
 }) {
   const editor = useSopEditor(initial);
+  const [interactionMode, setInteractionMode] = useState<"select" | "pan">("select");
   const lastConnectionCheck = useRef<{ valid: boolean; reason?: string } | null>(null);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.matches("input, textarea, select, [contenteditable='true']")) return;
+      if (event.key.toLowerCase() === "h") setInteractionMode("pan");
+      else if (event.key.toLowerCase() === "v") setInteractionMode("select");
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   return (
     <div className="sop-wrap">
       <SopPalette onAdd={editor.addNodeOfType} />
@@ -57,13 +70,15 @@ export function SopCanvasShell({ initial, legacyBackup, onSave, onBack }: {
           onFocusSearch={() => { const match = editor.searchMatches[0]; if (match) editor.focusNode(match.id); }}
           onUndo={editor.undo}
           onRedo={editor.redo}
+          interactionMode={interactionMode}
+          onInteractionModeChange={setInteractionMode}
           onLayout={editor.autoLayout}
           onFitSelection={editor.fitSelection}
           onTogglePin={editor.toggleSelectedPinned}
         />
         <div className="sop-workspace-body">
           <div className="sop-main">
-            <div className="sop-canvas" onDragOver={editor.onDragOver} onDrop={editor.onDrop}>
+            <div className={interactionMode === "pan" ? "sop-canvas is-pan-mode" : "sop-canvas"} onDragOver={editor.onDragOver} onDrop={editor.onDrop}>
               <ReactFlow<Node<SopFlowData>, Edge<SopFlowEdgeData>>
                 nodes={editor.nodes}
                 edges={editor.edges}
@@ -84,13 +99,16 @@ export function SopCanvasShell({ initial, legacyBackup, onSave, onBack }: {
                 }}
                 connectionMode={ConnectionMode.Loose}
                 onSelectionChange={({ nodes, edges }) => { editor.setSelectedNodeIds(new Set(nodes.map((node) => node.id))); editor.setSelectedEdgeIds(new Set(edges.map((edge) => edge.id))); }}
-                onPaneClick={() => { editor.setSelectedNodeIds(new Set()); editor.setSelectedEdgeIds(new Set()); }}
+                onPaneClick={() => { if (interactionMode === "select") { editor.setSelectedNodeIds(new Set()); editor.setSelectedEdgeIds(new Set()); } }}
                 onNodeDrag={editor.onNodeDrag}
                 onNodeDragStart={editor.onNodeDragStart}
                 onNodeDragStop={editor.onNodeDragStop}
                 multiSelectionKeyCode="Shift"
-                selectionOnDrag
-                panOnDrag={[1, 2]}
+                selectionOnDrag={interactionMode === "select"}
+                panOnDrag={interactionMode === "pan" ? true : [1, 2]}
+                nodesDraggable={interactionMode === "select"}
+                nodesConnectable={interactionMode === "select"}
+                elementsSelectable={interactionMode === "select"}
                 deleteKeyCode={null}
                 fitView
                 defaultEdgeOptions={{ type: "sop" }}

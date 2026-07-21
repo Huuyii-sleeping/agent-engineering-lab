@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowLeft, ArrowRight, Check, Download, FileJson, Focus, Lock, Redo2, Search, TriangleAlert, Undo2, Upload } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, Check, Download, FileJson, Focus, Hand, Lock, MousePointer2, Redo2, Search, TriangleAlert, Undo2, Upload } from "lucide-react";
 
 function downloadText(filename: string, text: string) {
   const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
@@ -31,6 +31,8 @@ export function SopToolbar(props: {
   onFocusSearch: () => void;
   onUndo: () => void;
   onRedo: () => void;
+  interactionMode: "select" | "pan";
+  onInteractionModeChange: (mode: "select" | "pan") => void;
   onLayout: (direction: "LR" | "TB") => Promise<void>;
   onFitSelection: () => void;
   onTogglePin: () => void;
@@ -44,6 +46,24 @@ export function SopToolbar(props: {
       <div className="sop-node-search"><Search width={13} /><input value={props.searchQuery} placeholder="搜索节点" onChange={(event) => props.onSearchChange(event.target.value)} /><button type="button" onClick={props.onFocusSearch}>{props.searchCount}</button></div>
       <div className="sop-top-sp" />
       <div className="sop-top-actions">
+        <div className="sop-tool-mode" role="group" aria-label="画布交互模式">
+          <button
+            type="button"
+            className={`btn btn-ghost btn-sm ${props.interactionMode === "select" ? "is-active" : ""}`}
+            aria-pressed={props.interactionMode === "select"}
+            data-testid="sop-select-mode"
+            onClick={() => props.onInteractionModeChange("select")}
+            title="选择节点与框选（V）"
+          ><MousePointer2 aria-hidden="true" />选择</button>
+          <button
+            type="button"
+            className={`btn btn-ghost btn-sm ${props.interactionMode === "pan" ? "is-active" : ""}`}
+            aria-pressed={props.interactionMode === "pan"}
+            data-testid="sop-pan-mode"
+            onClick={() => props.onInteractionModeChange("pan")}
+            title="按住左键拖动画布（H）"
+          ><Hand aria-hidden="true" />拖动画布</button>
+        </div>
         <button type="button" className="btn btn-ghost btn-sm" disabled={!props.canUndo} onClick={props.onUndo} title="撤销"><Undo2 /></button>
         <button type="button" className="btn btn-ghost btn-sm" disabled={!props.canRedo} onClick={props.onRedo} title="重做"><Redo2 /></button>
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => void props.onLayout("LR")} title="横向布局"><ArrowRight /></button>

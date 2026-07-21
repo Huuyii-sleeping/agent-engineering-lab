@@ -1976,6 +1976,26 @@
   flex-wrap: wrap;
   gap: 8px;
 }
+.orbit-studio .sop-tool-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--composer-bg) 76%, transparent);
+}
+.orbit-studio .sop-tool-mode .btn {
+  height: 28px;
+  border-color: transparent;
+  padding: 0 9px;
+}
+.orbit-studio .sop-tool-mode .btn.is-active {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border-strong));
+  background: var(--accent-soft);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent);
+}
 .orbit-studio .sop-editor-status {
   max-width: 180px;
   overflow: hidden;
@@ -2009,6 +2029,16 @@
 .orbit-studio .sop-canvas .react-flow {
   width: 100%;
   height: 100%;
+}
+.orbit-studio .sop-canvas.is-pan-mode .react-flow__pane {
+  cursor: grab;
+}
+.orbit-studio .sop-canvas.is-pan-mode .react-flow__pane:active {
+  cursor: grabbing;
+}
+.orbit-studio .sop-canvas.is-pan-mode .react-flow__node,
+.orbit-studio .sop-canvas.is-pan-mode .react-flow__edge {
+  pointer-events: none;
 }
 .orbit-studio .sop-insp {
   width: 264px;
