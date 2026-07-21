@@ -75,14 +75,14 @@
 
 ## 6. 阶段 D：运行控制与 Web 调试
 
-- [ ] 6.1 新增 BFF `workflow-runs` 薄 controller/service，代理 Agent runtime 启动、查询、取消和事件流。
-- [ ] 6.2 建立 runs/node_runs/events 数据表和运行索引写入，不在 BFF 重复执行节点逻辑。
+- [x] 6.1 新增 BFF `workflow-runs` 薄 controller/service，代理 Agent runtime 启动、查询、取消和事件流。
+- [x] 6.2 建立 runs/node_runs/events 数据表和运行索引写入，不在 BFF 重复执行节点逻辑。
 - [ ] 6.3 实现运行 SSE 断线续传、事件 id、终态关闭和客户端去重。
 - [ ] 6.4 Web 实现单节点试运行输入补全、运行控制和输入/输出/日志/耗时面板。
 - [ ] 6.5 Web 实现草稿完整试运行和发布版本运行，明确区分 draft run 与 production run。
 - [ ] 6.6 画布实时展示 pending/running/succeeded/failed/skipped/waiting 状态和当前执行路径。
-- [ ] 6.7 实现取消运行和可取消 executor 的 AbortSignal 传播。
-- [ ] 6.8 增加 BFF 运行 API、SSE 和取消的单元/集成测试。
+- [x] 6.7 实现取消运行和可取消 executor 的 AbortSignal 传播。
+- [x] 6.8 增加 BFF 运行 API、SSE 和取消的单元/集成测试。
 - [ ] 6.9 完成阶段 D 验收：发布版本可运行、可取消、失败可定位到具体节点与 attempt。
 
 ## 7. 阶段 E：高级控制流与长运行流程

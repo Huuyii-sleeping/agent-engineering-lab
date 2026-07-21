@@ -22,9 +22,17 @@ describe("SopDatabase", () => {
   it("启用 WAL 并创建显式迁移表和阶段 C 基础表", async () => {
     const database = new SopDatabase({ sopDataRoot: await root() });
     try {
-      expect(database.health()).toMatchObject({ ok: true, journalMode: "wal", migrationVersion: 1 });
+      expect(database.health()).toMatchObject({ ok: true, journalMode: "wal", migrationVersion: 2 });
       const tables = database.database.prepare("select name from sqlite_master where type = 'table' order by name").all() as Array<{ name: string }>;
-      expect(tables.map((item) => item.name)).toEqual(expect.arrayContaining(["schema_migrations", "sop_drafts", "sop_versions", "sop_templates"]));
+      expect(tables.map((item) => item.name)).toEqual(expect.arrayContaining([
+        "schema_migrations",
+        "sop_drafts",
+        "sop_versions",
+        "sop_templates",
+        "workflow_runs",
+        "workflow_node_runs",
+        "workflow_events",
+      ]));
     } finally {
       database.onModuleDestroy();
     }

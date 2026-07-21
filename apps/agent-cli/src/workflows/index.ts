@@ -6,6 +6,8 @@ export * from "./executor-registry.js";
 export * from "./compiler-adapter.js";
 export * from "./scheduler.js";
 export * from "./runtime.js";
+export * from "./service.js";
+export * from "./http-handler.js";
 export * from "./executors/index.js";
 export * from "./executors/basic.js";
 export * from "./executors/llm.js";

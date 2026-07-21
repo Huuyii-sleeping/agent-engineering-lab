@@ -11,7 +11,7 @@ export type SopDatabaseOptions = {
   sopDatabasePath?: string;
 };
 
-const latestMigrationVersion = 1;
+const latestMigrationVersion = 2;
 
 function readPragmaValue(row: unknown, key: string): string {
   if (!row || typeof row !== "object") return "";
@@ -170,6 +170,56 @@ export class SopDatabase implements OnModuleDestroy {
           create index sop_templates_updated_at on sop_templates(updated_at desc);
         `);
         database.prepare("insert into schema_migrations(version, applied_at) values (?, ?)").run(1, Date.now());
+      })();
+    }
+    if (current.version < 2) {
+      database.transaction(() => {
+        database.exec(`
+          create table workflow_runs (
+            id text primary key,
+            workflow_id text not null,
+            version_id text,
+            content_hash text,
+            mode text not null,
+            status text not null,
+            input_json text not null,
+            output_json text,
+            error_json text,
+            created_at integer not null,
+            started_at integer,
+            finished_at integer
+          );
+          create index workflow_runs_workflow_created on workflow_runs(workflow_id, created_at desc);
+          create index workflow_runs_status_created on workflow_runs(status, created_at desc);
+
+          create table workflow_node_runs (
+            run_id text not null,
+            node_id text not null,
+            status text not null,
+            attempt integer not null,
+            input_json text,
+            output_json text,
+            error_json text,
+            started_at integer,
+            finished_at integer,
+            duration_ms integer,
+            primary key(run_id, node_id),
+            foreign key(run_id) references workflow_runs(id) on delete cascade
+          );
+          create index workflow_node_runs_status on workflow_node_runs(run_id, status);
+
+          create table workflow_events (
+            run_id text not null,
+            event_id integer not null,
+            type text not null,
+            event_json text not null,
+            created_at integer not null,
+            primary key(run_id, event_id),
+            foreign key(run_id) references workflow_runs(id) on delete cascade
+          );
+          create index workflow_events_created on workflow_events(run_id, created_at);
+        `);
+        database.prepare("insert into schema_migrations(version, applied_at) values (?, ?)").run(2, Date.now());
       })();
     }
     const after = database.prepare("select coalesce(max(version), 0) as version from schema_migrations").get() as { version: number };

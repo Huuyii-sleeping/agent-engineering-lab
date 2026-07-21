@@ -8,16 +8,16 @@ import { SqliteSopsRepository } from "./sqlite-sops.repository.js";
 /** 独立 SOP 领域模块，封装 SQLite、repository、service 和薄 controller。 */
 @Module({})
 export class SopsModule {
-  static register(options: SopDatabaseOptions): DynamicModule {
+  static register(options: SopDatabaseOptions, database = new SopDatabase(options)): DynamicModule {
     return {
       module: SopsModule,
       controllers: [SopsController, SopTemplatesController],
       providers: [
-        { provide: SopDatabase, useValue: new SopDatabase(options) },
+        { provide: SopDatabase, useValue: database },
         SqliteSopsRepository,
         SopsService,
       ],
-      exports: [SopsService],
+      exports: [SopsService, SopDatabase],
     };
   }
 }

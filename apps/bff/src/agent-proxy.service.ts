@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { errorPayload, applyCommonHeaders, writeJson, type JsonObject } from "./http-utils.js";
 
-type ProxyResult =
+export type ProxyResult =
   | { ok: true; status: number; body: unknown }
   | { ok: false; status: number; body: JsonObject };
 
@@ -118,6 +118,32 @@ export class AgentProxyService {
 
   async securityFindings(search: string): Promise<ProxyResult> {
     return this.proxyJson({ method: "GET", pathname: "/security/findings", search });
+  }
+
+  /** 启动 Agent runtime 工作流。 */
+  async startWorkflowRun(body: JsonObject): Promise<ProxyResult> {
+    return this.proxyJson({ method: "POST", pathname: "/workflow-runs", body });
+  }
+
+  /** 查询 Agent runtime 工作流快照。 */
+  async workflowRun(runId: string): Promise<ProxyResult> {
+    return this.proxyJson({ method: "GET", pathname: `/workflow-runs/${encodeURIComponent(runId)}` });
+  }
+
+  /** 向 Agent runtime 传播取消请求。 */
+  async cancelWorkflowRun(runId: string): Promise<ProxyResult> {
+    return this.proxyJson({ method: "POST", pathname: `/workflow-runs/${encodeURIComponent(runId)}/cancel` });
+  }
+
+  /** 打开 Agent runtime SSE，并保留事件游标与取消信号。 */
+  workflowEventStream(runId: string, search: string, lastEventId: string | undefined, signal: AbortSignal): Promise<Response> {
+    const headers: HeadersInit = { Accept: "text/event-stream" };
+    if (lastEventId) headers["Last-Event-ID"] = lastEventId;
+    return this.fetchImpl(upstreamUrl(this.agentBaseUrl, `/workflow-runs/${encodeURIComponent(runId)}/events`, search), {
+      method: "GET",
+      headers,
+      signal,
+    });
   }
 
   async proxyEventStream(req: IncomingMessage, res: ServerResponse, search: string): Promise<void> {

@@ -15,6 +15,8 @@ import {
 import { runUserQuery } from "../runtime/query-runtime.js";
 import type { NotificationServiceLike, RuntimeCoordinationServiceLike } from "../services/index.js";
 import { resolveBoundSkills, toPromptSkillBlocks } from "../skills/loader.js";
+import { handleWorkflowHttpRequest } from "../workflows/http-handler.js";
+import { WorkflowRuntimeService } from "../workflows/service.js";
 
 export type AgentServiceDeps = AgentAppRuntimeDeps;
 
@@ -141,6 +143,8 @@ export class AgentService {
   private readonly runtimeCoordinationService: RuntimeCoordinationServiceLike;
   private readonly runtimeServices: AgentServiceDeps["runtimeServices"];
   private readonly queryEngine: AgentServiceDeps["queryEngine"];
+  /** 工作流执行由 Agent runtime 负责，BFF 只消费此控制面。 */
+  readonly workflowRuntime: WorkflowRuntimeService;
 
   constructor(deps: AgentServiceDeps, host?: AgentHost) {
     this.host = host ?? new AgentHost(deps);
@@ -157,6 +161,7 @@ export class AgentService {
     this.runtimeCoordinationService = deps.runtimeCoordinationService;
     this.runtimeServices = deps.runtimeServices;
     this.queryEngine = deps.queryEngine;
+    this.workflowRuntime = new WorkflowRuntimeService(deps);
   }
 
   createSession(agent?: unknown): AgentSessionRecord {
@@ -405,6 +410,10 @@ export function createAgentHttpServer(service: AgentService): Server {
       const url = req.url ? new URL(req.url, "http://127.0.0.1") : null;
       const pathname = url?.pathname ?? "/";
       const method = req.method ?? "GET";
+
+      if (url && pathname.startsWith("/workflow-runs") && await handleWorkflowHttpRequest(service.workflowRuntime, req, res, url)) {
+        return;
+      }
 
       if (method === "GET" && pathname === "/health") {
         json(res, 200, { ok: true, status: "ok" });

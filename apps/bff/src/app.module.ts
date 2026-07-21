@@ -13,6 +13,8 @@ import { SkillValidatorService } from "./skills/skill-validator.service.js";
 import { SkillsController } from "./skills/skills.controller.js";
 import { SopsModule } from "./sops/sops.module.js";
 import type { SopDatabaseOptions } from "./sops/sop-database.js";
+import { SopDatabase } from "./sops/sop-database.js";
+import { WorkflowRunsModule } from "./workflow-runs/workflow-runs.module.js";
 
 export type AppModuleOptions = AgentProxyOptions & LocalStoreOptions & SkillRegistryOptions & SopDatabaseOptions;
 
@@ -23,9 +25,10 @@ export class AppModule {
     const skillValidatorService = new SkillValidatorService();
     const skillStoreService = new SkillStoreService(skillValidatorService, options);
     const skillInstallerService = new SkillInstallerService(localStoreService, skillStoreService, skillValidatorService);
+    const sopDatabase = new SopDatabase(options);
     return {
       module: AppModule,
-      imports: [SopsModule.register(options)],
+      imports: [SopsModule.register(options, sopDatabase), WorkflowRunsModule.register(options, sopDatabase)],
       controllers: [AgentsController, SkillsController, AppController],
       providers: [
         { provide: AgentProxyService, useValue: new AgentProxyService(options) },
