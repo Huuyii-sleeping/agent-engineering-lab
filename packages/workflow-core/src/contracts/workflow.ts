@@ -55,3 +55,18 @@ export function isWorkflowDraft(value: unknown): value is WorkflowDraft {
     Array.isArray(record.edges)
   );
 }
+
+/** 判断输入是否为不可变 workflow v2 发布版本。 */
+export function isWorkflowVersion(value: unknown): value is WorkflowVersion {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.schemaVersion === WORKFLOW_SCHEMA_VERSION &&
+    typeof record.id === "string" &&
+    typeof record.workflowId === "string" &&
+    typeof record.version === "number" &&
+    typeof record.contentHash === "string" &&
+    Array.isArray(record.nodes) &&
+    Array.isArray(record.edges)
+  );
+}

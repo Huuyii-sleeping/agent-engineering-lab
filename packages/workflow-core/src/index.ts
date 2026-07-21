@@ -10,3 +10,6 @@ export * from "./graph/graph.js";
 export * from "./ports/compatibility.js";
 export * from "./variables/scope.js";
 export * from "./validation/publish.js";
+export * from "./compiler/contracts.js";
+export * from "./compiler/schema.js";
+export * from "./compiler/compile.js";
