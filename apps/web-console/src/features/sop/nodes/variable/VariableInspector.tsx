@@ -1,0 +1,7 @@
+import type { NodeConfigInspectorProps } from "../types";
+
+/** Variable 节点赋值摘要面板。 */
+export function VariableInspector({ node, onChange, availableVariables }: NodeConfigInspectorProps) {
+  if (node.kind !== "builtin" || node.type !== "variable") return null;
+  return <><div className="sop-field-group-title">变量赋值</div>{node.config.assignments.map((assignment, index) => <div className="sop-inline-fields" key={`${assignment.key}-${index}`}><input value={assignment.key} onChange={(event) => onChange({ ...node, config: { assignments: node.config.assignments.map((item, itemIndex) => itemIndex === index ? { ...item, key: event.target.value } : item) } })} /><select value={assignment.value.kind === "variable" ? availableVariables.find((item) => JSON.stringify(item.ref) === JSON.stringify(assignment.value.ref))?.id ?? "" : ""} onChange={(event) => { const variable = availableVariables.find((item) => item.id === event.target.value); if (variable) onChange({ ...node, config: { assignments: node.config.assignments.map((item, itemIndex) => itemIndex === index ? { ...item, value: { kind: "variable", ref: variable.ref } } : item) } }); }}><option value="">选择变量</option>{availableVariables.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></div>)}<button type="button" className="btn btn-ghost btn-sm" onClick={() => onChange({ ...node, config: { assignments: [...node.config.assignments, { key: `value${node.config.assignments.length + 1}`, value: { kind: "literal", value: "" } }] } })}>添加赋值</button></>;
+}

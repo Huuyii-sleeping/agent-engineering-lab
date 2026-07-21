@@ -10,6 +10,8 @@
     "test": "vitest run --no-cache"
   },
   "dependencies": {
+    "@dagrejs/dagre": "^1.1.5",
+    "@orbit/workflow-core": "workspace:*",
     "@xyflow/react": "^12.0.0",
     "lucide-react": "^1.18.0",
     "react": "^18.3.1",

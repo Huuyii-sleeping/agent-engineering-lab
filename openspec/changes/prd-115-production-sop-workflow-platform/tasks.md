@@ -2,43 +2,43 @@
 
 ## 1. 阶段 A：共享契约与兼容性基线
 
-- [ ] 1.1 更新 `pnpm-workspace.yaml` 纳入 `packages/*`，创建纯 TypeScript 的 `packages/workflow-core` 包和构建/测试配置。
-- [ ] 1.2 在 workflow-core 定义 `WorkflowDraft / WorkflowVersion / WorkflowNode / WorkflowEdge / NodePort / VariableRef / CredentialRef` v2 契约。
-- [ ] 1.3 使用判别联合定义 Start、End、LLM、Tool、HTTP、Code、Condition、Template、Variable、Knowledge 节点配置。
-- [ ] 1.4 定义 `NodeDefinition`、节点版本、端口工厂、配置 schema、validator 与 executor identity 注册契约。
-- [ ] 1.5 实现 schemaVersion 规范化、稳定序列化、内容 hash 和未知节点保留模型。
-- [ ] 1.6 实现 prd-114 `SopDraft` v1 -> workflow v2 的幂等迁移器与反复迁移测试。
-- [ ] 1.7 把 DAG、可达性、环检测和基础图算法迁移到 workflow-core，并补齐纯函数单测。
-- [ ] 1.8 定义编译诊断结构，支持 workflow/node/port/field/edge 精确定位和 error/warning 分级。
-- [ ] 1.9 完成 `better-sqlite3` 在 Node 22、macOS、Linux CI 环境的构建兼容性 spike，记录采用或替换结论到 design。
-- [ ] 1.10 建立 Web、BFF、Agent 对 workflow-core 的依赖方向检查，禁止三端重复定义近似工作流类型。
-- [ ] 1.11 运行 workflow-core build/test，并验证 v1 mock 草稿无损迁移为 v2。
+- [x] 1.1 更新 `pnpm-workspace.yaml` 纳入 `packages/*`，创建纯 TypeScript 的 `packages/workflow-core` 包和构建/测试配置。
+- [x] 1.2 在 workflow-core 定义 `WorkflowDraft / WorkflowVersion / WorkflowNode / WorkflowEdge / NodePort / VariableRef / CredentialRef` v2 契约。
+- [x] 1.3 使用判别联合定义 Start、End、LLM、Tool、HTTP、Code、Condition、Template、Variable、Knowledge 节点配置。
+- [x] 1.4 定义 `NodeDefinition`、节点版本、端口工厂、配置 schema、validator 与 executor identity 注册契约。
+- [x] 1.5 实现 schemaVersion 规范化、稳定序列化、内容 hash 和未知节点保留模型。
+- [x] 1.6 实现 prd-114 `SopDraft` v1 -> workflow v2 的幂等迁移器与反复迁移测试。
+- [x] 1.7 把 DAG、可达性、环检测和基础图算法迁移到 workflow-core，并补齐纯函数单测。
+- [x] 1.8 定义编译诊断结构，支持 workflow/node/port/field/edge 精确定位和 error/warning 分级。
+- [x] 1.9 完成 `better-sqlite3` 在 Node 22、macOS、Linux CI 环境的构建兼容性 spike，记录采用或替换结论到 design。
+- [x] 1.10 建立 Web、BFF、Agent 对 workflow-core 的依赖方向检查，禁止三端重复定义近似工作流类型。
+- [x] 1.11 运行 workflow-core build/test，并验证 v1 mock 草稿无损迁移为 v2。
 
 ## 2. 阶段 A：Web 编辑器边界收口
 
-- [ ] 2.1 将 `SopCanvas.tsx` 拆分为 canvas shell、toolbar、palette、inspector、alignment overlay、JSON panel 和 selection actions。
-- [ ] 2.2 将 React Flow Node/Edge 与 workflow-core 模型之间的转换放入独立 adapter，React 组件不得持有持久化模型规则。
-- [ ] 2.3 新增 editor state hook/store，集中处理 nodes、edges、selection、viewport、validation、dirty revision 和调试状态。
-- [ ] 2.4 将节点配置面板按节点类型拆入 `features/sop/nodes/<type>/**`，通用字段复用共享组件。
-- [ ] 2.5 将节点库改为读取 NodeDefinition registry，不再维护独立 catalog switch。
-- [ ] 2.6 接入 v1 -> v2 迁移适配，保留旧 localStorage 只读备份与显式导出入口。
-- [ ] 2.7 为 editor adapter、selection、迁移和节点 registry 增加 Web 单元测试。
-- [ ] 2.8 验证入口文件与顶层画布文件满足工作区薄入口和单文件职责规则。
+- [x] 2.1 将 `SopCanvas.tsx` 拆分为 canvas shell、toolbar、palette、inspector、alignment overlay、JSON panel 和 selection actions。
+- [x] 2.2 将 React Flow Node/Edge 与 workflow-core 模型之间的转换放入独立 adapter，React 组件不得持有持久化模型规则。
+- [x] 2.3 新增 editor state hook/store，集中处理 nodes、edges、selection、viewport、validation、dirty revision 和调试状态。
+- [x] 2.4 将节点配置面板按节点类型拆入 `features/sop/nodes/<type>/**`，通用字段复用共享组件。
+- [x] 2.5 将节点库改为读取 NodeDefinition registry，不再维护独立 catalog switch。
+- [x] 2.6 接入 v1 -> v2 迁移适配，保留旧 localStorage 只读备份与显式导出入口。
+- [x] 2.7 为 editor adapter、selection、迁移和节点 registry 增加 Web 单元测试。
+- [x] 2.8 验证入口文件与顶层画布文件满足工作区薄入口和单文件职责规则。
 
 ## 3. 阶段 B：生产级编排体验
 
-- [ ] 3.1 实现类型化 Handle/Port 渲染、兼容性命中提示和无效连线原因展示。
-- [ ] 3.2 实现 workflow input、node output、system、environment、secret 变量作用域解析。
-- [ ] 3.3 实现变量选择器、变量搜索、类型展示、引用插入和失效引用定位。
-- [ ] 3.4 实现节点配置变化后的端口重算，并将失效边标记为待修复而非静默删除。
-- [ ] 3.5 实现事务级 undo/redo，覆盖节点/边/配置/批量操作，至少保留 100 步。
-- [ ] 3.6 完成复制粘贴、跨工作流粘贴 id 重写、框选、多选移动和键盘快捷键。
-- [ ] 3.7 接入自动布局，支持横向/纵向方向、选中子图布局和保持用户固定节点。
-- [ ] 3.8 实现节点搜索定位、错误列表定位、容器折叠和 fit selection。
-- [ ] 3.9 完成 P0 节点的 Web inspector：Start/Input、End/Output、LLM、Tool、HTTP、Code、Condition/Switch、Template、Variable Assign/Aggregate、Knowledge Retrieval。
-- [ ] 3.10 实现发布前完整静态校验，并在画布、问题面板和字段级同时展示诊断。
-- [ ] 3.11 增加 200 节点/400 边编辑性能 fixture，开启可见元素渲染、memo 和状态 selector 优化。
-- [ ] 3.12 执行 Web 编辑器 smoke：创建、连接、变量引用、复制、撤销、自动布局、校验和 v1 导入。
+- [x] 3.1 实现类型化 Handle/Port 渲染、兼容性命中提示和无效连线原因展示。
+- [x] 3.2 实现 workflow input、node output、system、environment、secret 变量作用域解析。
+- [x] 3.3 实现变量选择器、变量搜索、类型展示、引用插入和失效引用定位。
+- [x] 3.4 实现节点配置变化后的端口重算，并将失效边标记为待修复而非静默删除。
+- [x] 3.5 实现事务级 undo/redo，覆盖节点/边/配置/批量操作，至少保留 100 步。
+- [x] 3.6 完成复制粘贴、跨工作流粘贴 id 重写、框选、多选移动和键盘快捷键。
+- [x] 3.7 接入自动布局，支持横向/纵向方向、选中子图布局和保持用户固定节点。
+- [x] 3.8 实现节点搜索定位、错误列表定位、容器折叠和 fit selection。
+- [x] 3.9 完成 P0 节点的 Web inspector：Start/Input、End/Output、LLM、Tool、HTTP、Code、Condition/Switch、Template、Variable Assign/Aggregate、Knowledge Retrieval。
+- [x] 3.10 实现发布前完整静态校验，并在画布、问题面板和字段级同时展示诊断。
+- [x] 3.11 增加 200 节点/400 边编辑性能 fixture，开启可见元素渲染、memo 和状态 selector 优化。
+- [x] 3.12 执行 Web 编辑器 smoke：创建、连接、变量引用、复制、撤销、自动布局、校验和 v1 导入。
 
 ## 4. 阶段 C：BFF 持久化与版本生命周期
 

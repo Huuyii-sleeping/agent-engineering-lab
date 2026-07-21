@@ -1,0 +1,138 @@
+import {
+  Background,
+  BackgroundVariant,
+  ConnectionMode,
+  Controls,
+  MiniMap,
+  ReactFlow,
+  type Edge,
+  type Node,
+} from "@xyflow/react";
+import { useRef } from "react";
+import type { WorkflowDraft } from "@orbit/workflow-core";
+import { SopConnectionLine, SopEdge } from "../../components/SopEdge";
+import { SopNodeView } from "../../components/SopNodeView";
+import { getSopNodeMeta } from "../../lib/sop-catalog";
+import { useSopEditor } from "../use-sop-editor";
+import type { SopFlowData, SopFlowEdgeData } from "../sop-flow-adapter";
+import { SopAlignmentOverlay } from "./SopAlignmentOverlay";
+import { SopInspector } from "./SopInspector";
+import { SopPalette } from "./SopPalette";
+import { SopToolbar } from "./SopToolbar";
+
+const nodeTypes = { sop: SopNodeView };
+const edgeTypes = { sop: SopEdge };
+
+/** SOP 编辑器外壳，负责组合画布、工具栏、节点库和检查器。 */
+export function SopCanvasShell({ initial, legacyBackup, onSave, onBack }: {
+  initial: WorkflowDraft;
+  legacyBackup: string | null;
+  onSave: (draft: WorkflowDraft) => void;
+  onBack: () => void;
+}) {
+  const editor = useSopEditor(initial);
+  const lastConnectionCheck = useRef<{ valid: boolean; reason?: string } | null>(null);
+  return (
+    <div className="sop-wrap">
+      <SopPalette onAdd={editor.addNodeOfType} />
+      <div className="sop-workspace">
+        <SopToolbar
+          name={editor.name}
+          summary={editor.summary}
+          dirtyRevision={editor.dirtyRevision}
+          debugState={editor.debugState}
+          legacyBackup={legacyBackup}
+          onNameChange={editor.setName}
+          onSummaryChange={editor.setSummary}
+          onBack={onBack}
+          onValidate={editor.runValidation}
+          onSave={() => onSave(editor.currentDraft())}
+          onExportJson={editor.openJsonExport}
+          onImportText={(text) => { editor.setJsonText(text); editor.setJsonError(null); editor.setShowJsonPanel(true); }}
+          canUndo={editor.canUndo}
+          canRedo={editor.canRedo}
+          searchQuery={editor.searchQuery}
+          searchCount={editor.searchMatches.length}
+          onSearchChange={editor.setSearchQuery}
+          onFocusSearch={() => { const match = editor.searchMatches[0]; if (match) editor.focusNode(match.id); }}
+          onUndo={editor.undo}
+          onRedo={editor.redo}
+          onLayout={editor.autoLayout}
+          onFitSelection={editor.fitSelection}
+          onTogglePin={editor.toggleSelectedPinned}
+        />
+        <div className="sop-workspace-body">
+          <div className="sop-main">
+            <div className="sop-canvas" onDragOver={editor.onDragOver} onDrop={editor.onDrop}>
+              <ReactFlow<Node<SopFlowData>, Edge<SopFlowEdgeData>>
+                nodes={editor.nodes}
+                edges={editor.edges}
+                nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
+                onNodesChange={editor.onNodesChange}
+                onEdgesChange={editor.onEdgesChange}
+                onConnect={editor.onConnect}
+                isValidConnection={(connection) => {
+                  const result = editor.checkConnection(connection);
+                  lastConnectionCheck.current = result;
+                  return result.valid;
+                }}
+                onConnectStart={() => editor.setConnectionHint(null)}
+                onConnectEnd={() => {
+                  const result = lastConnectionCheck.current;
+                  if (result && !result.valid) editor.setConnectionHint(result.reason ?? "连线不兼容。");
+                }}
+                connectionMode={ConnectionMode.Loose}
+                onSelectionChange={({ nodes, edges }) => { editor.setSelectedNodeIds(new Set(nodes.map((node) => node.id))); editor.setSelectedEdgeIds(new Set(edges.map((edge) => edge.id))); }}
+                onPaneClick={() => { editor.setSelectedNodeIds(new Set()); editor.setSelectedEdgeIds(new Set()); }}
+                onNodeDrag={editor.onNodeDrag}
+                onNodeDragStart={editor.onNodeDragStart}
+                onNodeDragStop={editor.onNodeDragStop}
+                multiSelectionKeyCode="Shift"
+                selectionOnDrag
+                panOnDrag={[1, 2]}
+                deleteKeyCode={null}
+                fitView
+                defaultEdgeOptions={{ type: "sop" }}
+                connectionRadius={40}
+                connectionLineType="smoothstep"
+                connectionLineComponent={SopConnectionLine}
+                connectionLineStyle={{ stroke: "#22c55e", strokeWidth: 2.2, strokeDasharray: "6 4" }}
+                proOptions={{ hideAttribution: true }}
+                onlyRenderVisibleElements
+              >
+                <Background variant={BackgroundVariant.Lines} gap={24} size={1} color="rgba(255,255,255,0.07)" />
+                <Controls showInteractive={false} />
+                <MiniMap pannable zoomable nodeColor={(node) => getSopNodeMeta((node.data as SopFlowData).node.type).color} maskColor="rgba(0,0,0,0.35)" />
+                <SopAlignmentOverlay guides={editor.alignLines} />
+              </ReactFlow>
+              {editor.connectionHint ? <div className="sop-connection-hint">{editor.connectionHint}</div> : null}
+            </div>
+          </div>
+          <SopInspector
+            showJson={editor.showJsonPanel}
+            name={editor.name}
+            jsonText={editor.jsonText}
+            jsonError={editor.jsonError}
+            selectedNodeIds={editor.selectedNodeIds}
+            selectedNode={editor.selectedNode}
+            selectedEdge={editor.selectedEdge}
+            validation={editor.validation}
+            availableVariables={editor.availableVariables}
+            selectedDiagnostics={editor.selectedDiagnostics}
+            onJsonTextChange={(text) => { editor.setJsonText(text); editor.setJsonError(null); }}
+            onImportJson={editor.importJson}
+            onCloseJson={() => editor.setShowJsonPanel(false)}
+            onUpdateNode={editor.updateSelectedNode}
+            onUpdateEdgeLabel={editor.updateSelectedEdgeLabel}
+            onDelete={editor.deleteSelected}
+            onDuplicate={editor.duplicateSelected}
+            onClearValidation={editor.clearValidation}
+            onFocusNode={editor.focusNode}
+            onToggleCollapsed={editor.toggleSelectedCollapsed}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}

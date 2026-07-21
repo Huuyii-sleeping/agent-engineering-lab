@@ -1,2 +1,9 @@
 packages:
   - "apps/*"
+  - "packages/*"
+
+allowBuilds:
+  better-sqlite3: true
+
+onlyBuiltDependencies:
+  - "better-sqlite3"

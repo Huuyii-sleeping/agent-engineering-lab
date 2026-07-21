@@ -1,103 +1,65 @@
-import type { SopDraft } from "./sop-types";
+import {
+  checkPortConnection,
+  findCycle,
+  findReachableNodeIds,
+  isVariableRefAvailable,
+  validateNodeConfig,
+  type VariableRef,
+  type WorkflowDiagnostic,
+  type WorkflowDraft,
+} from "@orbit/workflow-core";
 
-/** DAG 校验结果。 */
-export type SopValidation = {
-  ok: boolean;
-  errors: string[];
-  warnings: string[];
-};
+/** 发布前静态校验结果。 */
+export type SopValidation = { ok: boolean; errors: string[]; warnings: string[]; diagnostics: WorkflowDiagnostic[] };
 
-/**
- * 校验 SOP 草稿是否构成合法的有向无环图（DAG）。
- * 规则：单一开始节点、从开始可达、无悬挂节点、无环、至少含一个结束节点。
- */
-export function validateSop(draft: SopDraft): SopValidation {
-  const errors: string[] = [];
-  const warnings: string[] = [];
-  const nodes = draft.nodes;
-  const edges = draft.edges;
-
-  if (nodes.length === 0) {
-    return { ok: false, errors: ["画布为空，请先添加节点。"], warnings };
+function collectVariableRefs(value: unknown, refs: VariableRef[] = []): VariableRef[] {
+  if (!value || typeof value !== "object") return refs;
+  const record = value as Record<string, unknown>;
+  if (record.kind === "variable" && record.ref && typeof record.ref === "object") {
+    refs.push(record.ref as VariableRef);
+    return refs;
   }
-
-  const startNodes = nodes.filter((node) => node.type === "start");
-  if (startNodes.length === 0) {
-    errors.push("缺少「开始」节点，流程无法启动。");
-  } else if (startNodes.length > 1) {
-    errors.push(`存在 ${startNodes.length} 个「开始」节点，只能有 1 个。`);
+  if (typeof record.scope === "string" && ["workflow-input", "node-output", "system", "environment", "secret", "loop"].includes(record.scope)) {
+    refs.push(record as VariableRef);
+    return refs;
   }
+  for (const child of Array.isArray(value) ? value : Object.values(record)) collectVariableRefs(child, refs);
+  return refs;
+}
 
-  const endNodes = nodes.filter((node) => node.type === "end");
-  if (endNodes.length === 0) {
-    warnings.push("缺少「结束」节点，流程没有明确的出口。");
-  }
+const diagnostic = (code: string, severity: "error" | "warning", message: string, location: WorkflowDiagnostic["location"]): WorkflowDiagnostic => ({ code, severity, message, location });
 
-  // 邻接表
-  const adjacency = new Map<string, string[]>();
-  for (const node of nodes) {
-    adjacency.set(node.id, []);
+/** 校验图结构、节点配置、端口、变量、必填输入和首期资源上限。 */
+export function validateSop(draft: WorkflowDraft): SopValidation {
+  const diagnostics: WorkflowDiagnostic[] = [];
+  if (draft.nodes.length === 0) diagnostics.push(diagnostic("workflow.empty", "error", "画布为空，请先添加节点。", { kind: "workflow" }));
+  if (draft.nodes.length > 200) diagnostics.push(diagnostic("workflow.node-limit", "error", `节点数 ${draft.nodes.length} 超过上限 200。`, { kind: "workflow" }));
+  if (draft.edges.length > 400) diagnostics.push(diagnostic("workflow.edge-limit", "error", `连边数 ${draft.edges.length} 超过上限 400。`, { kind: "workflow" }));
+
+  const starts = draft.nodes.filter((node) => node.type === "start");
+  if (starts.length !== 1) diagnostics.push(diagnostic("workflow.start-count", "error", starts.length === 0 ? "缺少「开始」节点，流程无法启动。" : `存在 ${starts.length} 个「开始」节点，只能有 1 个。`, { kind: "workflow" }));
+  if (!draft.nodes.some((node) => node.type === "end")) diagnostics.push(diagnostic("workflow.missing-end", "warning", "缺少「结束」节点，流程没有明确出口。", { kind: "workflow" }));
+
+  if (starts.length > 0) {
+    const reachable = findReachableNodeIds(draft.nodes, draft.edges, starts.map((node) => node.id));
+    for (const node of draft.nodes) if (!reachable.has(node.id)) diagnostics.push(diagnostic("node.unreachable", "error", `节点「${node.label}」无法从开始节点到达。`, { kind: "node", nodeId: node.id }));
   }
-  for (const edge of edges) {
-    if (!adjacency.has(edge.source) || !adjacency.has(edge.target)) {
-      errors.push("存在指向不存在节点的连边。");
-      continue;
+  const cycle = findCycle(draft.nodes, draft.edges);
+  if (cycle) diagnostics.push(diagnostic("workflow.cycle", "error", `流程存在环：${cycle.join(" → ")}。`, { kind: "workflow" }));
+
+  for (const edge of draft.edges) {
+    const result = checkPortConnection(draft.nodes, edge.source, edge.target);
+    if (!result.valid) diagnostics.push(diagnostic("edge.invalid-port", "error", result.reason, { kind: "edge", edgeId: edge.id }));
+  }
+  for (const node of draft.nodes) {
+    diagnostics.push(...validateNodeConfig(node));
+    for (const port of node.ports.inputs.filter((item) => item.required)) {
+      if (!draft.edges.some((edge) => edge.target.nodeId === node.id && edge.target.portId === port.id && edge.status !== "needs-repair")) diagnostics.push(diagnostic("port.required", "error", `必填输入「${port.name}」尚未连接。`, { kind: "port", nodeId: node.id, portId: port.id }));
     }
-    adjacency.get(edge.source)!.push(edge.target);
+    const config = node.kind === "builtin" ? node.config : node.original;
+    for (const ref of collectVariableRefs(config)) if (!isVariableRefAvailable(draft, node.id, ref, { system: [{ key: "runId", dataType: "string" }, { key: "currentTime", dataType: "string" }], environment: [{ key: "ORBIT_ENV", dataType: "string" }] })) diagnostics.push(diagnostic("variable.unavailable", "error", "变量引用不可达、已失效或不在当前作用域。", { kind: "node", nodeId: node.id }));
   }
-
-  // 从所有开始节点做可达性 BFS
-  const reachable = new Set<string>();
-  const queue = startNodes.map((node) => node.id);
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    if (reachable.has(current)) continue;
-    reachable.add(current);
-    for (const next of adjacency.get(current) ?? []) {
-      if (!reachable.has(next)) queue.push(next);
-    }
-  }
-
-  const unreachable = nodes.filter((node) => !reachable.has(node.id));
-  if (unreachable.length > 0) {
-    const names = unreachable.map((node) => node.label || node.id).join("、");
-    errors.push(`存在无法从开始节点到达的节点：${names}。`);
-  }
-
-  // 环检测（DFS 三色标记）
-  const WHITE = 0;
-  const GRAY = 1;
-  const BLACK = 2;
-  const color = new Map<string, number>(nodes.map((node) => [node.id, WHITE]));
-  let hasCycle = false;
-  const visit = (id: string): void => {
-    color.set(id, GRAY);
-    for (const next of adjacency.get(id) ?? []) {
-      const state = color.get(next) ?? WHITE;
-      if (state === GRAY) {
-        hasCycle = true;
-        return;
-      }
-      if (state === WHITE) {
-        visit(next);
-        if (hasCycle) return;
-      }
-    }
-    color.set(id, BLACK);
-  };
-  for (const node of nodes) {
-    if (color.get(node.id) === WHITE) {
-      visit(node.id);
-      if (hasCycle) break;
-    }
-  }
-  if (hasCycle) {
-    errors.push("流程存在环（循环依赖），必须是有向无环图。");
-  }
-
-  return {
-    ok: errors.length === 0,
-    errors,
-    warnings,
-  };
+  const errors = diagnostics.filter((item) => item.severity === "error").map((item) => item.message);
+  const warnings = diagnostics.filter((item) => item.severity === "warning").map((item) => item.message);
+  return { ok: errors.length === 0, errors, warnings, diagnostics };
 }

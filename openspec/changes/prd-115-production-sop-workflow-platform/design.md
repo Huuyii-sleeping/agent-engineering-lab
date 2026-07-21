@@ -92,6 +92,8 @@ BFF 新增 workflow repository，默认使用 SQLite WAL、显式迁移和事务
 
 驱动优先选择成熟的 `better-sqlite3`，在实施第一阶段先完成 Node 22 / macOS / Linux 构建兼容性验证；Repository 接口允许替换驱动。
 
+实施兼容性 spike（2026-07-20）结论：采用 `better-sqlite3@12.11.1`。已在 macOS arm64 / Node 22.23.1 和 Linux arm64（`node:22-bookworm-slim`）完成原生依赖安装、内存数据库建表、参数化写入和查询，SQLite 版本均为 3.53.2；同时在当前 macOS / Node 24.16.0 验证通过。仓库通过 `pnpm-workspace.yaml` 同时声明 `allowBuilds` 与 `onlyBuiltDependencies`，兼容当前本地 pnpm 构建策略和官方 pnpm 10 CI 的原生依赖许可。BFF smoke 将持续验证事务读写。已确认原生模块绑定 Node ABI，因此切换 Node 大版本后必须重新执行 `pnpm install`，不得复用其他 Node ABI 生成的 `node_modules`。
+
 备选：继续写单个 JSON 文件。未采用，因为发布、运行事件、并发写入和恢复需要事务与查询能力。
 
 ### 8. 变量系统使用显式作用域与类型

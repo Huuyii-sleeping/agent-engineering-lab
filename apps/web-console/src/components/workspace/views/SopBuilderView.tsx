@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { SopList } from "../../../features/sop/components/SopList";
 import { SopCanvas } from "../../../features/sop/components/SopCanvas";
-import { createSopDraft, listSopDrafts, writeSopDrafts } from "../../../features/sop/lib/sop-store";
+import { createSopDraft, listSopDrafts, readLegacySopBackup, writeSopDrafts } from "../../../features/sop/lib/sop-store";
 import type { SopDraft } from "../../../features/sop/lib/sop-types";
 
 /** SOP Builder 入口：列表页（默认）与 DAG 画布编辑器二选一。 */
@@ -9,10 +9,12 @@ export function SopBuilderView({ active, query }: { active: boolean; query: stri
   const [drafts, setDrafts] = useState<SopDraft[]>([]);
   const [mode, setMode] = useState<"list" | "canvas">("list");
   const [editing, setEditing] = useState<SopDraft | null>(null);
+  const [legacyBackup, setLegacyBackup] = useState<string | null>(null);
 
   useEffect(() => {
     if (active) {
       setDrafts(listSopDrafts(window.localStorage));
+      setLegacyBackup(readLegacySopBackup(window.localStorage));
     }
   }, [active]);
 
@@ -51,7 +53,7 @@ export function SopBuilderView({ active, query }: { active: boolean; query: stri
   if (mode === "canvas" && editing) {
     return (
       <section className={`view-pad builder-canvas ${active ? "" : "view-hide"}`} data-view="builder" data-mode="canvas">
-        <SopCanvas key={editing.id} initial={editing} onSave={handleSave} onBack={handleBack} />
+        <SopCanvas key={editing.id} initial={editing} legacyBackup={legacyBackup} onSave={handleSave} onBack={handleBack} />
       </section>
     );
   }

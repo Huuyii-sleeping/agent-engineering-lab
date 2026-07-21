@@ -69,6 +69,7 @@ export function SopEdge({
   sourceHandleId,
   label,
   selected,
+  data,
 }: EdgeProps) {
   const [path, labelX, labelY] = getSmoothStepPath({
     sourceX,
@@ -81,7 +82,8 @@ export function SopEdge({
   });
 
   const isFalse = sourceHandleId === "false";
-  const stroke = selected ? "#ffffff" : isFalse ? "#f43f5e" : "#64748b";
+  const needsRepair = (data as { status?: string } | undefined)?.status === "needs-repair";
+  const stroke = selected ? "#ffffff" : needsRepair || isFalse ? "#f43f5e" : "#64748b";
   const width = selected ? 2.4 : 1.6;
   const glowColor = "#ffffff";
 
@@ -109,6 +111,7 @@ export function SopEdge({
           stroke,
           strokeWidth: width,
           transition: "stroke 120ms ease, stroke-width 120ms ease",
+          strokeDasharray: needsRepair ? "5 4" : undefined,
         }}
       />
       {/* 手绘箭头：尖端 = targetX/Y = Handle 圆心 */}

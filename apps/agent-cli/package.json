@@ -38,6 +38,7 @@
     "release:check": "tsx test/smoke/release-gate.ts"
   },
   "dependencies": {
+    "@orbit/workflow-core": "workspace:*",
     "dotenv": "^17.2.0",
     "ink": "^7.0.3",
     "openai": "^6.0.0",

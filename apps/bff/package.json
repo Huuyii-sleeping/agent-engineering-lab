@@ -10,15 +10,18 @@
     "test": "vitest run --no-cache"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.0.0",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0",
     "vitest": "^2.0.5"
   },
   "dependencies": {
+    "@orbit/workflow-core": "workspace:*",
     "@nestjs/common": "^11.1.27",
     "@nestjs/core": "^11.1.27",
     "@nestjs/platform-express": "^11.1.27",
+    "better-sqlite3": "12.11.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2"
   }

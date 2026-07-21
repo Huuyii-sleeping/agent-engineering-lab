@@ -19,6 +19,7 @@
     "test:skill-registry": "pnpm --filter skill-registry test",
     "docker:skill-registry": "docker compose -f compose.skill-registry.yaml up --build",
     "dev:web": "pnpm --filter agent-web-console dev",
-    "build:web": "pnpm --filter agent-web-console build"
+    "build:web": "pnpm --filter agent-web-console build",
+    "check:workflow-boundaries": "node scripts/check-workflow-boundaries.mjs"
   }
 }

@@ -1,116 +1,64 @@
+import { memo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { SOP_TYPE_META } from "../lib/sop-catalog";
-import type { SopNodeType } from "../lib/sop-types";
+import { getSopNodeMeta } from "../lib/sop-catalog";
+import type { SopFlowData } from "../editor/sop-flow-adapter";
 
-/** React Flow 节点上承载的自定义数据。 */
-export type SopFlowData = {
-  type: SopNodeType;
-  label: string;
-  model?: string;
-  condition?: string;
-  note?: string;
-  /* AI 节点 */
-  temperature?: number;
-  systemPrompt?: string;
-  /* 条件节点 */
-  threshold?: number;
-  operator?: ">=" | "<=" | "==" | "!=" | ">" | "<";
-  variable?: string;
-  /* 处理节点 */
-  steps?: string;
-  timeoutMs?: number;
-  retries?: number;
-  /* 工具调用节点 */
-  toolName?: string;
-  params?: string;
-  /* 开始节点（触发器） */
-  trigger?: "manual" | "webhook" | "schedule" | "event";
-  webhookPath?: string;
-  cronExpr?: string;
-  /* 结束节点（输出） */
-  outputMode?: "result" | "notify" | "callback" | "store";
-  callbackUrl?: string;
-  notifyChannel?: string;
-};
+function portOffset(index: number, count: number): string {
+  return `${((index + 1) / (count + 1)) * 100}%`;
+}
 
-/**
- * SOP 自定义节点：按类型着色，展示名称与关键标签。
- * Handle 布局（模仿飞书画板）：
- *   start   — 仅底部出口
- *   end     — 仅顶部入口
- *   condition— 顶入口 + 底部双出口(是/否) + 左右出口
- *   其他    — 四边全有(顶=入口,底/左/右=出口)
- */
-export function SopNodeView({ data, selected }: NodeProps) {
-  const d = data as SopFlowData;
-  const meta = SOP_TYPE_META[d.type];
+/** React Flow 节点只负责将 workflow-core 的类型化端口渲染为 Handle。 */
+function SopNodeViewComponent({ data, selected }: NodeProps) {
+  const { node, collapsed, issueCount } = data as unknown as SopFlowData;
+  const meta = getSopNodeMeta(node.type);
   const Icon = meta.icon;
-  const isCondition = d.type === "condition";
-  const isStart = d.type === "start";
-  const isEnd = d.type === "end";
+  const inputs = node.ports.inputs;
+  const outputs = node.ports.outputs;
 
   return (
     <div className={`sop-node ${selected ? "on" : ""}`} style={{ borderColor: meta.color }}>
-      {/* ===== 入口 Handle ===== */}
-      {/* 顶部入口（除 start 外所有节点都有） */}
-      {!isStart && (
-        <Handle type="target" position={Position.Top} id="in-t" className="sop-h sop-h--top" />
-      )}
-      {/* 左侧入口（非 start/end 的中间节点） */}
-      {!isStart && !isEnd && (
-        <Handle type="target" position={Position.Left} id="in-l" className="sop-h sop-h--left" />
-      )}
+      {inputs.map((port, index) => (
+        <Handle
+          key={`input-${port.id}`}
+          type="target"
+          position={Position.Top}
+          id={port.id}
+          className="sop-h sop-h--top"
+          style={{ left: portOffset(index, inputs.length) }}
+          title={`${port.name}${port.required ? "（必填）" : ""} · ${port.dataType}`}
+        />
+      ))}
 
-      {/* ===== 节点内容 ===== */}
       <div className="sop-node-h" style={{ color: meta.color }}>
         <Icon width={13} height={13} aria-hidden="true" />
         <span>{meta.label}</span>
       </div>
+      <div className="sop-node-label">{node.label}</div>
+      {issueCount ? <div className="sop-node-issue">{issueCount}</div> : null}
+      {!collapsed && node.kind === "builtin" && node.type === "llm" ? <div className="sop-node-tag">{node.config.model}</div> : null}
+      {!collapsed && node.kind === "builtin" && node.type === "condition" ? <div className="sop-node-tag">if {node.config.expression}</div> : null}
+      {!collapsed && node.description ? <div className="sop-node-note">{node.description}</div> : null}
+      {node.kind === "unknown" ? <div className="sop-node-tag">未安装节点</div> : null}
 
-      <div className="sop-node-label">{d.label}</div>
-
-      {d.type === "ai" && d.model ? <div className="sop-node-tag">{d.model}</div> : null}
-      {isCondition && d.condition ? <div className="sop-node-tag">if {d.condition}</div> : null}
-      {d.note ? <div className="sop-node-note">{d.note}</div> : null}
-
-      {/* ===== 出口 Handle ===== */}
-
-      {/* 右侧出口（非 start/end 中间节点） */}
-      {!isStart && !isEnd && (
-        <Handle type="source" position={Position.Right} id="out-r" className="sop-h sop-h--right" />
-      )}
-
-      {/* 底部出口（end 节点无出口） */}
-      {!isEnd && !isCondition && (
-        <Handle type="source" position={Position.Bottom} id="out-b" className="sop-h sop-h--bottom" />
-      )}
-
-      {/* 条件节点特殊：底部双出口 + 是/否标签 */}
-      {isCondition && (
-        <>
-          <Handle
-            type="source"
-            position={Position.Bottom}
-            id="true"
-            className="sop-h sop-h--bottom sop-h--cond-yes"
-            style={{ left: "30%" }}
-          />
-          <Handle
-            type="source"
-            position={Position.Bottom}
-            id="false"
-            className="sop-h sop-h--bottom sop-h--cond-no"
-            style={{ left: "70%" }}
-          />
-          <span className="sop-branch sop-branch--t">是</span>
-          <span className="sop-branch sop-branch--f">否</span>
-        </>
-      )}
-
-      {/* start 节点仅底部单出口 */}
-      {isStart && (
-        <Handle type="source" position={Position.Bottom} id="start-out" className="sop-h sop-h--bottom" />
-      )}
+      {outputs.map((port, index) => (
+        <span key={`output-label-${port.id}`} className="sop-branch" style={{ left: portOffset(index, outputs.length) }}>
+          {port.name}
+        </span>
+      ))}
+      {outputs.map((port, index) => (
+        <Handle
+          key={`output-${port.id}`}
+          type="source"
+          position={Position.Bottom}
+          id={port.id}
+          className="sop-h sop-h--bottom"
+          style={{ left: portOffset(index, outputs.length) }}
+          title={`${port.name} · ${port.dataType}`}
+        />
+      ))}
     </div>
   );
 }
+
+/** 仅在节点数据或选择状态变化时重渲染。 */
+export const SopNodeView = memo(SopNodeViewComponent);
