@@ -7,6 +7,7 @@ import {
   createSopDraftRemote,
   createSession,
   createAgentEventStream,
+  createWorkflowRunEventStream,
   deleteAgentProfile,
   deleteSopDraftRemote,
   downloadSkill,
@@ -27,9 +28,12 @@ import {
   installSkill,
   previewSopImport,
   publishSopDraft,
+  cancelWorkflowRun,
   rollbackSkill,
   resolveAgentSkills,
   saveSopDraftRemote,
+  startWorkflowRun,
+  fetchWorkflowRun,
   sendSessionMessage,
   sendSessionMessageStream,
   syncSkillRegistry,
@@ -98,6 +102,30 @@ describe("web-console api client", () => {
       data: { id: 3, payload: { session_id: "s1" } },
     });
     expect(source.close).toHaveBeenCalledOnce();
+  });
+
+  it("工作流事件流按 id 去重并在终态关闭", () => {
+    const listeners = new Map<string, (event: MessageEvent<string>) => void>();
+    let source: FakeEventSource | undefined;
+    class FakeEventSource {
+      onopen: ((event: Event) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      constructor(readonly url: string) { source = this; }
+      addEventListener(type: string, listener: (event: MessageEvent<string>) => void): void { listeners.set(type, listener); }
+      close = vi.fn();
+    }
+    const onEvent = vi.fn();
+    const onTerminal = vi.fn();
+    createWorkflowRunEventStream({ runId: "run-1", sinceId: 4, eventSourceCtor: FakeEventSource, onEvent, onTerminal });
+    const running = JSON.stringify({ id: 5, runId: "run-1", at: 1, type: "run.status", status: "running" });
+    listeners.get("run.status")?.(new MessageEvent("run.status", { data: running, lastEventId: "5" }));
+    listeners.get("run.status")?.(new MessageEvent("run.status", { data: running, lastEventId: "5" }));
+    listeners.get("run.status")?.(new MessageEvent("run.status", { data: JSON.stringify({ id: 6, runId: "run-1", at: 2, type: "run.status", status: "succeeded" }), lastEventId: "6" }));
+
+    expect(source?.url).toBe("/api/workflow-runs/run-1/events?since_id=4");
+    expect(onEvent).toHaveBeenCalledTimes(2);
+    expect(onTerminal).toHaveBeenCalledOnce();
+    expect(source?.close).toHaveBeenCalledOnce();
   });
 
   it("calls BFF health, session, and message endpoints", async () => {
@@ -236,6 +264,28 @@ describe("web-console api client", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ expectedRevision: 1, releaseNotes: "首版" }),
+    });
+  });
+
+  it("调用工作流启动、查询和取消 API", async () => {
+    const draft = createSopDraft("运行 API");
+    const run = { id: "run-1", workflowId: draft.id, mode: "draft", status: "queued", createdAt: 1, inputs: {}, nodeRuns: {} };
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(String(input), "http://localhost");
+      if (init?.method === "POST" && url.pathname === "/api/workflow-runs") return jsonResponse({ ok: true, data: run }, 201);
+      if (init?.method === "POST" && url.pathname === "/api/workflow-runs/run-1/cancel") return jsonResponse({ ok: true, data: run }, 202);
+      if ((init?.method ?? "GET") === "GET" && url.pathname === "/api/workflow-runs/run-1") return jsonResponse({ ok: true, data: run });
+      return jsonResponse({ ok: false }, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(startWorkflowRun({ workflowId: draft.id, mode: "draft", draft })).resolves.toMatchObject({ id: "run-1", mode: "draft" });
+    await expect(fetchWorkflowRun("run-1")).resolves.toMatchObject({ id: "run-1" });
+    await expect(cancelWorkflowRun("run-1")).resolves.toMatchObject({ id: "run-1" });
+    expect(fetchMock).toHaveBeenCalledWith("/api/workflow-runs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workflowId: draft.id, mode: "draft", draft }),
     });
   });
 

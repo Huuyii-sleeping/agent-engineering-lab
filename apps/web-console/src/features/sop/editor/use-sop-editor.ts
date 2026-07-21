@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type DragEvent } from "react";
 import { addEdge, applyEdgeChanges, applyNodeChanges, useReactFlow, type Connection, type Edge, type Node, type OnEdgesChange, type OnNodeDrag, type OnNodesChange } from "@xyflow/react";
-import { builtinNodeRegistry, getAvailableVariables, migrateSopDraftV1, refreshNodePorts, type BuiltinNodeType, type WorkflowDraft, type WorkflowNode } from "@orbit/workflow-core";
+import { builtinNodeRegistry, getAvailableVariables, migrateSopDraftV1, refreshNodePorts, type BuiltinNodeType, type WorkflowDraft, type WorkflowNode, type WorkflowRuntimeEvent } from "@orbit/workflow-core";
 import { getSopAlignmentSnap, type SopAlignmentGuide, type SopNodeBox, type SopNodeSize } from "../lib/sop-alignment";
 import { validateSop, type SopValidation } from "../lib/sop-validate";
 import { buildWorkflowDraft, parseWorkflowDraftJson, toFlowEdges, toFlowNodes, type SopFlowData, type SopFlowEdgeData } from "./sop-flow-adapter";
@@ -173,6 +173,35 @@ export function useSopEditor(initial: WorkflowDraft) {
     setDebugState(result.ok ? { status: "ready", message: "发布前校验通过" } : { status: "error", message: `${result.errors.length} 个阻断问题` });
   }, [currentDraft]);
   const clearValidation = useCallback(() => { setValidation(null); setDebugState({ status: "idle" }); setNodes((current) => current.map((node) => ({ ...node, data: { ...node.data, issueCount: 0 } }))); }, []);
+  const clearRunState = useCallback(() => {
+    setNodes((current) => current.map((node) => ({ ...node, data: { ...node.data, runStatus: undefined, runAttempt: undefined } })));
+    setEdges((current) => current.map((edge) => ({ ...edge, data: { ...edge.data, runtimeActive: false, runtimeTraversed: false, runtimeExcluded: false } })));
+  }, []);
+  const applyRunEvent = useCallback((event: WorkflowRuntimeEvent) => {
+    if (event.type === "node.output" && typeof event.output.selected === "string") {
+      setEdges((current) => current.map((edge) => edge.source === event.nodeId
+        ? { ...edge, data: { ...edge.data, runtimeExcluded: edge.sourceHandle !== event.output.selected } }
+        : edge));
+      return;
+    }
+    if (event.type !== "node.status") return;
+    setNodes((current) => current.map((node) => node.id === event.nodeId
+      ? { ...node, data: { ...node.data, runStatus: event.status, runAttempt: event.attempt } }
+      : node));
+    if (event.status === "running" || event.status === "waiting") {
+      setEdges((current) => current.map((edge) => edge.target === event.nodeId && edge.data?.runtimeExcluded !== true
+        ? { ...edge, data: { ...edge.data, runtimeActive: true } }
+        : edge));
+    } else if (["succeeded", "failed", "cancelled"].includes(event.status)) {
+      setEdges((current) => current.map((edge) => edge.target === event.nodeId && edge.data?.runtimeExcluded !== true
+        ? { ...edge, data: { ...edge.data, runtimeActive: false, runtimeTraversed: true } }
+        : edge));
+    } else if (event.status === "skipped") {
+      setEdges((current) => current.map((edge) => edge.target === event.nodeId
+        ? { ...edge, data: { ...edge.data, runtimeActive: false } }
+        : edge));
+    }
+  }, []);
   const openJsonExport = useCallback(() => { setJsonText(JSON.stringify(currentDraft(), null, 2)); setJsonError(null); setShowJsonPanel(true); }, [currentDraft]);
   const importJson = useCallback(() => {
     try {
@@ -206,5 +235,6 @@ export function useSopEditor(initial: WorkflowDraft) {
     onNodesChange, onEdgesChange, onConnect, checkConnection, addNodeOfType, onDragOver, onDrop, onNodeDragStart, onNodeDrag, onNodeDragStop,
     updateSelectedNode, updateSelectedEdgeLabel, deleteSelected, duplicateSelected, copySelected, pasteSelected, undo, redo, autoLayout,
     toggleSelectedPinned, toggleSelectedCollapsed, focusNode, fitSelection, runValidation, currentDraft, openJsonExport, importJson, clearValidation,
+    clearRunState, applyRunEvent,
   };
 }

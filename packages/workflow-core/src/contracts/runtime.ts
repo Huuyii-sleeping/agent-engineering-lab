@@ -16,6 +16,37 @@ export type WorkflowRuntimeError = {
   details?: Record<string, unknown>;
 };
 
+/** 跨 Agent、BFF 和 Web 共享的节点运行快照。 */
+export type WorkflowNodeRunSnapshot = {
+  nodeId: string;
+  status: WorkflowNodeRunStatus;
+  attempt: number;
+  startedAt?: number;
+  finishedAt?: number;
+  durationMs?: number;
+  input?: Record<string, unknown>;
+  output?: Record<string, unknown>;
+  error?: WorkflowRuntimeError;
+  handledError?: boolean;
+};
+
+/** 跨控制面共享的工作流运行快照。 */
+export type WorkflowRunSnapshot = {
+  id: string;
+  workflowId: string;
+  versionId?: string;
+  contentHash?: string;
+  mode: WorkflowRunMode;
+  status: WorkflowRunStatus;
+  createdAt: number;
+  startedAt?: number;
+  finishedAt?: number;
+  inputs: Record<string, unknown>;
+  output?: Record<string, unknown>;
+  error?: WorkflowRuntimeError;
+  nodeRuns: Record<string, WorkflowNodeRunSnapshot>;
+};
+
 type RuntimeEventBase = {
   id: number;
   runId: string;

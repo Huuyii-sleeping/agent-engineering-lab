@@ -76,7 +76,7 @@ export class WorkflowScheduler {
     if (signal.aborted) return this.cancelRemaining(run, ir, events);
     this.setRunStatus(run, "running", events);
     run.startedAt = Date.now();
-    const inputError = this.validateInputs(ir, run.inputs);
+    const inputError = input.targetNodeId ? undefined : this.validateInputs(ir, run.inputs);
     if (inputError) {
       run.error = inputError;
       this.setRunStatus(run, "failed", events, inputError);

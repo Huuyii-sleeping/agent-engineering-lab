@@ -1,8 +1,8 @@
 import type {
-  WorkflowNodeRunStatus,
+  WorkflowDraft,
   WorkflowRunMode,
-  WorkflowRunStatus,
-  WorkflowRuntimeError,
+  WorkflowNodeRunSnapshot,
+  WorkflowRunSnapshot,
   WorkflowRuntimeEvent,
 } from "@orbit/workflow-core";
 
@@ -11,40 +11,14 @@ export type StartWorkflowRunInput = {
   workflowId: string;
   mode: WorkflowRunMode;
   versionId?: string;
+  draft?: WorkflowDraft;
   inputs?: Record<string, unknown>;
   targetNodeId?: string;
   nodeInputs?: Record<string, unknown>;
 };
 
 /** BFF 持久化的节点运行快照。 */
-export type WorkflowNodeRunSnapshot = {
-  nodeId: string;
-  status: WorkflowNodeRunStatus;
-  attempt: number;
-  startedAt?: number;
-  finishedAt?: number;
-  durationMs?: number;
-  input?: Record<string, unknown>;
-  output?: Record<string, unknown>;
-  error?: WorkflowRuntimeError;
-};
-
-/** Agent 返回且由 BFF 建立索引的运行快照。 */
-export type WorkflowRunSnapshot = {
-  id: string;
-  workflowId: string;
-  versionId?: string;
-  contentHash?: string;
-  mode: WorkflowRunMode;
-  status: WorkflowRunStatus;
-  createdAt: number;
-  startedAt?: number;
-  finishedAt?: number;
-  inputs: Record<string, unknown>;
-  output?: Record<string, unknown>;
-  error?: WorkflowRuntimeError;
-  nodeRuns: Record<string, WorkflowNodeRunSnapshot>;
-};
+export type { WorkflowNodeRunSnapshot, WorkflowRunSnapshot };
 
 /** Repository 只保存 Agent 产生的运行事实，不执行节点。 */
 export interface WorkflowRunsRepository {

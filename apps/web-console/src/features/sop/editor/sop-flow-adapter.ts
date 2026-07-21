@@ -1,6 +1,7 @@
 import type { Edge, Node } from "@xyflow/react";
 import {
   WORKFLOW_SCHEMA_VERSION,
+  type WorkflowNodeRunStatus,
   type WorkflowDraft,
   type WorkflowEdge,
   type WorkflowNode,
@@ -11,12 +12,17 @@ export type SopFlowData = Record<string, unknown> & {
   node: WorkflowNode;
   issueCount?: number;
   collapsed?: boolean;
+  runStatus?: WorkflowNodeRunStatus;
+  runAttempt?: number;
 };
 
 /** React Flow 边承载的修复状态。 */
 export type SopFlowEdgeData = Record<string, unknown> & {
   status: "valid" | "needs-repair";
   issue?: string;
+  runtimeActive?: boolean;
+  runtimeTraversed?: boolean;
+  runtimeExcluded?: boolean;
 };
 
 /** 将持久化节点映射为 React Flow 展示节点。 */

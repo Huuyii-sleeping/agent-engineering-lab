@@ -1,4 +1,14 @@
-import { isWorkflowDraft, normalizeWorkflowDraft, type WorkflowDiagnostic, type WorkflowDraft, type WorkflowVersion } from "@orbit/workflow-core";
+import {
+  isTerminalWorkflowRunStatus,
+  isWorkflowDraft,
+  normalizeWorkflowDraft,
+  type WorkflowDiagnostic,
+  type WorkflowDraft,
+  type WorkflowRunMode,
+  type WorkflowRunSnapshot,
+  type WorkflowRuntimeEvent,
+  type WorkflowVersion,
+} from "@orbit/workflow-core";
 
 /** Dev-only mock data for the Skill Hub view (no live BFF needed). */
 import { mockSkills, mockSkillAuditEvents } from "./mockSkillHub";
@@ -48,6 +58,20 @@ export type SopImportPreview = {
   migrated: boolean;
   publishable: boolean;
 };
+
+/** Web 调试面板启动运行时的参数。 */
+export type StartWorkflowRunInput = {
+  workflowId: string;
+  mode: WorkflowRunMode;
+  versionId?: string;
+  draft?: WorkflowDraft;
+  inputs?: Record<string, unknown>;
+  targetNodeId?: string;
+  nodeInputs?: Record<string, unknown>;
+};
+
+/** 可关闭的工作流 SSE 订阅。 */
+export type WorkflowRunEventStream = { close(): void };
 
 /** BFF API 错误，保留状态码、领域错误码和冲突元数据。 */
 export class ApiRequestError extends Error {
@@ -756,6 +780,64 @@ export async function importSopDraft(draft: unknown): Promise<WorkflowDraft> {
 export async function exportSopDraft(id: string): Promise<WorkflowDraft> {
   const response = await requestJson<{ data?: unknown }>(`/api/sops/${encodeURIComponent(id)}/export`);
   return workflowDraft(response.data);
+}
+
+function workflowRun(value: unknown): WorkflowRunSnapshot {
+  const run = asObject(value);
+  if (!asString(run.id) || !asString(run.workflowId) || !asString(run.mode) || !asString(run.status)) {
+    throw new Error("BFF 返回了无效的工作流运行快照。 ");
+  }
+  return run as WorkflowRunSnapshot;
+}
+
+/** 启动单节点、草稿或发布版本运行。 */
+export async function startWorkflowRun(input: StartWorkflowRunInput): Promise<WorkflowRunSnapshot> {
+  const response = await requestJson<{ data?: unknown }>("/api/workflow-runs", jsonRequest("POST", input));
+  return workflowRun(response.data);
+}
+
+/** 查询运行最新快照。 */
+export async function fetchWorkflowRun(runId: string): Promise<WorkflowRunSnapshot> {
+  const response = await requestJson<{ data?: unknown }>(`/api/workflow-runs/${encodeURIComponent(runId)}`);
+  return workflowRun(response.data);
+}
+
+/** 取消运行并返回 Agent 当前快照。 */
+export async function cancelWorkflowRun(runId: string): Promise<WorkflowRunSnapshot> {
+  const response = await requestJson<{ data?: unknown }>(`/api/workflow-runs/${encodeURIComponent(runId)}/cancel`, { method: "POST" });
+  return workflowRun(response.data);
+}
+
+const workflowEventTypes = ["run.status", "node.status", "node.log", "node.output", "run.output", "run.waiting"];
+
+/** 建立可自动重连的 EventSource，并在客户端按 event id 去重。 */
+export function createWorkflowRunEventStream(input: {
+  runId: string;
+  sinceId?: number;
+  onEvent: (event: WorkflowRuntimeEvent) => void;
+  onError?: () => void;
+  onTerminal?: (event: Extract<WorkflowRuntimeEvent, { type: "run.status" }>) => void;
+  eventSourceCtor?: EventSourceConstructor;
+}): WorkflowRunEventStream {
+  const EventSourceImpl = input.eventSourceCtor ?? globalThis.EventSource;
+  if (!EventSourceImpl) throw new Error("当前浏览器不支持运行事件流。");
+  const delivered = new Set<number>();
+  const source = new EventSourceImpl(`/api/workflow-runs/${encodeURIComponent(input.runId)}/events?since_id=${input.sinceId ?? 0}`);
+  source.onerror = () => input.onError?.();
+  for (const type of workflowEventTypes) {
+    source.addEventListener(type, (rawEvent) => {
+      const message = rawEvent as MessageEvent<string>;
+      const event = parseEventData(message.data) as WorkflowRuntimeEvent;
+      if (!event || typeof event.id !== "number" || delivered.has(event.id)) return;
+      delivered.add(event.id);
+      input.onEvent(event);
+      if (event.type === "run.status" && isTerminalWorkflowRunStatus(event.status)) {
+        source.close();
+        input.onTerminal?.(event);
+      }
+    });
+  }
+  return { close: () => source.close() };
 }
 
 function parseEventData(raw: string): unknown {

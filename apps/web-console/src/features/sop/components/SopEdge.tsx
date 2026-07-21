@@ -83,8 +83,11 @@ export function SopEdge({
 
   const isFalse = sourceHandleId === "false";
   const needsRepair = (data as { status?: string } | undefined)?.status === "needs-repair";
-  const stroke = selected ? "#ffffff" : needsRepair || isFalse ? "#f43f5e" : "#64748b";
-  const width = selected ? 2.4 : 1.6;
+  const runtimeActive = (data as { runtimeActive?: boolean } | undefined)?.runtimeActive === true;
+  const runtimeTraversed = (data as { runtimeTraversed?: boolean } | undefined)?.runtimeTraversed === true;
+  const runtimeExcluded = (data as { runtimeExcluded?: boolean } | undefined)?.runtimeExcluded === true;
+  const stroke = selected ? "#ffffff" : runtimeActive ? "#38bdf8" : runtimeTraversed ? "#22c55e" : needsRepair || isFalse ? "#f43f5e" : "#64748b";
+  const width = selected ? 2.4 : runtimeActive ? 2.8 : runtimeTraversed ? 2.1 : 1.6;
   const glowColor = "#ffffff";
 
   /* 箭头尖端精确落在 Handle 锚点 (targetX, targetY) */
@@ -112,6 +115,8 @@ export function SopEdge({
           strokeWidth: width,
           transition: "stroke 120ms ease, stroke-width 120ms ease",
           strokeDasharray: needsRepair ? "5 4" : undefined,
+          filter: runtimeActive ? "drop-shadow(0 0 5px rgba(56, 189, 248, 0.72))" : undefined,
+          opacity: runtimeExcluded ? 0.28 : 1,
         }}
       />
       {/* 手绘箭头：尖端 = targetX/Y = Handle 圆心 */}

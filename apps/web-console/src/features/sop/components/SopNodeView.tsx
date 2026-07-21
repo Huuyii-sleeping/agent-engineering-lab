@@ -9,14 +9,14 @@ function portOffset(index: number, count: number): string {
 
 /** React Flow 节点只负责将 workflow-core 的类型化端口渲染为 Handle。 */
 function SopNodeViewComponent({ data, selected }: NodeProps) {
-  const { node, collapsed, issueCount } = data as unknown as SopFlowData;
+  const { node, collapsed, issueCount, runStatus, runAttempt } = data as unknown as SopFlowData;
   const meta = getSopNodeMeta(node.type);
   const Icon = meta.icon;
   const inputs = node.ports.inputs;
   const outputs = node.ports.outputs;
 
   return (
-    <div className={`sop-node ${selected ? "on" : ""}`} style={{ borderColor: meta.color }}>
+    <div className={`sop-node ${selected ? "on" : ""} ${runStatus ? `run-${runStatus}` : ""}`} style={{ borderColor: meta.color }}>
       {inputs.map((port, index) => (
         <Handle
           key={`input-${port.id}`}
@@ -34,6 +34,7 @@ function SopNodeViewComponent({ data, selected }: NodeProps) {
         <span>{meta.label}</span>
       </div>
       <div className="sop-node-label">{node.label}</div>
+      {runStatus ? <div className={`sop-node-runtime ${runStatus}`}><span aria-hidden="true" />{runStatus}{runAttempt ? ` · ${runAttempt}` : ""}</div> : null}
       {issueCount ? <div className="sop-node-issue">{issueCount}</div> : null}
       {!collapsed && node.kind === "builtin" && node.type === "llm" ? <div className="sop-node-tag">{node.config.model}</div> : null}
       {!collapsed && node.kind === "builtin" && node.type === "condition" ? <div className="sop-node-tag">if {node.config.expression}</div> : null}

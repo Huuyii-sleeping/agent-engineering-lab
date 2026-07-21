@@ -8,8 +8,8 @@ import {
   type Edge,
   type Node,
 } from "@xyflow/react";
-import { useEffect, useRef, useState } from "react";
-import type { WorkflowDraft } from "@orbit/workflow-core";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { WorkflowDraft, WorkflowRuntimeEvent } from "@orbit/workflow-core";
 import { SopConnectionLine, SopEdge } from "../../components/SopEdge";
 import { SopNodeView } from "../../components/SopNodeView";
 import { getSopNodeMeta } from "../../lib/sop-catalog";
@@ -19,6 +19,8 @@ import { SopAlignmentOverlay } from "./SopAlignmentOverlay";
 import { SopInspector } from "./SopInspector";
 import { SopPalette } from "./SopPalette";
 import { SopToolbar } from "./SopToolbar";
+import { SopRunPanel } from "../../runs/components/SopRunPanel";
+import { useSopRun } from "../../runs/use-sop-run";
 
 const nodeTypes = { sop: SopNodeView };
 const edgeTypes = { sop: SopEdge };
@@ -34,6 +36,11 @@ export function SopCanvasShell({ initial, legacyBackup, onSave, onAutoSave, onRe
   onOpenLifecycle: () => void;
 }) {
   const editor = useSopEditor(initial);
+  const handleRunEvent = useCallback((event: WorkflowRuntimeEvent) => {
+    editor.applyRunEvent(event);
+    if (event.type === "node.status" && event.status === "failed") editor.focusNode(event.nodeId);
+  }, [editor.applyRunEvent, editor.focusNode]);
+  const run = useSopRun({ draft: editor.currentDraft, onEvent: handleRunEvent, onReset: editor.clearRunState });
   const [interactionMode, setInteractionMode] = useState<"select" | "pan">("select");
   const lastConnectionCheck = useRef<{ valid: boolean; reason?: string } | null>(null);
   const currentDraftRef = useRef(editor.currentDraft);
@@ -95,6 +102,10 @@ export function SopCanvasShell({ initial, legacyBackup, onSave, onAutoSave, onRe
           onLayout={editor.autoLayout}
           onFitSelection={editor.fitSelection}
           onTogglePin={editor.toggleSelectedPinned}
+          canTestNode={Boolean(editor.selectedNode)}
+          onTestNode={() => { void run.prepare("node-test"); }}
+          onRunDraft={() => { void run.prepare("draft"); }}
+          onRunProduction={() => { void run.prepare("production"); }}
         />
         <div className="sop-workspace-body">
           <div className="sop-main">
@@ -170,6 +181,20 @@ export function SopCanvasShell({ initial, legacyBackup, onSave, onAutoSave, onRe
             onToggleCollapsed={editor.toggleSelectedCollapsed}
           />
         </div>
+        <SopRunPanel
+          open={run.open}
+          mode={run.mode}
+          phase={run.phase}
+          draft={editor.currentDraft()}
+          selectedNode={editor.selectedNode?.data.node ?? null}
+          run={run.run}
+          events={run.events}
+          versions={run.versions}
+          message={run.message}
+          onStart={(input) => { void run.start(input); }}
+          onCancel={() => { void run.cancel(); }}
+          onClose={run.close}
+        />
       </div>
     </div>
   );

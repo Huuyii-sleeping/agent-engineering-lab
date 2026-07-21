@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowLeft, ArrowRight, Check, Download, FileJson, Focus, GitBranch, Hand, Lock, MousePointer2, Redo2, Rocket, Search, TriangleAlert, Undo2, Upload } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, Check, Download, FileJson, FlaskConical, Focus, GitBranch, Hand, Lock, MousePointer2, PackageCheck, Play, Redo2, Rocket, Search, TriangleAlert, Undo2, Upload } from "lucide-react";
 
 function downloadText(filename: string, text: string) {
   const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
@@ -37,6 +37,10 @@ export function SopToolbar(props: {
   onLayout: (direction: "LR" | "TB") => Promise<void>;
   onFitSelection: () => void;
   onTogglePin: () => void;
+  canTestNode: boolean;
+  onTestNode: () => void;
+  onRunDraft: () => void;
+  onRunProduction: () => void;
 }) {
   return (
     <div className="sop-top">
@@ -93,6 +97,11 @@ export function SopToolbar(props: {
           <button type="button" className="sop-icon-action" onClick={props.onTogglePin} aria-label="固定或取消固定" title="固定或取消固定"><Lock /></button>
         </div>
         <div className="sop-top-sp" />
+        <div className="sop-run-actions" role="group" aria-label="运行调试">
+          <button type="button" disabled={!props.canTestNode} onClick={props.onTestNode} title={props.canTestNode ? "试运行当前节点" : "先选择一个节点"}><FlaskConical aria-hidden="true" />试节点</button>
+          <button type="button" onClick={props.onRunDraft} title="运行当前画布草稿"><Play aria-hidden="true" />跑草稿</button>
+          <button type="button" onClick={props.onRunProduction} title="运行不可变发布版本"><PackageCheck aria-hidden="true" />跑版本</button>
+        </div>
         <div className="sop-action-cluster" role="group" aria-label="流程文件工具">
           <button type="button" className="sop-icon-action" onClick={props.onExportJson} aria-label="查看 JSON" title="查看 JSON"><FileJson aria-hidden="true" /></button>
           <label className="sop-icon-action sop-json-upload" aria-label="导入 JSON" title="导入 JSON"><Upload aria-hidden="true" /><input type="file" accept=".json,application/json" onChange={(event) => {

@@ -130,7 +130,8 @@ describe("workflow-runs API smoke", () => {
     const publish = await request(baseUrl, `/api/sops/${draft.id}/publish`, "POST", { expectedRevision: 0, releaseNotes: "run" });
     const version = (await publish.json() as { data: { id: string } }).data;
 
-    const draftRunResponse = await request(baseUrl, "/api/workflow-runs", "POST", { workflowId: draft.id, mode: "draft", inputs: {} });
+    const inlineDraft = { ...draft, name: "尚未保存的画布状态" };
+    const draftRunResponse = await request(baseUrl, "/api/workflow-runs", "POST", { workflowId: draft.id, mode: "draft", draft: inlineDraft, inputs: {} });
     expect(draftRunResponse.status).toBe(201);
     const draftRun = (await draftRunResponse.json() as { data: { id: string; mode: string } }).data;
     expect(draftRun.mode).toBe("draft");
@@ -152,7 +153,7 @@ describe("workflow-runs API smoke", () => {
     expect(seen.some((item) => item.method === "POST" && item.path === `/workflow-runs/${draftRun.id}/cancel`)).toBe(true);
 
     const agentStarts = seen.filter((item) => item.path === "/workflow-runs");
-    expect(agentStarts[0].body).toMatchObject({ mode: "draft", workflow: { id: draft.id } });
+    expect(agentStarts[0].body).toMatchObject({ mode: "draft", workflow: { id: draft.id, name: "尚未保存的画布状态" } });
     expect(agentStarts[1].body).toMatchObject({ mode: "production", workflow: { id: version.id, workflowId: draft.id } });
   });
 });

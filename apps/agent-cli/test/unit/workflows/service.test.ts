@@ -74,6 +74,17 @@ describe("WorkflowRuntimeService", () => {
     expect(() => runtime.start({ workflow: draft(), mode: "node-test" })).toThrow("target_node_id");
     expect(() => runtime.start({ workflow: draft(), mode: "node-test", target_node_id: "missing" })).toThrow("不存在");
   });
+
+  it("单节点试运行只校验目标节点补充输入，不要求完整工作流输入", async () => {
+    const runtime = service();
+    const source = draft();
+    const start = source.nodes.find((node) => node.id === "start");
+    if (!start || start.kind !== "builtin" || start.type !== "start") throw new Error("fixture error");
+    start.config.inputs = [{ id: "required", name: "正式运行必填", dataType: "string", required: true }];
+    const run = runtime.start({ workflow: source, mode: "node-test", target_node_id: "template", node_inputs: {} });
+    await viWaitFor(() => runtime.get(run.id)?.status === "succeeded");
+    expect(runtime.get(run.id)?.nodeRuns.template.status).toBe("succeeded");
+  });
 });
 
 async function viWaitFor(predicate: () => boolean, timeoutMs = 1_000): Promise<void> {

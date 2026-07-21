@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { WorkflowRunMode, WorkflowRuntimeEvent } from "@orbit/workflow-core";
+import { isWorkflowDraft, type WorkflowRunMode, type WorkflowRuntimeEvent } from "@orbit/workflow-core";
 import { AgentProxyService, type ProxyResult } from "../agent-proxy.service.js";
 import { applyCommonHeaders, writeJson } from "../http-utils.js";
 import { SqliteSopsRepository } from "../sops/sqlite-sops.repository.js";
@@ -58,7 +58,7 @@ export class WorkflowRunsService {
     }
     const workflow = mode === "production"
       ? this.requireVersion(workflowId, input.versionId)
-      : this.requireDraft(workflowId);
+      : this.resolveDraft(workflowId, input.draft);
     const result = await this.agent.startWorkflowRun({
       workflow,
       mode,
@@ -144,7 +144,13 @@ export class WorkflowRunsService {
     return this.runs.getRun(runId);
   }
 
-  private requireDraft(workflowId: string) {
+  private resolveDraft(workflowId: string, inlineDraft: StartWorkflowRunInput["draft"]) {
+    if (inlineDraft !== undefined) {
+      if (!isWorkflowDraft(inlineDraft) || inlineDraft.id !== workflowId) {
+        throw new WorkflowRunControlError(400, "WORKFLOW_RUN_INVALID", "试运行草稿必须是当前 workflowId 对应的 workflow v2 数据。");
+      }
+      return inlineDraft;
+    }
     const draft = this.sops.getDraft(workflowId);
     if (!draft) throw new WorkflowRunControlError(404, "SOP_NOT_FOUND", `草稿 ${workflowId} 不存在。`);
     return draft;
