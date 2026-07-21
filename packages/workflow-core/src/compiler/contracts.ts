@@ -1,4 +1,4 @@
-import type { BuiltinNodeConfigMap, BuiltinNodeType } from "../contracts/nodes.js";
+import type { BuiltinNodeConfigMap, BuiltinNodeType, WorkflowNodeExecutionPolicy } from "../contracts/nodes.js";
 import type { NodePorts } from "../contracts/primitives.js";
 import type { WorkflowDiagnostic } from "../contracts/diagnostics.js";
 import type { ExecutorIdentity } from "../registry/types.js";
@@ -55,6 +55,7 @@ export type WorkflowIRNode = {
   config: BuiltinNodeConfigMap[BuiltinNodeType];
   ports: NodePorts;
   executor: ExecutorIdentity;
+  execution: Required<Pick<WorkflowNodeExecutionPolicy, "timeoutMs" | "maxAttempts" | "retryBackoffMs" | "idempotent" | "onError">> & Pick<WorkflowNodeExecutionPolicy, "defaultOutput" | "errorPortId">;
 };
 
 /** 编译后连边。 */

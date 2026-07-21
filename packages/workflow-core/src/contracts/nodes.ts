@@ -98,6 +98,20 @@ export type BuiltinNodeConfigMap = {
   knowledge: KnowledgeNodeConfig;
 };
 
+/** 节点运行失败后的处理策略。 */
+export type WorkflowNodeErrorStrategy = "fail" | "default" | "route";
+
+/** 节点级超时、重试、幂等和失败路由策略。 */
+export type WorkflowNodeExecutionPolicy = {
+  timeoutMs?: number;
+  maxAttempts?: number;
+  retryBackoffMs?: number;
+  idempotent?: boolean;
+  onError?: WorkflowNodeErrorStrategy;
+  defaultOutput?: Record<string, unknown>;
+  errorPortId?: string;
+};
+
 /** 所有节点共享的持久化字段。 */
 export type WorkflowNodeBase = {
   id: string;
@@ -107,6 +121,7 @@ export type WorkflowNodeBase = {
   ports: NodePorts;
   description?: string;
   disabled?: boolean;
+  execution?: WorkflowNodeExecutionPolicy;
 };
 
 /** 指定类型的内置工作流节点。 */

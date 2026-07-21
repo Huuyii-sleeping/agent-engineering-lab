@@ -1,4 +1,4 @@
-import type { BuiltinWorkflowNode, WorkflowNode } from "../contracts/nodes.js";
+import type { WorkflowNode, WorkflowNodeExecutionPolicy } from "../contracts/nodes.js";
 import type { WorkflowDiagnostic } from "../contracts/diagnostics.js";
 import { WORKFLOW_SCHEMA_VERSION } from "../contracts/primitives.js";
 import { isWorkflowDraft, isWorkflowVersion, type WorkflowDraft, type WorkflowVersion } from "../contracts/workflow.js";
@@ -106,8 +106,26 @@ function builtInExecutors(): ExecutorIdentity[] {
   return builtinNodeRegistry.list().map((definition) => definition.executor);
 }
 
-function compileNode(node: WorkflowNode): BuiltinWorkflowNode | null {
+type KnownWorkflowNode = Exclude<WorkflowNode, { kind: "unknown" }>;
+
+function compileNode(node: WorkflowNode): KnownWorkflowNode | null {
   return node.kind === "builtin" ? node : null;
+}
+
+function defaultExecutionPolicy(node: KnownWorkflowNode): WorkflowIR["nodes"][number]["execution"] {
+  const mutatingHttp = node.type === "http" && node.config.method !== "GET";
+  const idempotentByDefault = !["llm", "tool"].includes(node.type) && !mutatingHttp;
+  const policy: WorkflowNodeExecutionPolicy = node.execution ?? {};
+  const idempotent = policy.idempotent ?? idempotentByDefault;
+  return {
+    timeoutMs: Math.max(100, Math.trunc(policy.timeoutMs ?? (node.type === "http" ? node.config.timeoutMs : 30_000))),
+    maxAttempts: Math.max(1, Math.trunc(policy.maxAttempts ?? (idempotent ? 2 : 1))),
+    retryBackoffMs: Math.max(0, Math.trunc(policy.retryBackoffMs ?? 250)),
+    idempotent,
+    onError: policy.onError ?? "fail",
+    defaultOutput: policy.defaultOutput,
+    errorPortId: policy.errorPortId,
+  };
 }
 
 /** 将 v1/v2 草稿或不可变发布版本编译为确定性 Workflow IR。 */
@@ -145,7 +163,7 @@ export function compileWorkflow(value: unknown, options: CompileWorkflowOptions 
   if (diagnostics.some((item) => item.severity === "error")) return { ok: false, diagnostics };
 
   const nodeById = new Map(draft.nodes.map((node) => [node.id, node]));
-  const compiledNodes = orderedNodeIds.map((nodeId) => compileNode(nodeById.get(nodeId)!)).filter((node): node is BuiltinWorkflowNode => Boolean(node)).map((node) => ({
+  const compiledNodes = orderedNodeIds.map((nodeId) => compileNode(nodeById.get(nodeId)!)).filter((node): node is KnownWorkflowNode => Boolean(node)).map((node) => ({
     id: node.id,
     type: node.type,
     nodeVersion: node.version,
@@ -154,6 +172,7 @@ export function compileWorkflow(value: unknown, options: CompileWorkflowOptions 
     config: node.config,
     ports: node.ports,
     executor: builtinNodeRegistry.get(node.type)!.executor,
+    execution: defaultExecutionPolicy(node),
   }));
   const ir: WorkflowIR = {
     irVersion: WORKFLOW_IR_VERSION,

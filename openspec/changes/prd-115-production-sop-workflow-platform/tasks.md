@@ -59,19 +59,19 @@
 
 - [x] 5.1 在 workflow-core 定义 Workflow IR、execution topology、resource budget 和 executor binding。
 - [x] 5.2 实现编译流水线：迁移、schema、节点、端口、变量、图、限制、依赖版本和 executor 校验。
-- [ ] 5.3 在 `apps/agent-cli/src/workflows/` 创建 compiler adapter、runtime、scheduler、context、events 和 executors 边界。
-- [ ] 5.4 定义 WorkflowRun/NodeRun 状态机、合法状态转换和终态不可逆规则。
-- [ ] 5.5 实现顺序 DAG 调度、Condition/Switch 分支、skipped 传播和 Output 收集。
-- [ ] 5.6 实现变量上下文、节点输出写入、类型校验、system/environment/secret 解析。
-- [ ] 5.7 实现 LLM executor，复用现有模型策略、预算、流式输出和错误契约。
-- [ ] 5.8 实现 Tool executor，复用现有工具权限、审批、审计和执行链路。
-- [ ] 5.9 实现 HTTP executor，包含超时、响应上限、SSRF 防护、credential reference 和结构化输出。
-- [ ] 5.10 实现 Code executor，复用沙箱并限制 CPU、内存、时间、文件和网络。
-- [ ] 5.11 实现 Template、Variable、Condition、Start、Output 基础 executor。
-- [ ] 5.12 实现节点超时、幂等声明、有限重试、退避、默认值和 error handle 策略。
-- [ ] 5.13 定义并发安全的 workflow runtime event 协议，覆盖 run/node/log/output/waiting 事件。
-- [ ] 5.14 为状态机、调度、变量、各 executor 和错误策略创建镜像 `apps/agent-cli/test/unit/workflows/**` 单测。
-- [ ] 5.15 增加 Agent runtime smoke：LLM/Tool/HTTP/Code/Condition 组合流程端到端执行。
+- [x] 5.3 在 `apps/agent-cli/src/workflows/` 创建 compiler adapter、runtime、scheduler、context、events 和 executors 边界。
+- [x] 5.4 定义 WorkflowRun/NodeRun 状态机、合法状态转换和终态不可逆规则。
+- [x] 5.5 实现顺序 DAG 调度、Condition/Switch 分支、skipped 传播和 Output 收集。
+- [x] 5.6 实现变量上下文、节点输出写入、类型校验、system/environment/secret 解析。
+- [x] 5.7 实现 LLM executor，复用现有模型策略、预算、流式输出和错误契约。
+- [x] 5.8 实现 Tool executor，复用现有工具权限、审批、审计和执行链路。
+- [x] 5.9 实现 HTTP executor，包含超时、响应上限、SSRF 防护、credential reference 和结构化输出。
+- [x] 5.10 实现 Code executor，复用沙箱并限制 CPU、内存、时间、文件和网络。
+- [x] 5.11 实现 Template、Variable、Condition、Start、Output 基础 executor。
+- [x] 5.12 实现节点超时、幂等声明、有限重试、退避、默认值和 error handle 策略。
+- [x] 5.13 定义并发安全的 workflow runtime event 协议，覆盖 run/node/log/output/waiting 事件。
+- [x] 5.14 为状态机、调度、变量、各 executor 和错误策略创建镜像 `apps/agent-cli/test/unit/workflows/**` 单测。
+- [x] 5.15 增加 Agent runtime smoke：LLM/Tool/HTTP/Code/Condition 组合流程端到端执行。
 
 ## 6. 阶段 D：运行控制与 Web 调试
 

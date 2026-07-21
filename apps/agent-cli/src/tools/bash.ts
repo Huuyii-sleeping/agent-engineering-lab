@@ -70,7 +70,7 @@ const BARE_REPO_SCAN_SKIP = new Set([".codex", ".git", ".pnpm-store", "coverage"
 type ToolError = {
   ok: false;
   error: {
-    code: "DANGEROUS_COMMAND" | "SANDBOX_READONLY_VIOLATION" | "TIMEOUT";
+    code: "DANGEROUS_COMMAND" | "SANDBOX_READONLY_VIOLATION" | "TIMEOUT" | "CANCELLED";
     message: string;
   };
 };
@@ -186,7 +186,7 @@ export function readCommandArgs(argumentsJson: string): string {
   }
 }
 
-export function runBash(command: string): Promise<string> {
+export function runBash(command: string, options: { signal?: AbortSignal; timeoutMs?: number } = {}): Promise<string> {
   if (getBashSandboxMode() === "strict-readonly" && isReadonlyWriteCommand(command)) {
     return Promise.resolve(
       toToolError(
@@ -209,13 +209,18 @@ export function runBash(command: string): Promise<string> {
         {
           cwd,
           env: scrubbedEnvironment(),
-          timeout: RUNTIME_CONFIG.bashTimeoutMs,
+          timeout: options.timeoutMs ?? RUNTIME_CONFIG.bashTimeoutMs,
+          signal: options.signal,
           windowsHide: true,
         },
         (error: ExecException | null, stdout: string, stderr: string) => {
           void (async () => {
             const scrubbed = await scrubBareRepos();
             if (error) {
+              if (error.name === "AbortError" || (error as NodeJS.ErrnoException).code === "ABORT_ERR") {
+                resolve(toToolError("CANCELLED", "command cancelled"));
+                return;
+              }
               const timeoutError = (error as NodeJS.ErrnoException).code === "ETIMEDOUT";
               if (timeoutError) {
                 resolve(toToolError("TIMEOUT", "command timed out"));

@@ -57,6 +57,7 @@ describe("compileWorkflow", () => {
       { id: "workflow.template", version: 1 },
       { id: "workflow.end", version: 1 },
     ]);
+    expect(result.ir.nodes[1].execution).toMatchObject({ idempotent: true, maxAttempts: 2, onError: "fail" });
     expect(result.ir.resourceBudget.estimate).toMatchObject({ nodeCount: 3, edgeCount: 2, maxParallelism: 1 });
   });
 

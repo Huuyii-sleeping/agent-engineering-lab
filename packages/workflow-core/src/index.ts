@@ -2,6 +2,7 @@ export * from "./contracts/primitives.js";
 export * from "./contracts/nodes.js";
 export * from "./contracts/workflow.js";
 export * from "./contracts/diagnostics.js";
+export * from "./contracts/runtime.js";
 export * from "./registry/types.js";
 export * from "./registry/builtins.js";
 export * from "./serialization/stable.js";
