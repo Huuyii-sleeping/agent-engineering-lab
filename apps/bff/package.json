@@ -4,10 +4,16 @@
   "type": "module",
   "packageManager": "pnpm@10.18.3",
   "scripts": {
+    "predev": "pnpm --filter @orbit/workflow-core build",
     "dev": "tsx src/main.ts",
+    "prebuild": "pnpm --filter @orbit/workflow-core build",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
-    "test": "vitest run --no-cache"
+    "pretest": "pnpm --filter @orbit/workflow-core build",
+    "test": "vitest run --no-cache",
+    "sops:health": "tsx src/sops/sops-admin.ts health",
+    "sops:backup": "tsx src/sops/sops-admin.ts backup",
+    "sops:restore": "tsx src/sops/sops-admin.ts restore"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

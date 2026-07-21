@@ -42,18 +42,18 @@
 
 ## 4. 阶段 C：BFF 持久化与版本生命周期
 
-- [ ] 4.1 新增 `apps/bff/src/sops/` 领域模块、薄 controller、service、repository 接口和公开类型注释。
-- [ ] 4.2 建立 SQLite 连接、WAL、迁移表和 drafts/versions/templates 基础 schema。
-- [ ] 4.3 实现草稿 list/get/create/update/delete API 和 revision 乐观并发控制。
-- [ ] 4.4 实现自动保存 API、dirty revision、冲突响应和 Web 端冲突恢复界面。
-- [ ] 4.5 实现发布事务：规范化、编译预检、内容 hash、不可变版本和发布说明。
-- [ ] 4.6 实现版本列表、版本详情、结构化 diff 和“从历史版本创建新草稿”。
-- [ ] 4.7 实现带 schemaVersion 的导入预检、导出、未知节点保留和 v1 数据迁移 API。
-- [ ] 4.8 实现版本化模板 CRUD、模板参数 schema 和从模板创建草稿。
-- [ ] 4.9 将 Web SOP 列表/编辑器切换到 BFF 权威数据源，localStorage 仅保留未提交恢复缓存。
-- [ ] 4.10 为 repository 事务、并发冲突、发布原子性、迁移和回滚增加 BFF 单元/集成测试。
-- [ ] 4.11 增加数据库备份/恢复命令与损坏数据库的可读失败提示。
-- [ ] 4.12 完成阶段 C 验收：刷新/重启不丢草稿，历史发布版本不可被修改。
+- [x] 4.1 新增 `apps/bff/src/sops/` 领域模块、薄 controller、service、repository 接口和公开类型注释。
+- [x] 4.2 建立 SQLite 连接、WAL、迁移表和 drafts/versions/templates 基础 schema。
+- [x] 4.3 实现草稿 list/get/create/update/delete API 和 revision 乐观并发控制。
+- [x] 4.4 实现自动保存 API、dirty revision、冲突响应和 Web 端冲突恢复界面。
+- [x] 4.5 实现发布事务：规范化、编译预检、内容 hash、不可变版本和发布说明。
+- [x] 4.6 实现版本列表、版本详情、结构化 diff 和“从历史版本创建新草稿”。
+- [x] 4.7 实现带 schemaVersion 的导入预检、导出、未知节点保留和 v1 数据迁移 API。
+- [x] 4.8 实现版本化模板 CRUD、模板参数 schema 和从模板创建草稿。
+- [x] 4.9 将 Web SOP 列表/编辑器切换到 BFF 权威数据源，localStorage 仅保留未提交恢复缓存。
+- [x] 4.10 为 repository 事务、并发冲突、发布原子性、迁移和回滚增加 BFF 单元/集成测试。
+- [x] 4.11 增加数据库备份/恢复命令与损坏数据库的可读失败提示。
+- [x] 4.12 完成阶段 C 验收：刷新/重启不丢草稿，历史发布版本不可被修改。
 
 ## 5. 阶段 D：编译器与 Runtime MVP
 

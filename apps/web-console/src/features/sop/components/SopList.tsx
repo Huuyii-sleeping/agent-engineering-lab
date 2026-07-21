@@ -62,7 +62,7 @@ export function SopList({
       <div className="section-head">
         <span className="eyebrow">SOP Builder · 流程编排</span>
         <h2 className="h2">用有向无环图编排你的自动化流程</h2>
-        <p className="sub">拖拽节点构建 DAG，支持条件分支、AI 节点与工具调用，本地持久化草稿。</p>
+        <p className="sub">拖拽节点构建 DAG，支持自动保存、不可变发布版本与历史恢复。</p>
       </div>
 
       <div className="hub">

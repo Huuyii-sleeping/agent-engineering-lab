@@ -1,10 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  ApiRequestError,
+  autoSaveSopDraft,
+  createDraftFromSopVersion,
   createAgentProfile,
+  createSopDraftRemote,
   createSession,
   createAgentEventStream,
   deleteAgentProfile,
+  deleteSopDraftRemote,
   downloadSkill,
+  exportSopDraft,
   fetchAgents,
   fetchHealth,
   fetchProfile,
@@ -12,11 +18,18 @@ import {
   fetchSkillAuditEvents,
   fetchSkillRegistrySettings,
   fetchSkills,
+  fetchSopDraft,
+  fetchSopDrafts,
+  fetchSopVersions,
   fetchSession,
   fetchSessions,
+  importSopDraft,
   installSkill,
+  previewSopImport,
+  publishSopDraft,
   rollbackSkill,
   resolveAgentSkills,
+  saveSopDraftRemote,
   sendSessionMessage,
   sendSessionMessageStream,
   syncSkillRegistry,
@@ -26,6 +39,7 @@ import {
   updateAgentProfile,
   updateProfile,
 } from "./api";
+import { createSopDraft } from "./features/sop/lib/sop-store";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -165,6 +179,86 @@ describe("web-console api client", () => {
     );
 
     await expect(fetchSessions()).rejects.toThrow("agent down");
+  });
+
+  it("调用 SOP 草稿、版本、导入导出和发布 API", async () => {
+    const draft = createSopDraft("API 测试流程");
+    const saved = { ...draft, revision: 1, updatedAt: draft.updatedAt + 1 };
+    const version = {
+      schemaVersion: 2 as const,
+      id: "version-1",
+      workflowId: draft.id,
+      version: 1,
+      contentHash: "hash",
+      createdAt: draft.updatedAt,
+      createdBy: "tester",
+      releaseNotes: "首版",
+      nodes: draft.nodes,
+      edges: draft.edges,
+    };
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(String(input), "http://localhost");
+      const method = init?.method ?? "GET";
+      if (method === "GET" && url.pathname === "/api/sops") return jsonResponse({ ok: true, data: [draft] });
+      if (method === "POST" && url.pathname === "/api/sops") return jsonResponse({ ok: true, data: draft }, 201);
+      if (method === "GET" && url.pathname === `/api/sops/${draft.id}`) return jsonResponse({ ok: true, data: draft });
+      if (method === "PUT" && url.pathname === `/api/sops/${draft.id}`) return jsonResponse({ ok: true, data: saved });
+      if (method === "POST" && url.pathname === `/api/sops/${draft.id}/autosave`) return jsonResponse({ ok: true, data: saved });
+      if (method === "DELETE" && url.pathname === `/api/sops/${draft.id}`) return jsonResponse({ ok: true, data: { id: draft.id } });
+      if (method === "POST" && url.pathname === `/api/sops/${draft.id}/publish`) return jsonResponse({ ok: true, data: version }, 201);
+      if (method === "GET" && url.pathname === `/api/sops/${draft.id}/versions`) {
+        const { nodes, edges, ...summary } = version;
+        return jsonResponse({ ok: true, data: [{ ...summary, nodeCount: nodes.length, edgeCount: edges.length }] });
+      }
+      if (method === "POST" && url.pathname === `/api/sops/${draft.id}/versions/version-1/drafts`) return jsonResponse({ ok: true, data: { ...draft, id: "restored" } }, 201);
+      if (method === "POST" && url.pathname === "/api/sops/import/preview") return jsonResponse({ ok: true, data: { draft, diagnostics: [], migrated: false, publishable: true } });
+      if (method === "POST" && url.pathname === "/api/sops/import") return jsonResponse({ ok: true, data: { ...draft, id: "imported" } }, 201);
+      if (method === "GET" && url.pathname === `/api/sops/${draft.id}/export`) return jsonResponse({ ok: true, data: draft });
+      return jsonResponse({ ok: false, error: { code: "NOT_FOUND", message: url.pathname } }, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchSopDrafts()).resolves.toMatchObject([{ id: draft.id }]);
+    await expect(fetchSopDraft(draft.id)).resolves.toMatchObject({ id: draft.id });
+    await expect(createSopDraftRemote(draft)).resolves.toMatchObject({ id: draft.id });
+    await expect(saveSopDraftRemote(draft.id, 0, draft)).resolves.toMatchObject({ revision: 1 });
+    await expect(autoSaveSopDraft(draft.id, 0, draft)).resolves.toMatchObject({ revision: 1 });
+    await expect(deleteSopDraftRemote(draft.id, 1)).resolves.toBeUndefined();
+    await expect(publishSopDraft(draft.id, 1, "首版")).resolves.toMatchObject({ id: "version-1", version: 1 });
+    await expect(fetchSopVersions(draft.id)).resolves.toMatchObject([{ id: "version-1", nodeCount: draft.nodes.length }]);
+    await expect(createDraftFromSopVersion(draft.id, "version-1")).resolves.toMatchObject({ id: "restored" });
+    await expect(previewSopImport(draft)).resolves.toMatchObject({ migrated: false, publishable: true });
+    await expect(importSopDraft(draft)).resolves.toMatchObject({ id: "imported" });
+    await expect(exportSopDraft(draft.id)).resolves.toMatchObject({ id: draft.id, schemaVersion: 2 });
+
+    expect(fetchMock).toHaveBeenCalledWith(`/api/sops/${draft.id}?revision=1`, { method: "DELETE" });
+    expect(fetchMock).toHaveBeenCalledWith(`/api/sops/${draft.id}/publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedRevision: 1, releaseNotes: "首版" }),
+    });
+  });
+
+  it("保留 SOP revision 冲突的最新服务端草稿", async () => {
+    const current = { ...createSopDraft("服务端版本"), revision: 3 };
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>(async () => jsonResponse({
+      ok: false,
+      error: {
+        code: "SOP_REVISION_CONFLICT",
+        message: "草稿已被其他写入更新。",
+        current,
+        expectedRevision: 1,
+        actualRevision: 3,
+      },
+    }, 409)));
+
+    const error = await saveSopDraftRemote(current.id, 1, current).catch((value: unknown) => value);
+    expect(error).toBeInstanceOf(ApiRequestError);
+    expect(error).toMatchObject({
+      status: 409,
+      code: "SOP_REVISION_CONFLICT",
+      metadata: { current: { id: current.id, revision: 3 }, expectedRevision: 1, actualRevision: 3 },
+    });
   });
 
   it("calls BFF profile business endpoints", async () => {

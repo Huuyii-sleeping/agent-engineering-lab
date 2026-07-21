@@ -964,7 +964,7 @@ export function App() {
       case "builder":
         return {
           title: "SOP Builder",
-          sub: "流程编排 · 本地持久化",
+          sub: "流程编排 · 版本化持久化",
           primary: "",
           onPrimary: () => {},
         };

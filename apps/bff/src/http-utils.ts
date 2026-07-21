@@ -9,7 +9,7 @@ export function applyCommonHeaders(res: ServerResponse): void {
 
 export function applyHeaderSetters(res: { setHeader(name: string, value: string): void }): void {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type,Last-Event-ID");
   res.setHeader("Cache-Control", "no-store");
 }

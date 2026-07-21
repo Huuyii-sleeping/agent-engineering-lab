@@ -7,8 +7,11 @@ import { SopCanvasShell } from "../editor/components/SopCanvasShell";
 export function SopCanvas(props: {
   initial: WorkflowDraft;
   legacyBackup: string | null;
-  onSave: (draft: WorkflowDraft) => void;
+  onSave: (draft: WorkflowDraft) => void | Promise<void>;
+  onAutoSave?: (draft: WorkflowDraft) => void | Promise<void>;
+  onRecoveryChange?: (draft: WorkflowDraft) => void;
   onBack: () => void;
+  onOpenLifecycle: () => void;
 }) {
   return <ReactFlowProvider><SopCanvasShell {...props} /></ReactFlowProvider>;
 }

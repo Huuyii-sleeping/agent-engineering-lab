@@ -24,15 +24,24 @@ const nodeTypes = { sop: SopNodeView };
 const edgeTypes = { sop: SopEdge };
 
 /** SOP 编辑器外壳，负责组合画布、工具栏、节点库和检查器。 */
-export function SopCanvasShell({ initial, legacyBackup, onSave, onBack }: {
+export function SopCanvasShell({ initial, legacyBackup, onSave, onAutoSave, onRecoveryChange, onBack, onOpenLifecycle }: {
   initial: WorkflowDraft;
   legacyBackup: string | null;
-  onSave: (draft: WorkflowDraft) => void;
+  onSave: (draft: WorkflowDraft) => void | Promise<void>;
+  onAutoSave?: (draft: WorkflowDraft) => void | Promise<void>;
+  onRecoveryChange?: (draft: WorkflowDraft) => void;
   onBack: () => void;
+  onOpenLifecycle: () => void;
 }) {
   const editor = useSopEditor(initial);
   const [interactionMode, setInteractionMode] = useState<"select" | "pan">("select");
   const lastConnectionCheck = useRef<{ valid: boolean; reason?: string } | null>(null);
+  const currentDraftRef = useRef(editor.currentDraft);
+  const autoSaveRef = useRef(onAutoSave);
+  const recoveryChangeRef = useRef(onRecoveryChange);
+  currentDraftRef.current = editor.currentDraft;
+  autoSaveRef.current = onAutoSave;
+  recoveryChangeRef.current = onRecoveryChange;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -44,6 +53,16 @@ export function SopCanvasShell({ initial, legacyBackup, onSave, onBack }: {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  useEffect(() => {
+    if (editor.dirtyRevision === 0) return;
+    const draft = currentDraftRef.current();
+    recoveryChangeRef.current?.(draft);
+    const timer = window.setTimeout(() => {
+      void autoSaveRef.current?.(currentDraftRef.current());
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [editor.dirtyRevision]);
 
   return (
     <div className="sop-wrap">
@@ -59,7 +78,8 @@ export function SopCanvasShell({ initial, legacyBackup, onSave, onBack }: {
           onSummaryChange={editor.setSummary}
           onBack={onBack}
           onValidate={editor.runValidation}
-          onSave={() => onSave(editor.currentDraft())}
+          onSave={() => { void onSave(editor.currentDraft()); }}
+          onOpenLifecycle={onOpenLifecycle}
           onExportJson={editor.openJsonExport}
           onImportText={(text) => { editor.setJsonText(text); editor.setJsonError(null); editor.setShowJsonPanel(true); }}
           canUndo={editor.canUndo}

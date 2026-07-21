@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowLeft, ArrowRight, Check, Download, FileJson, Focus, GitBranch, Hand, Lock, MousePointer2, Redo2, Search, TriangleAlert, Undo2, Upload } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, Check, Download, FileJson, Focus, GitBranch, Hand, Lock, MousePointer2, Redo2, Rocket, Search, TriangleAlert, Undo2, Upload } from "lucide-react";
 
 function downloadText(filename: string, text: string) {
   const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
@@ -21,6 +21,7 @@ export function SopToolbar(props: {
   onBack: () => void;
   onValidate: () => void;
   onSave: () => void;
+  onOpenLifecycle: () => void;
   onExportJson: () => void;
   onImportText: (text: string) => void;
   canUndo: boolean;
@@ -102,8 +103,9 @@ export function SopToolbar(props: {
           }} /></label>
           {props.legacyBackup ? <button type="button" className="sop-icon-action" onClick={() => downloadText(`sop-v1-backup-${Date.now()}.json`, props.legacyBackup!)} aria-label="下载 v1 备份" title="下载迁移前的只读 v1 草稿"><Download aria-hidden="true" /></button> : null}
         </div>
-        <button type="button" className="sop-validate-action" onClick={props.onValidate}><TriangleAlert aria-hidden="true" />检查</button>
+        <button type="button" className="sop-validate-action" title="检查流程" onClick={props.onValidate}><TriangleAlert aria-hidden="true" />检查</button>
         <button type="button" className="sop-save-action" onClick={props.onSave}><Check aria-hidden="true" />保存草稿</button>
+        <button type="button" className="sop-publish-action" onClick={props.onOpenLifecycle}><Rocket aria-hidden="true" />发布</button>
       </div>
     </div>
   );

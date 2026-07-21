@@ -11,8 +11,10 @@ import { SkillRegistryService, type SkillRegistryOptions } from "./skills/skill-
 import { SkillStoreService } from "./skills/skill-store.service.js";
 import { SkillValidatorService } from "./skills/skill-validator.service.js";
 import { SkillsController } from "./skills/skills.controller.js";
+import { SopsModule } from "./sops/sops.module.js";
+import type { SopDatabaseOptions } from "./sops/sop-database.js";
 
-export type AppModuleOptions = AgentProxyOptions & LocalStoreOptions & SkillRegistryOptions;
+export type AppModuleOptions = AgentProxyOptions & LocalStoreOptions & SkillRegistryOptions & SopDatabaseOptions;
 
 @Module({})
 export class AppModule {
@@ -23,6 +25,7 @@ export class AppModule {
     const skillInstallerService = new SkillInstallerService(localStoreService, skillStoreService, skillValidatorService);
     return {
       module: AppModule,
+      imports: [SopsModule.register(options)],
       controllers: [AgentsController, SkillsController, AppController],
       providers: [
         { provide: AgentProxyService, useValue: new AgentProxyService(options) },

@@ -1,9 +1,9 @@
-import { All, Body, Controller, Get, Inject, Param, Post, Put, Patch, Req, Res } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Post, Put, Patch, Req, Res } from "@nestjs/common";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { AgentProxyService } from "./agent-proxy.service.js";
 import { ProfileService } from "./profile.service.js";
 import { SettingsService } from "./settings.service.js";
-import { errorPayload, writeJson, type JsonObject } from "./http-utils.js";
+import { writeJson, type JsonObject } from "./http-utils.js";
 
 function writeProxyResult(res: ServerResponse, result: { status: number; body: unknown }): void {
   writeJson(res, result.status, result.body);
@@ -116,10 +116,5 @@ export class AppController {
   @Get("events/stream")
   async events(@Req() req: IncomingMessage, @Res() res: ServerResponse): Promise<void> {
     await this.agentProxy.proxyEventStream(req, res, searchFromReq(req));
-  }
-
-  @All("*")
-  notFound(@Req() req: IncomingMessage, @Res() res: ServerResponse): void {
-    writeJson(res, 404, errorPayload("NOT_FOUND", `${req.method ?? "GET"} ${req.url ?? "/"} is not implemented`));
   }
 }

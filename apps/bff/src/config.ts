@@ -41,3 +41,8 @@ export function resolveSkillRegistryAdminToken(env: NodeJS.ProcessEnv = process.
 export function resolveSkillHubDataRoot(env: NodeJS.ProcessEnv = process.env, cwd = process.cwd()): string {
   return env.SKILLHUB_DATA_ROOT?.trim() || join(cwd, ".data", "skills");
 }
+
+/** Resolve the local SQLite root used by the SOP control plane. */
+export function resolveSopDataRoot(env: NodeJS.ProcessEnv = process.env, cwd = process.cwd()): string {
+  return env.SOP_DATA_ROOT?.trim() || join(cwd, ".data", "sops");
+}

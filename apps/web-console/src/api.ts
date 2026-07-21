@@ -1,3 +1,5 @@
+import { isWorkflowDraft, normalizeWorkflowDraft, type WorkflowDiagnostic, type WorkflowDraft, type WorkflowVersion } from "@orbit/workflow-core";
+
 /** Dev-only mock data for the Skill Hub view (no live BFF needed). */
 import { mockSkills, mockSkillAuditEvents } from "./mockSkillHub";
 
@@ -35,6 +37,30 @@ export type HealthStatus = {
   bffStatus: string;
   agentStatus: string;
 };
+
+/** BFF 返回的不可变 SOP 版本摘要。 */
+export type SopVersionSummary = Omit<WorkflowVersion, "nodes" | "edges"> & { nodeCount: number; edgeCount: number };
+
+/** SOP 导入预检结果。 */
+export type SopImportPreview = {
+  draft: WorkflowDraft;
+  diagnostics: WorkflowDiagnostic[];
+  migrated: boolean;
+  publishable: boolean;
+};
+
+/** BFF API 错误，保留状态码、领域错误码和冲突元数据。 */
+export class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code: string,
+    readonly metadata: Record<string, unknown>,
+  ) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
 
 /** Local Web Console profile managed by the BFF business API. */
 export type UserProfile = {
@@ -641,9 +667,95 @@ async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
   const parsed = raw.trim() ? (JSON.parse(raw) as JsonObject) : {};
   if (!response.ok || parsed.ok === false) {
     const error = asObject(parsed.error);
-    throw new Error(asString(error.message) || `${response.status} ${response.statusText}`);
+    const { code, message, ...metadata } = error;
+    throw new ApiRequestError(
+      asString(message) || `${response.status} ${response.statusText}`,
+      response.status,
+      asString(code) || "API_REQUEST_FAILED",
+      metadata,
+    );
   }
   return parsed as T;
+}
+
+function workflowDraft(value: unknown): WorkflowDraft {
+  if (!isWorkflowDraft(value)) throw new Error("BFF 返回了无效的 workflow v2 草稿。 ");
+  return normalizeWorkflowDraft(value);
+}
+
+function jsonRequest(method: string, body: unknown): RequestInit {
+  return { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+}
+
+/** 读取服务端权威 SOP 草稿列表。 */
+export async function fetchSopDrafts(): Promise<WorkflowDraft[]> {
+  const response = await requestJson<{ data?: unknown }>("/api/sops");
+  return Array.isArray(response.data) ? response.data.map(workflowDraft) : [];
+}
+
+/** 读取一份服务端 SOP 草稿。 */
+export async function fetchSopDraft(id: string): Promise<WorkflowDraft> {
+  const response = await requestJson<{ data?: unknown }>(`/api/sops/${encodeURIComponent(id)}`);
+  return workflowDraft(response.data);
+}
+
+/** 在服务端创建 SOP 草稿。 */
+export async function createSopDraftRemote(draft: WorkflowDraft): Promise<WorkflowDraft> {
+  const response = await requestJson<{ data?: unknown }>("/api/sops", jsonRequest("POST", { draft }));
+  return workflowDraft(response.data);
+}
+
+/** 使用 expectedRevision 显式保存 SOP 草稿。 */
+export async function saveSopDraftRemote(id: string, expectedRevision: number, draft: WorkflowDraft): Promise<WorkflowDraft> {
+  const response = await requestJson<{ data?: unknown }>(`/api/sops/${encodeURIComponent(id)}`, jsonRequest("PUT", { expectedRevision, draft }));
+  return workflowDraft(response.data);
+}
+
+/** 使用 expectedRevision 自动保存 SOP 草稿。 */
+export async function autoSaveSopDraft(id: string, expectedRevision: number, draft: WorkflowDraft): Promise<WorkflowDraft> {
+  const response = await requestJson<{ data?: unknown }>(`/api/sops/${encodeURIComponent(id)}/autosave`, jsonRequest("POST", { expectedRevision, draft }));
+  return workflowDraft(response.data);
+}
+
+/** 删除指定 revision 的服务端 SOP 草稿。 */
+export async function deleteSopDraftRemote(id: string, revision: number): Promise<void> {
+  await requestJson(`/api/sops/${encodeURIComponent(id)}?revision=${revision}`, { method: "DELETE" });
+}
+
+/** 发布当前 revision 为不可变版本。 */
+export async function publishSopDraft(id: string, expectedRevision: number, releaseNotes = ""): Promise<WorkflowVersion> {
+  const response = await requestJson<{ data: WorkflowVersion }>(`/api/sops/${encodeURIComponent(id)}/publish`, jsonRequest("POST", { expectedRevision, releaseNotes }));
+  return response.data;
+}
+
+/** 读取 SOP 不可变版本摘要。 */
+export async function fetchSopVersions(id: string): Promise<SopVersionSummary[]> {
+  const response = await requestJson<{ data?: SopVersionSummary[] }>(`/api/sops/${encodeURIComponent(id)}/versions`);
+  return Array.isArray(response.data) ? response.data : [];
+}
+
+/** 从历史版本创建一份独立草稿。 */
+export async function createDraftFromSopVersion(id: string, versionId: string): Promise<WorkflowDraft> {
+  const response = await requestJson<{ data?: unknown }>(`/api/sops/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}/drafts`, { method: "POST" });
+  return workflowDraft(response.data);
+}
+
+/** 预检 workflow v2 或旧 v1 导入数据。 */
+export async function previewSopImport(draft: unknown): Promise<SopImportPreview> {
+  const response = await requestJson<{ data: SopImportPreview }>("/api/sops/import/preview", jsonRequest("POST", { draft }));
+  return { ...response.data, draft: workflowDraft(response.data.draft) };
+}
+
+/** 将 workflow v2 或旧 v1 数据导入服务端。 */
+export async function importSopDraft(draft: unknown): Promise<WorkflowDraft> {
+  const response = await requestJson<{ data?: unknown }>("/api/sops/import", jsonRequest("POST", { draft }));
+  return workflowDraft(response.data);
+}
+
+/** 从服务端权威数据源导出 workflow v2 草稿。 */
+export async function exportSopDraft(id: string): Promise<WorkflowDraft> {
+  const response = await requestJson<{ data?: unknown }>(`/api/sops/${encodeURIComponent(id)}/export`);
+  return workflowDraft(response.data);
 }
 
 function parseEventData(raw: string): unknown {

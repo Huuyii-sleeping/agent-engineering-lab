@@ -9,3 +9,4 @@ export * from "./migration/v1.js";
 export * from "./graph/graph.js";
 export * from "./ports/compatibility.js";
 export * from "./variables/scope.js";
+export * from "./validation/publish.js";
