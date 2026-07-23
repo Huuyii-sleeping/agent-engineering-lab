@@ -42,6 +42,7 @@ export function SopCanvasShell({ initial, legacyBackup, onSave, onAutoSave, onRe
   }, [editor.applyRunEvent, editor.focusNode]);
   const run = useSopRun({ draft: editor.currentDraft, onEvent: handleRunEvent, onReset: editor.clearRunState });
   const [interactionMode, setInteractionMode] = useState<"select" | "pan">("select");
+  const [openPanel, setOpenPanel] = useState<"palette" | "inspector" | null>(null);
   const lastConnectionCheck = useRef<{ valid: boolean; reason?: string } | null>(null);
   const currentDraftRef = useRef(editor.currentDraft);
   const autoSaveRef = useRef(onAutoSave);
@@ -53,6 +54,10 @@ export function SopCanvasShell({ initial, legacyBackup, onSave, onAutoSave, onRe
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
+      if (event.key === "Escape") {
+        setOpenPanel(null);
+        return;
+      }
       if (target?.matches("input, textarea, select, [contenteditable='true']")) return;
       if (event.key.toLowerCase() === "h") setInteractionMode("pan");
       else if (event.key.toLowerCase() === "v") setInteractionMode("select");
@@ -60,6 +65,10 @@ export function SopCanvasShell({ initial, legacyBackup, onSave, onAutoSave, onRe
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  useEffect(() => {
+    if (editor.showJsonPanel || editor.selectedNodeIds.size > 0 || editor.selectedEdgeIds.size > 0) setOpenPanel("inspector");
+  }, [editor.selectedEdgeIds.size, editor.selectedNodeIds.size, editor.showJsonPanel]);
 
   useEffect(() => {
     if (editor.dirtyRevision === 0) return;
@@ -72,8 +81,9 @@ export function SopCanvasShell({ initial, legacyBackup, onSave, onAutoSave, onRe
   }, [editor.dirtyRevision]);
 
   return (
-    <div className="sop-wrap">
-      <SopPalette onAdd={editor.addNodeOfType} />
+    <div className={`sop-wrap ${openPanel ? "has-open-panel" : ""}`}>
+      {openPanel ? <button type="button" className="sop-panel-scrim" aria-label="关闭辅助面板" onClick={() => setOpenPanel(null)} /> : null}
+      <SopPalette open={openPanel === "palette"} onAdd={editor.addNodeOfType} onClose={() => setOpenPanel(null)} />
       <div className="sop-workspace">
         <SopToolbar
           name={editor.name}
@@ -106,6 +116,10 @@ export function SopCanvasShell({ initial, legacyBackup, onSave, onAutoSave, onRe
           onTestNode={() => { void run.prepare("node-test"); }}
           onRunDraft={() => { void run.prepare("draft"); }}
           onRunProduction={() => { void run.prepare("production"); }}
+          paletteOpen={openPanel === "palette"}
+          inspectorOpen={openPanel === "inspector"}
+          onTogglePalette={() => setOpenPanel((current) => current === "palette" ? null : "palette")}
+          onToggleInspector={() => setOpenPanel((current) => current === "inspector" ? null : "inspector")}
         />
         <div className="sop-workspace-body">
           <div className="sop-main">
@@ -159,6 +173,7 @@ export function SopCanvasShell({ initial, legacyBackup, onSave, onAutoSave, onRe
             </div>
           </div>
           <SopInspector
+            open={openPanel === "inspector"}
             showJson={editor.showJsonPanel}
             name={editor.name}
             jsonText={editor.jsonText}
@@ -179,6 +194,7 @@ export function SopCanvasShell({ initial, legacyBackup, onSave, onAutoSave, onRe
             onClearValidation={editor.clearValidation}
             onFocusNode={editor.focusNode}
             onToggleCollapsed={editor.toggleSelectedCollapsed}
+            onClose={() => setOpenPanel(null)}
           />
         </div>
         <SopRunPanel

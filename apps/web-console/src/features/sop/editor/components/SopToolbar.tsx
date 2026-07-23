@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowLeft, ArrowRight, Check, Download, FileJson, FlaskConical, Focus, GitBranch, Hand, Lock, MousePointer2, PackageCheck, Play, Redo2, Rocket, Search, TriangleAlert, Undo2, Upload } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, Check, Download, FileJson, FlaskConical, Focus, GitBranch, Hand, Lock, MousePointer2, PackageCheck, PanelLeft, PanelRight, Play, Redo2, Rocket, Search, TriangleAlert, Undo2, Upload } from "lucide-react";
 
 function downloadText(filename: string, text: string) {
   const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
@@ -41,6 +41,10 @@ export function SopToolbar(props: {
   onTestNode: () => void;
   onRunDraft: () => void;
   onRunProduction: () => void;
+  paletteOpen: boolean;
+  inspectorOpen: boolean;
+  onTogglePalette: () => void;
+  onToggleInspector: () => void;
 }) {
   return (
     <div className="sop-top">
@@ -65,6 +69,10 @@ export function SopToolbar(props: {
       </div>
 
       <div className="sop-top-actions">
+        <div className="sop-panel-toggles" role="group" aria-label="辅助面板">
+          <button type="button" className={`sop-icon-action ${props.paletteOpen ? "is-active" : ""}`} aria-label="切换节点库" aria-expanded={props.paletteOpen} onClick={props.onTogglePalette} title="节点库"><PanelLeft aria-hidden="true" /></button>
+          <button type="button" className={`sop-icon-action ${props.inspectorOpen ? "is-active" : ""}`} aria-label="切换配置面板" aria-expanded={props.inspectorOpen} onClick={props.onToggleInspector} title="配置面板"><PanelRight aria-hidden="true" /></button>
+        </div>
         <div className="sop-node-search">
           <Search aria-hidden="true" />
           <input aria-label="搜索节点" value={props.searchQuery} placeholder="搜索节点" onChange={(event) => props.onSearchChange(event.target.value)} />

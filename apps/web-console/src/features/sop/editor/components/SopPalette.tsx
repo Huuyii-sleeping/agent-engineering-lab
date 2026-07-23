@@ -1,17 +1,20 @@
 import type { DragEvent } from "react";
 import type { BuiltinNodeType } from "@orbit/workflow-core";
+import { X } from "lucide-react";
 import { sopNodeCatalog } from "../../lib/sop-catalog";
 
 /** 由 NodeDefinition registry 驱动的节点库。 */
-export function SopPalette({ onAdd }: { onAdd: (type: BuiltinNodeType) => void }) {
+export function SopPalette({ open, onAdd, onClose }: { open: boolean; onAdd: (type: BuiltinNodeType) => void; onClose: () => void }) {
   const startDrag = (event: DragEvent, type: BuiltinNodeType) => {
     event.dataTransfer.setData("application/sop-node", type);
     event.dataTransfer.effectAllowed = "move";
   };
   return (
-    <aside className="sop-pal">
-      <div className="sop-pal-h">节点库</div>
-      <div className="sop-pal-hint">拖入画布，或点击添加</div>
+    <aside className={`sop-pal ${open ? "is-open" : ""}`} aria-label="节点库">
+      <div className="sop-panel-head">
+        <div><div className="sop-pal-h">节点库</div><div className="sop-pal-hint">拖入画布，或点击添加</div></div>
+        <button type="button" className="sop-panel-close" aria-label="关闭节点库" onClick={onClose}><X aria-hidden="true" /></button>
+      </div>
       {sopNodeCatalog.map((meta) => {
         const Icon = meta.icon;
         return (

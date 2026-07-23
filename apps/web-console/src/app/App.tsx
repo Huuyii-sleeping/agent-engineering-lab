@@ -986,25 +986,18 @@ export function App() {
 
   return (
     <div className="orbit-studio">
-      <div className="shell">
+      <div className={`shell ${isSidebarCollapsed ? "sidebar-collapsed" : ""}`}>
         <AppSidebar
-        view={view}
-        health={health}
-        sessions={visibleSessions}
-        activeSessionId={activeSessionId}
-        sessionMetadata={sessionMetadata}
-        sessionTitleFor={sessionTitleFor}
-        agents={agents}
-        activeAgentId={activeAgentId}
-        installedSkills={installedSkills}
-        onNavigate={setView}
-        onSelectSession={(sessionId) => {
-          setView("chat");
-          setActiveSessionId(sessionId);
-        }}
-        onSelectAgent={selectAgent}
-        onOpenSettings={openSettings}
-      />
+          view={view}
+          health={health}
+          sessions={visibleSessions}
+          agents={agents}
+          installedSkills={installedSkills}
+          collapsed={isSidebarCollapsed}
+          onNavigate={setView}
+          onToggleCollapsed={() => setIsSidebarCollapsed((current) => !current)}
+          onOpenSettings={openSettings}
+        />
       <main className="main">
         <WorkspaceTopBar
           title={topMeta.title}
