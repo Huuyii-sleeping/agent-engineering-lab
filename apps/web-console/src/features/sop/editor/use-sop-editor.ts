@@ -9,6 +9,7 @@ import { pasteSelection, serializeSelection } from "./sop-clipboard";
 import { pushHistory, redoHistory, undoHistory, type EditorHistory } from "./sop-history";
 import { layoutFlowGraph } from "./sop-layout";
 import { reconcileFlowEdges, validateFlowConnection } from "./sop-connections";
+import { centerViewportAfterResize, type SopCanvasSize } from "./sop-viewport";
 
 type DebugState = { status: "idle" | "validating" | "ready" | "error"; message?: string };
 const uid = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
@@ -163,6 +164,9 @@ export function useSopEditor(initial: WorkflowDraft) {
     void flow.fitView({ nodes: [node], padding: 0.5, duration: 250 });
   }, [flow, nodes]);
   const fitSelection = useCallback(() => { const selected = nodes.filter((node) => selectedNodeIds.has(node.id)); if (selected.length > 0) void flow.fitView({ nodes: selected, padding: 0.35, duration: 250 }); }, [flow, nodes, selectedNodeIds]);
+  const resizeViewport = useCallback((previous: SopCanvasSize, next: SopCanvasSize) => {
+    void flow.setViewport(centerViewportAfterResize(flow.getViewport(), previous, next), { duration: 180 });
+  }, [flow]);
   const searchMatches = useMemo(() => { const query = searchQuery.trim().toLowerCase(); return query ? nodes.filter((node) => `${node.data.node.label} ${node.data.node.type}`.toLowerCase().includes(query)) : []; }, [nodes, searchQuery]);
 
   const runValidation = useCallback(() => {
@@ -234,7 +238,7 @@ export function useSopEditor(initial: WorkflowDraft) {
     setName, setSummary, setSelectedNodeIds, setSelectedEdgeIds, setShowJsonPanel, setJsonText, setJsonError, setConnectionHint, setSearchQuery,
     onNodesChange, onEdgesChange, onConnect, checkConnection, addNodeOfType, onDragOver, onDrop, onNodeDragStart, onNodeDrag, onNodeDragStop,
     updateSelectedNode, updateSelectedEdgeLabel, deleteSelected, duplicateSelected, copySelected, pasteSelected, undo, redo, autoLayout,
-    toggleSelectedPinned, toggleSelectedCollapsed, focusNode, fitSelection, runValidation, currentDraft, openJsonExport, importJson, clearValidation,
+    toggleSelectedPinned, toggleSelectedCollapsed, focusNode, fitSelection, resizeViewport, runValidation, currentDraft, openJsonExport, importJson, clearValidation,
     clearRunState, applyRunEvent,
   };
 }

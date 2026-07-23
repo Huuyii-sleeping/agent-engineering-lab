@@ -1916,9 +1916,17 @@
 .orbit-studio .view-pad.builder-canvas {
   position: relative;
   max-width: none;
-  height: calc(100dvh - 108px);
+  width: 100%;
+  height: calc(100dvh - 60px);
   display: flex;
   flex-direction: column;
+}
+.orbit-studio .view-pad.builder-canvas.view-hide {
+  display: none;
+}
+.orbit-studio .view:has(> .view-pad.builder-canvas:not(.view-hide)) {
+  overflow: hidden;
+  padding: 0;
 }
 .orbit-studio .sop-sync-banner,
 .orbit-studio .sop-list-status {
@@ -1961,7 +1969,14 @@
 }
 .orbit-studio .sop-wrap {
   display: flex;
+  flex-direction: column;
   flex: 1 1 auto;
+  min-height: 0;
+}
+.orbit-studio .sop-editor-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
   min-height: 0;
 }
 .orbit-studio .sop-pal {
@@ -2161,6 +2176,7 @@
   display: flex;
   min-width: 0;
   align-items: center;
+  flex-wrap: nowrap;
   gap: 7px;
   overflow-x: auto;
   border-top: 1px solid color-mix(in srgb, var(--border-subtle) 72%, transparent);
@@ -2169,6 +2185,18 @@
 }
 .orbit-studio .sop-top-actions::-webkit-scrollbar {
   display: none;
+}
+.orbit-studio .sop-top-actions > * {
+  align-self: center;
+}
+.orbit-studio .sop-top-actions button,
+.orbit-studio .sop-top-actions label {
+  line-height: 1;
+}
+.orbit-studio .sop-top-actions button svg,
+.orbit-studio .sop-top-actions label svg {
+  display: block;
+  flex: 0 0 auto;
 }
 .orbit-studio .sop-tool-mode {
   display: inline-flex;
@@ -3382,6 +3410,7 @@
   .orbit-studio .sop-run-actions button {
     width: 30px;
     justify-content: center;
+    gap: 0;
     padding: 0;
     font-size: 0;
   }
@@ -3390,7 +3419,29 @@
   }
 }
 
-@media (max-width: 1360px) {
+@media (max-width: 1200px) {
+  .orbit-studio .sop-pal {
+    width: 164px;
+    padding: 12px;
+  }
+  .orbit-studio .sop-insp {
+    width: 240px;
+    padding: 12px;
+  }
+  .orbit-studio .sop-top-actions {
+    flex-wrap: nowrap;
+    gap: 5px;
+    overflow-x: auto;
+  }
+  .orbit-studio .sop-top-sp {
+    display: block;
+    height: auto;
+    min-width: 0;
+    flex: 1 1 8px;
+  }
+}
+
+@media (max-width: 920px) {
   .orbit-studio .sop-wrap {
     position: relative;
     overflow: hidden;
@@ -3452,7 +3503,10 @@
     grid-template-columns: minmax(110px, 0.52fr) minmax(130px, 1fr);
   }
   .orbit-studio .sop-top-sp {
-    display: none;
+    display: block;
+    height: auto;
+    min-width: 0;
+    flex: 1 1 8px;
   }
   .orbit-studio .sop-save-action,
   .orbit-studio .sop-publish-action {
@@ -3531,8 +3585,8 @@
     display: none;
   }
   .orbit-studio .sop-top-actions {
-    flex-wrap: wrap;
-    overflow-x: visible;
+    flex-wrap: nowrap;
+    overflow-x: auto;
     padding: 7px 8px 8px;
   }
   .orbit-studio .sop-node-search {
