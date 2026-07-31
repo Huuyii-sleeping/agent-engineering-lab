@@ -417,6 +417,7 @@ async function startBff(
     await createBffHttpServer({
       agentBaseUrl,
       filePath: join(tempDir, "state.json"),
+      sopDataRoot: join(tempDir, "sops-data"),
       skillsRoot: options.skillsRoot,
       skillDataRoot: options.skillDataRoot ?? join(tempDir, "skills-data"),
       remoteRegistryUrl,
@@ -781,6 +782,89 @@ describe("bff server", () => {
     await expect(requestJson(`${bffBaseUrl}/api/agents/${createdAgent.id}`, { method: "DELETE" })).resolves.toMatchObject({
       status: 404,
       body: { ok: false, error: { code: "AGENT_NOT_FOUND" } },
+    });
+  });
+
+  it("publishes immutable AgentVersion snapshots and exposes a read-only catalog", async () => {
+    const agent = await startMockAgent();
+    const bffBaseUrl = await startBff(agent.baseUrl);
+    const created = await requestJson(`${bffBaseUrl}/api/agents`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "发布 Agent",
+        description: "第一版描述",
+        systemPrompt: "第一版 instructions",
+        skillIds: [],
+        skills: [],
+      }),
+    });
+    const profile = created.body.agent as Record<string, unknown>;
+    const profileId = String(profile.id);
+
+    const first = await requestJson(`${bffBaseUrl}/api/agents/${profileId}/versions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        createdBy: "publisher-1",
+        releaseNotes: "first",
+        instructions: ["客户端不得覆盖"],
+        outputSchema: { type: "number" },
+      }),
+    });
+    const firstVersion = first.body.version as Record<string, unknown>;
+    expect(first).toMatchObject({
+      status: 201,
+      body: {
+        ok: true,
+        version: {
+          agentProfileId: profileId,
+          version: 1,
+          instructions: ["第一版 instructions"],
+          toolPolicy: { allowedToolIds: [] },
+          skillPolicy: { bindings: [] },
+          outputSchema: {
+            type: "object",
+            properties: { text: { type: "string" } },
+            required: ["text"],
+            additionalProperties: false,
+          },
+          createdBy: "publisher-1",
+          releaseNotes: "first",
+        },
+      },
+    });
+    expect(firstVersion.contentHash).toMatch(/^[a-f0-9]{64}$/);
+
+    await requestJson(`${bffBaseUrl}/api/agents/${profileId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...profile, systemPrompt: "第二版 instructions", description: "第二版描述" }),
+    });
+    const second = await requestJson(`${bffBaseUrl}/api/agents/${profileId}/versions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ createdBy: "publisher-2" }),
+    });
+    expect(second).toMatchObject({
+      status: 201,
+      body: { ok: true, version: { agentProfileId: profileId, version: 2, instructions: ["第二版 instructions"] } },
+    });
+
+    const catalog = await requestJson(`${bffBaseUrl}/api/agent-versions?agentProfileId=${profileId}`);
+    expect(catalog).toMatchObject({
+      status: 200,
+      body: {
+        ok: true,
+        versions: [
+          { version: 2, instructions: ["第二版 instructions"] },
+          { id: firstVersion.id, version: 1, instructions: ["第一版 instructions"], description: "第一版描述" },
+        ],
+      },
+    });
+    await expect(requestJson(`${bffBaseUrl}/api/agent-versions/${firstVersion.id}`)).resolves.toMatchObject({
+      status: 200,
+      body: { ok: true, version: { version: 1, instructions: ["第一版 instructions"] } },
     });
   });
 

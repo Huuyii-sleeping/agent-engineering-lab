@@ -19,10 +19,10 @@ afterEach(async () => {
 });
 
 describe("SopDatabase", () => {
-  it("启用 WAL 并创建显式迁移表和阶段 C 基础表", async () => {
+  it("启用 WAL 并创建显式迁移表、SOP 运行表和 AgentVersion，但不创建审批产品表", async () => {
     const database = new SopDatabase({ sopDataRoot: await root() });
     try {
-      expect(database.health()).toMatchObject({ ok: true, journalMode: "wal", migrationVersion: 2 });
+      expect(database.health()).toMatchObject({ ok: true, journalMode: "wal", migrationVersion: 6 });
       const tables = database.database.prepare("select name from sqlite_master where type = 'table' order by name").all() as Array<{ name: string }>;
       expect(tables.map((item) => item.name)).toEqual(expect.arrayContaining([
         "schema_migrations",
@@ -32,7 +32,9 @@ describe("SopDatabase", () => {
         "workflow_runs",
         "workflow_node_runs",
         "workflow_events",
+        "agent_versions",
       ]));
+      expect(tables.map((item) => item.name)).not.toContain("approval_requests");
     } finally {
       database.onModuleDestroy();
     }

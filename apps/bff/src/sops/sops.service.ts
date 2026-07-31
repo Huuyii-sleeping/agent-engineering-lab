@@ -8,12 +8,15 @@ import {
   stableSerialize,
   validateWorkflowDraft,
   type WorkflowDraft,
+  type WorkflowStageECapabilityRegistry,
   type WorkflowVersion,
 } from "@orbit/workflow-core";
 import { randomUUID } from "node:crypto";
+import { SqliteAgentVersionRepository } from "../agents/sqlite-agent-version.repository.js";
 import { SopDatabase } from "./sop-database.js";
 import { SopNotFoundError, SopRevisionConflictError, SopValidationError } from "./sops.errors.js";
 import { SqliteSopsRepository } from "./sqlite-sops.repository.js";
+import { WORKFLOW_STAGE_E_CAPABILITY_REGISTRY } from "./workflow-stage-e-capabilities.js";
 import type {
   PublishSopInput,
   SaveSopDraftInput,
@@ -56,6 +59,8 @@ export class SopsService {
   constructor(
     @Inject(SqliteSopsRepository) private readonly repository: SqliteSopsRepository,
     @Inject(SopDatabase) private readonly storage: SopDatabase,
+    @Inject(SqliteAgentVersionRepository) private readonly agentVersions?: SqliteAgentVersionRepository,
+    @Inject(WORKFLOW_STAGE_E_CAPABILITY_REGISTRY) private readonly stageECapabilities?: WorkflowStageECapabilityRegistry,
   ) {}
 
   listDrafts(): WorkflowDraft[] {
@@ -88,7 +93,13 @@ export class SopsService {
   async publish(id: string, input: PublishSopInput): Promise<WorkflowVersion> {
     const draft = this.getDraft(id);
     if (draft.revision !== input.expectedRevision) throw new SopRevisionConflictError(draft);
-    const validation = validateWorkflowDraft(draft);
+    const validation = validateWorkflowDraft(draft, {
+      agentVersions: this.agentVersions,
+      workflowVersions: {
+        resolvePublishedVersion: (workflowId, versionId) => this.repository.getVersion(workflowId, versionId) ?? undefined,
+      },
+      stageECapabilities: this.stageECapabilities,
+    });
     if (!validation.ok) throw new SopValidationError("发布前校验未通过。", { diagnostics: validation.diagnostics });
     const contentHash = await createContentHash(normalizeWorkflowContent(draft));
     return this.repository.publishVersion({
@@ -152,7 +163,10 @@ export class SopsService {
 
   previewImport(value: unknown): SopImportPreview {
     const parsed = this.parseImport(value);
-    const validation = validateWorkflowDraft(parsed.draft);
+    const validation = validateWorkflowDraft(parsed.draft, {
+      agentVersions: this.agentVersions,
+      stageECapabilities: this.stageECapabilities,
+    });
     return {
       draft: parsed.draft,
       diagnostics: validation.diagnostics,

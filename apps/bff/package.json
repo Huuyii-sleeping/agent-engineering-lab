@@ -4,12 +4,12 @@
   "type": "module",
   "packageManager": "pnpm@10.18.3",
   "scripts": {
-    "predev": "pnpm --filter @orbit/workflow-core build",
+    "predev": "pnpm --filter @orbit/runtime-contracts build",
     "dev": "tsx src/main.ts",
-    "prebuild": "pnpm --filter @orbit/workflow-core build",
+    "prebuild": "pnpm --filter @orbit/runtime-contracts build",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
-    "pretest": "pnpm --filter @orbit/workflow-core build",
+    "pretest": "pnpm --filter @orbit/runtime-contracts build",
     "test": "vitest run --no-cache",
     "sops:health": "tsx src/sops/sops-admin.ts health",
     "sops:backup": "tsx src/sops/sops-admin.ts backup",
@@ -23,6 +23,7 @@
     "vitest": "^2.0.5"
   },
   "dependencies": {
+    "@orbit/runtime-contracts": "workspace:*",
     "@orbit/workflow-core": "workspace:*",
     "@nestjs/common": "^11.1.27",
     "@nestjs/core": "^11.1.27",

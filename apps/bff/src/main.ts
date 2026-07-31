@@ -14,7 +14,13 @@ const skillDataRoot = resolveSkillHubDataRoot();
 const registryServiceUrl = resolveSkillRegistryServiceUrl();
 const registryAdminToken = resolveSkillRegistryAdminToken();
 const sopDataRoot = resolveSopDataRoot();
-const server = await createBffHttpServer({ agentBaseUrl, skillDataRoot, registryServiceUrl, registryAdminToken, sopDataRoot });
+const server = await createBffHttpServer({
+  agentBaseUrl,
+  skillDataRoot,
+  registryServiceUrl,
+  registryAdminToken,
+  sopDataRoot,
+});
 
 server.listen(port, "0.0.0.0", () => {
   process.stdout.write(`agent bff listening on http://0.0.0.0:${port}\n`);

@@ -207,6 +207,11 @@ export class AgentProfileService {
     return [...agents].sort((left, right) => right.updatedAt - left.updatedAt);
   }
 
+  /** Returns one current editable profile, or null when it does not exist. */
+  async getAgent(agentId: string): Promise<AgentProfile | null> {
+    return (await this.readAgents()).find((agent) => agent.id === agentId) ?? null;
+  }
+
   /** Creates and persists a new agent profile. */
   async createAgent(input: unknown): Promise<AgentProfile> {
     const now = Date.now();

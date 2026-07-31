@@ -2,6 +2,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import {
+  DEFAULT_WORKFLOW_STAGE_E_CAPABILITIES,
+  builtinNodeRegistry,
+  type WorkflowStageECapabilityRegistry,
+} from "@orbit/workflow-core";
+import { SqliteAgentVersionRepository } from "../../../src/agents/sqlite-agent-version.repository.js";
 import { SopDatabase } from "../../../src/sops/sop-database.js";
 import { SopRevisionConflictError, SopValidationError } from "../../../src/sops/sops.errors.js";
 import { SopsService } from "../../../src/sops/sops.service.js";
@@ -9,13 +15,27 @@ import { SqliteSopsRepository } from "../../../src/sops/sqlite-sops.repository.j
 import { createTestDraft } from "./test-fixtures.js";
 
 const roots: string[] = [];
+const CLOSED_STAGE_E_CAPABILITIES = {
+  parallelMerge: false,
+  iteration: false,
+  boundedLoop: false,
+  nestedWorkflow: false,
+  agentNode: false,
+  humanApproval: false,
+  restartResume: false,
+} satisfies WorkflowStageECapabilityRegistry;
 
-async function setup() {
+async function setup(stageECapabilities: WorkflowStageECapabilityRegistry = DEFAULT_WORKFLOW_STAGE_E_CAPABILITIES) {
   const dataRoot = await mkdtemp(join(tmpdir(), "orbit-sops-service-"));
   roots.push(dataRoot);
   const database = new SopDatabase({ sopDataRoot: dataRoot });
   const repository = new SqliteSopsRepository(database);
-  return { database, service: new SopsService(repository, database) };
+  const agentVersions = new SqliteAgentVersionRepository(database);
+  return {
+    database,
+    agentVersions,
+    service: new SopsService(repository, database, agentVersions, stageECapabilities),
+  };
 }
 
 afterEach(async () => {
@@ -23,6 +43,80 @@ afterEach(async () => {
 });
 
 describe("SopsService", () => {
+  it("允许保存阶段 E 草稿，但按单项 capability 阻止生产发布", async () => {
+    const { database, service } = await setup(CLOSED_STAGE_E_CAPABILITIES);
+    try {
+      const source = createTestDraft("stage-e-capability-gate");
+      const definition = builtinNodeRegistry.get("iteration")!;
+      const config = definition.createDefaultConfig();
+      const iteration = {
+        kind: "builtin" as const,
+        id: "iteration",
+        type: "iteration" as const,
+        version: definition.version,
+        label: "迭代",
+        position: { x: 0, y: 80 },
+        config,
+        ports: definition.createPorts(config),
+      };
+      const created = service.createDraft({
+        ...source,
+        nodes: [source.nodes[0]!, iteration, source.nodes[1]!],
+        edges: [
+          { id: "start-iteration", source: { nodeId: "start", portId: "out" }, target: { nodeId: "iteration", portId: "items" } },
+          { id: "iteration-end", source: { nodeId: "iteration", portId: "results" }, target: { nodeId: "end", portId: "in" } },
+        ],
+      });
+
+      await expect(service.publish(created.id, { expectedRevision: 0 })).rejects.toMatchObject({
+        metadata: {
+          diagnostics: expect.arrayContaining([
+            expect.objectContaining({ code: "runtime.capability-disabled", message: expect.stringContaining("iteration") }),
+          ]),
+        },
+      });
+      expect(service.getDraft(created.id).nodes).toContainEqual(iteration);
+    } finally {
+      database.onModuleDestroy();
+    }
+  });
+
+  it("共享生产矩阵继续拒绝 Parallel/Merge 发布", async () => {
+    const { database, service } = await setup();
+    try {
+      const source = createTestDraft("parallel-capability-gate");
+      const definition = builtinNodeRegistry.get("parallel")!;
+      const config = definition.createDefaultConfig();
+      const parallel = {
+        kind: "builtin" as const,
+        id: "parallel",
+        type: "parallel" as const,
+        version: definition.version,
+        label: "并行",
+        position: { x: 0, y: 80 },
+        config,
+        ports: definition.createPorts(config),
+      };
+      const created = service.createDraft({
+        ...source,
+        nodes: [source.nodes[0]!, parallel, source.nodes[1]!],
+        edges: [
+          { id: "start-parallel", source: { nodeId: "start", portId: "out" }, target: { nodeId: "parallel", portId: "in" } },
+        ],
+      });
+
+      await expect(service.publish(created.id, { expectedRevision: 0 })).rejects.toMatchObject({
+        metadata: {
+          diagnostics: expect.arrayContaining([
+            expect.objectContaining({ code: "runtime.capability-disabled", message: expect.stringContaining("parallelMerge") }),
+          ]),
+        },
+      });
+    } finally {
+      database.onModuleDestroy();
+    }
+  });
+
   it("自动保存使用 expectedRevision 并返回最新冲突草稿", async () => {
     const { database, service } = await setup();
     try {
@@ -48,6 +142,112 @@ describe("SopsService", () => {
 
       const invalid = service.createDraft({ ...createTestDraft("invalid"), edges: [] });
       await expect(service.publish(invalid.id, { expectedRevision: 0 })).rejects.toBeInstanceOf(SopValidationError);
+    } finally {
+      database.onModuleDestroy();
+    }
+  });
+
+  it("发布 Agent 节点时使用同一不可变 AgentVersion resolver", async () => {
+    const { database, agentVersions, service } = await setup();
+    try {
+      const source = createTestDraft("agent-version-workflow");
+      const definition = builtinNodeRegistry.get("agent")!;
+      const config = definition.createDefaultConfig();
+      const version = agentVersions.publish({
+        agentProfileId: "profile-1",
+        contentHash: "agent-hash-1",
+        name: "发布 Agent",
+        description: "",
+        instructions: ["执行节点。"],
+        toolPolicy: { allowedToolIds: [] },
+        skillPolicy: { bindings: [] },
+        outputSchema: config.outputSchema,
+        createdBy: "tester",
+        releaseNotes: "",
+        createdAt: 1,
+      });
+      config.agentProfileId = version.agentProfileId;
+      config.agentVersionId = version.id;
+      const agentNode = {
+        kind: "builtin" as const,
+        id: "agent",
+        type: "agent" as const,
+        version: definition.version,
+        label: "Agent",
+        position: { x: 0, y: 80 },
+        config,
+        ports: definition.createPorts(config),
+      };
+      const created = service.createDraft({
+        ...source,
+        nodes: [source.nodes[0]!, agentNode, source.nodes[1]!],
+        edges: [
+          { id: "start-agent", source: { nodeId: "start", portId: "out" }, target: { nodeId: "agent", portId: "in" } },
+          { id: "agent-end", source: { nodeId: "agent", portId: "result" }, target: { nodeId: "end", portId: "in" } },
+        ],
+      });
+      await expect(service.publish(created.id, { expectedRevision: 0 })).resolves.toMatchObject({ workflowId: created.id });
+
+      const mismatched = service.createDraft({
+        ...source,
+        id: "agent-version-mismatch",
+        nodes: [source.nodes[0]!, { ...agentNode, config: { ...config, outputSchema: { type: "number" } } }, source.nodes[1]!],
+        edges: [
+          { id: "start-agent", source: { nodeId: "start", portId: "out" }, target: { nodeId: "agent", portId: "in" } },
+          { id: "agent-end", source: { nodeId: "agent", portId: "result" }, target: { nodeId: "end", portId: "in" } },
+        ],
+      });
+      await expect(service.publish(mismatched.id, { expectedRevision: 0 })).rejects.toBeInstanceOf(SopValidationError);
+    } finally {
+      database.onModuleDestroy();
+    }
+  });
+
+  it("发布 Subworkflow 节点时使用同一不可变 WorkflowVersion resolver", async () => {
+    const { database, service } = await setup();
+    try {
+      const childDraft = service.createDraft(createTestDraft("child-workflow"));
+      const childVersion = await service.publish(childDraft.id, { expectedRevision: 0, createdBy: "tester" });
+      const parentSource = createTestDraft("parent-workflow");
+      const definition = builtinNodeRegistry.get("subworkflow")!;
+      const config = definition.createDefaultConfig();
+      config.workflowId = childVersion.workflowId;
+      config.versionId = childVersion.id;
+      config.contentHash = childVersion.contentHash;
+      const subworkflowNode = {
+        kind: "builtin" as const,
+        id: "subworkflow",
+        type: "subworkflow" as const,
+        version: definition.version,
+        label: "子流程",
+        position: { x: 0, y: 80 },
+        config,
+        ports: definition.createPorts(config),
+      };
+      const parent = service.createDraft({
+        ...parentSource,
+        nodes: [parentSource.nodes[0]!, subworkflowNode, parentSource.nodes[1]!],
+        edges: [
+          { id: "start-subworkflow", source: { nodeId: "start", portId: "out" }, target: { nodeId: "subworkflow", portId: "in" } },
+          { id: "subworkflow-end", source: { nodeId: "subworkflow", portId: "result" }, target: { nodeId: "end", portId: "in" } },
+        ],
+      });
+
+      await expect(service.publish(parent.id, { expectedRevision: 0 })).resolves.toMatchObject({ workflowId: parent.id });
+      const mismatched = service.createDraft({
+        ...parentSource,
+        id: "parent-workflow-mismatch",
+        nodes: [
+          parentSource.nodes[0]!,
+          { ...subworkflowNode, config: { ...config, contentHash: "tampered" } },
+          parentSource.nodes[1]!,
+        ],
+        edges: [
+          { id: "start-subworkflow", source: { nodeId: "start", portId: "out" }, target: { nodeId: "subworkflow", portId: "in" } },
+          { id: "subworkflow-end", source: { nodeId: "subworkflow", portId: "result" }, target: { nodeId: "end", portId: "in" } },
+        ],
+      });
+      await expect(service.publish(mismatched.id, { expectedRevision: 0 })).rejects.toBeInstanceOf(SopValidationError);
     } finally {
       database.onModuleDestroy();
     }

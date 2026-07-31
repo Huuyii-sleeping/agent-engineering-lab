@@ -11,7 +11,7 @@ export type SopDatabaseOptions = {
   sopDatabasePath?: string;
 };
 
-const latestMigrationVersion = 2;
+const latestMigrationVersion = 6;
 
 function readPragmaValue(row: unknown, key: string): string {
   if (!row || typeof row !== "object") return "";
@@ -220,6 +220,61 @@ export class SopDatabase implements OnModuleDestroy {
           create index workflow_events_created on workflow_events(run_id, created_at);
         `);
         database.prepare("insert into schema_migrations(version, applied_at) values (?, ?)").run(2, Date.now());
+      })();
+    }
+    if (current.version < 3) {
+      database.transaction(() => {
+        database.exec(`
+          create table agent_versions (
+            id text primary key,
+            agent_profile_id text not null,
+            version integer not null,
+            content_hash text not null,
+            name text not null,
+            description text not null,
+            snapshot_json text not null,
+            created_by text not null,
+            release_notes text not null,
+            created_at integer not null,
+            unique(agent_profile_id, version)
+          );
+          create index agent_versions_profile on agent_versions(agent_profile_id, version desc);
+          create index agent_versions_created on agent_versions(created_at desc);
+
+          create trigger agent_versions_immutable_update
+          before update on agent_versions
+          begin
+            select raise(abort, 'agent_versions is immutable');
+          end;
+
+          create trigger agent_versions_immutable_delete
+          before delete on agent_versions
+          begin
+            select raise(abort, 'agent_versions is immutable');
+          end;
+        `);
+        database.prepare("insert into schema_migrations(version, applied_at) values (?, ?)").run(3, Date.now());
+      })();
+    }
+    if (current.version < 4) {
+      database.transaction(() => {
+        database.prepare("insert into schema_migrations(version, applied_at) values (?, ?)").run(4, Date.now());
+      })();
+    }
+    if (current.version < 5) {
+      database.transaction(() => {
+        database.exec(`
+          alter table workflow_runs add column node_instances_json text;
+          alter table workflow_runs add column child_runs_json text;
+          alter table workflow_runs add column waiting_json text;
+        `);
+        database.prepare("insert into schema_migrations(version, applied_at) values (?, ?)").run(5, Date.now());
+      })();
+    }
+    if (current.version < 6) {
+      database.transaction(() => {
+        database.exec("drop table if exists approval_requests;");
+        database.prepare("insert into schema_migrations(version, applied_at) values (?, ?)").run(6, Date.now());
       })();
     }
     const after = database.prepare("select coalesce(max(version), 0) as version from schema_migrations").get() as { version: number };

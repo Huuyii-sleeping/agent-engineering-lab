@@ -17,6 +17,14 @@ export type StartWorkflowRunInput = {
   nodeInputs?: Record<string, unknown>;
 };
 
+/** 绑定当前 waiting interrupt 的运行恢复命令。 */
+export type ResumeWorkflowRunInput = {
+  interruptId: string;
+  action: "approve" | "reject";
+  data?: Record<string, unknown>;
+  idempotencyKey: string;
+};
+
 /** BFF 持久化的节点运行快照。 */
 export type { WorkflowNodeRunSnapshot, WorkflowRunSnapshot };
 

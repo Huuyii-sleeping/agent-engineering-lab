@@ -2,12 +2,15 @@ import { Body, Controller, Delete, Get, Inject, Param, Post, Put, Res } from "@n
 import type { ServerResponse } from "node:http";
 import { errorPayload, writeJson } from "../http-utils.js";
 import { AgentProfileService, AgentSkillBindingValidationError } from "./agent-profile.service.js";
+import { AgentVersionNotFoundError, AgentVersionService } from "./agent-version.service.js";
 
 @Controller("/api/agents")
 export class AgentsController {
   constructor(
     @Inject(AgentProfileService)
     private readonly agentProfileService: AgentProfileService,
+    @Inject(AgentVersionService)
+    private readonly agentVersionService: AgentVersionService,
   ) {}
 
   /** Lists all user-managed agent profiles. */
@@ -23,6 +26,24 @@ export class AgentsController {
       writeJson(res, 201, { ok: true, agent: await this.agentProfileService.createAgent(body) });
     } catch (error) {
       this.writeAgentError(res, error);
+    }
+  }
+
+  /** Publishes the current profile as a new immutable AgentVersion. */
+  @Post(":agentId/versions")
+  async publishVersion(
+    @Param("agentId") agentId: string,
+    @Body() body: unknown,
+    @Res() res: ServerResponse,
+  ): Promise<void> {
+    try {
+      writeJson(res, 201, { ok: true, version: await this.agentVersionService.publish(agentId, body) });
+    } catch (error) {
+      if (error instanceof AgentVersionNotFoundError) {
+        writeJson(res, 404, errorPayload(error.code, error.message));
+        return;
+      }
+      throw error;
     }
   }
 

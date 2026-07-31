@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { errorPayload, writeJson } from "../http-utils.js";
 import { WorkflowRunControlError } from "./workflow-runs.errors.js";
 import { WorkflowRunsService } from "./workflow-runs.service.js";
-import type { StartWorkflowRunInput } from "./workflow-runs.types.js";
+import type { ResumeWorkflowRunInput, StartWorkflowRunInput } from "./workflow-runs.types.js";
 
 async function respond(res: ServerResponse, statusCode: number, action: () => Promise<unknown>): Promise<void> {
   try {
@@ -43,6 +43,11 @@ export class WorkflowRunsController {
   @Post(":id/cancel")
   cancel(@Param("id") id: string, @Res() res: ServerResponse): Promise<void> {
     return respond(res, 202, () => this.service.cancel(id));
+  }
+
+  @Post(":id/resume")
+  resume(@Param("id") id: string, @Body() body: ResumeWorkflowRunInput, @Res() res: ServerResponse): Promise<void> {
+    return respond(res, 200, () => this.service.resume(id, body));
   }
 
   @Get(":id")

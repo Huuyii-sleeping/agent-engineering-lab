@@ -135,6 +135,11 @@ export class AgentProxyService {
     return this.proxyJson({ method: "POST", pathname: `/workflow-runs/${encodeURIComponent(runId)}/cancel` });
   }
 
+  /** 将绑定具体 run 的 interrupt 决定转发到 Agent Runtime。 */
+  async resumeWorkflowRun(runId: string, body: JsonObject): Promise<ProxyResult> {
+    return this.proxyJson({ method: "POST", pathname: `/workflow-runs/${encodeURIComponent(runId)}/resume`, body });
+  }
+
   /** 打开 Agent runtime SSE，并保留事件游标与取消信号。 */
   workflowEventStream(runId: string, search: string, lastEventId: string | undefined, signal: AbortSignal): Promise<Response> {
     const headers: HeadersInit = { Accept: "text/event-stream" };
