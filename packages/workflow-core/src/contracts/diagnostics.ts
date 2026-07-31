@@ -4,10 +4,10 @@ export type DiagnosticSeverity = "error" | "warning";
 /** 编译诊断可精确定位的实体类型。 */
 export type DiagnosticLocation =
   | { kind: "workflow" }
-  | { kind: "node"; nodeId: string }
-  | { kind: "port"; nodeId: string; portId: string }
-  | { kind: "field"; nodeId: string; fieldPath: string[] }
-  | { kind: "edge"; edgeId: string };
+  | { kind: "node"; nodeId: string; containerId?: string }
+  | { kind: "port"; nodeId: string; portId: string; containerId?: string }
+  | { kind: "field"; nodeId: string; fieldPath: string[]; containerId?: string }
+  | { kind: "edge"; edgeId: string; containerId?: string };
 
 /** 可由画布、问题面板和字段级 UI 共同消费的诊断。 */
 export type WorkflowDiagnostic = {

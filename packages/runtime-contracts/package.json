@@ -1,0 +1,29 @@
+{
+  "name": "@orbit/runtime-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "prebuild": "pnpm --filter @orbit/workflow-core build",
+    "build": "tsc -p tsconfig.json",
+    "pretest": "pnpm build",
+    "test": "vitest run --no-cache"
+  },
+  "dependencies": {
+    "@orbit/workflow-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^2.0.5"
+  }
+}

@@ -19,6 +19,9 @@ const output = (id: string, name: string, dataType: NodePort["dataType"] = "any"
 });
 
 const noDiagnostics = (): WorkflowDiagnostic[] => [];
+const DAY_MS = 24 * 60 * 60 * 1_000;
+
+const emptySubgraph = (id: string) => ({ id, nodes: [], edges: [], inputs: [], outputs: [] });
 
 function requiredText(nodeId: string, field: string, value: string, label: string): WorkflowDiagnostic[] {
   return value.trim()
@@ -29,6 +32,35 @@ function requiredText(nodeId: string, field: string, value: string, label: strin
         message: `${label}不能为空。`,
         location: { kind: "field", nodeId, fieldPath: [field] },
       }];
+}
+
+function numberRange(
+  nodeId: string,
+  field: string,
+  value: number,
+  minimum: number,
+  maximum: number,
+  label: string,
+): WorkflowDiagnostic[] {
+  return Number.isInteger(value) && value >= minimum && value <= maximum
+    ? []
+    : [{
+        code: "node.invalid-range",
+        severity: "error",
+        message: `${label}必须为 ${minimum} 到 ${maximum} 之间的整数。`,
+        location: { kind: "field", nodeId, fieldPath: [field] },
+      }];
+}
+
+function uniqueIds(nodeId: string, field: string, values: readonly { id: string }[], label: string): WorkflowDiagnostic[] {
+  const ids = values.map((item) => item.id.trim());
+  if (ids.length === new Set(ids).size && ids.every(Boolean)) return [];
+  return [{
+    code: "node.duplicate-id",
+    severity: "error",
+    message: `${label} id 必须非空且唯一。`,
+    location: { kind: "field", nodeId, fieldPath: [field] },
+  }];
 }
 
 const definitions: { [T in BuiltinNodeType]: NodeDefinition<T> } = {
@@ -188,6 +220,273 @@ const definitions: { [T in BuiltinNodeType]: NodeDefinition<T> } = {
     createPorts: () => ({ inputs: [input("in", "查询上下文")], outputs: [output("documents", "文档", "array"), output("text", "合并文本", "string")] }),
     validate: (config, nodeId) => requiredText(nodeId, "knowledgeBaseId", config.knowledgeBaseId, "知识库"),
   },
+  parallel: {
+    type: "parallel",
+    version: 1,
+    category: "control",
+    label: "并行",
+    description: "以受限并发执行静态分支",
+    icon: "GitFork",
+    color: "#f97316",
+    inspectorId: "parallel",
+    executor: { id: "workflow.parallel", version: 1 },
+    configSchema: {
+      type: "object",
+      required: ["branches", "maxConcurrency", "failurePolicy"],
+      properties: {
+        branches: { type: "array", items: { type: "object", required: ["id", "label"] } },
+        maxConcurrency: { type: "integer", minimum: 1, maximum: 10 },
+        failurePolicy: { type: "string", enum: ["fail-fast", "collect"] },
+      },
+    },
+    createDefaultConfig: () => ({
+      branches: [{ id: "branch-1", label: "分支 1" }, { id: "branch-2", label: "分支 2" }],
+      maxConcurrency: 2,
+      failurePolicy: "fail-fast",
+    }),
+    createPorts: (config) => ({
+      inputs: [input("in", "输入", "any", true)],
+      outputs: config.branches.map((branch) => output(branch.id, branch.label)),
+    }),
+    validate: (config, nodeId) => [
+      ...(config.branches.length >= 2 ? [] : [{
+        code: "node.parallel.branches",
+        severity: "error" as const,
+        message: "Parallel 至少需要两个分支。",
+        location: { kind: "field" as const, nodeId, fieldPath: ["branches"] },
+      }]),
+      ...uniqueIds(nodeId, "branches", config.branches, "Parallel 分支"),
+      ...numberRange(nodeId, "maxConcurrency", config.maxConcurrency, 1, 10, "最大并发度"),
+    ],
+  },
+  merge: {
+    type: "merge",
+    version: 1,
+    category: "control",
+    label: "聚合",
+    description: "确定性聚合对应 Parallel 的分支结果",
+    icon: "GitMerge",
+    color: "#fb923c",
+    inspectorId: "merge",
+    executor: { id: "workflow.merge", version: 1 },
+    configSchema: {
+      type: "object",
+      required: ["parallelNodeId", "strategy", "allowMissing"],
+      properties: {
+        parallelNodeId: { type: "string" },
+        strategy: { type: "string", enum: ["ordered", "by-branch"] },
+        allowMissing: { type: "boolean" },
+      },
+    },
+    createDefaultConfig: () => ({ parallelNodeId: "", strategy: "ordered", allowMissing: false }),
+    createPorts: () => ({
+      inputs: [{ ...input("branches", "分支结果", "any", true), multiple: true }],
+      outputs: [output("result", "聚合结果", "object")],
+    }),
+    validate: (config, nodeId) => requiredText(nodeId, "parallelNodeId", config.parallelNodeId, "Parallel 节点"),
+  },
+  iteration: {
+    type: "iteration",
+    version: 1,
+    category: "container",
+    label: "迭代",
+    description: "对数组元素受限并发执行统一子图",
+    icon: "ListRestart",
+    color: "#6366f1",
+    inspectorId: "iteration",
+    executor: { id: "workflow.iteration", version: 1 },
+    configSchema: {
+      type: "object",
+      required: ["items", "maxItems", "maxConcurrency", "itemTimeoutMs", "timeoutMs", "failurePolicy", "aggregation", "inputBindings", "body"],
+      properties: {
+        items: { type: "object" },
+        maxItems: { type: "integer", minimum: 1, maximum: 1_000 },
+        maxConcurrency: { type: "integer", minimum: 1, maximum: 10 },
+        itemTimeoutMs: { type: "integer", minimum: 1 },
+        timeoutMs: { type: "integer", minimum: 1, maximum: DAY_MS },
+        failurePolicy: { type: "string", enum: ["fail-fast", "continue", "collect-errors"] },
+        aggregation: { type: "string", enum: ["ordered", "by-index"] },
+        inputBindings: { type: "array" },
+        body: { type: "object" },
+      },
+    },
+    createDefaultConfig: () => ({
+      items: { kind: "literal", value: [] },
+      maxItems: 1_000,
+      maxConcurrency: 1,
+      itemTimeoutMs: 30_000,
+      timeoutMs: DAY_MS,
+      failurePolicy: "fail-fast",
+      aggregation: "ordered",
+      inputBindings: [],
+      body: emptySubgraph("iteration-body"),
+    }),
+    createPorts: (config) => ({
+      inputs: [input("items", "数组", "array", true), ...config.body.inputs.map((field) => input(`input:${field.id}`, field.name, field.dataType, field.required))],
+      outputs: [output("results", "迭代结果", "array"), ...config.body.outputs.map((field) => output(`output:${field.id}`, field.name, field.dataType))],
+    }),
+    validate: (config, nodeId) => [
+      ...requiredText(nodeId, "body.id", config.body.id, "子图 id"),
+      ...numberRange(nodeId, "maxItems", config.maxItems, 1, 1_000, "最大元素数"),
+      ...numberRange(nodeId, "maxConcurrency", config.maxConcurrency, 1, 10, "最大并发度"),
+      ...numberRange(nodeId, "itemTimeoutMs", config.itemTimeoutMs, 1, DAY_MS, "单项超时"),
+      ...numberRange(nodeId, "timeoutMs", config.timeoutMs, 1, DAY_MS, "整体超时"),
+    ],
+  },
+  loop: {
+    type: "loop",
+    version: 1,
+    category: "container",
+    label: "循环",
+    description: "按 while 或 until 条件受限重复执行子图",
+    icon: "Repeat2",
+    color: "#4f46e5",
+    inspectorId: "loop",
+    executor: { id: "workflow.loop", version: 1 },
+    configSchema: {
+      type: "object",
+      required: ["mode", "condition", "initialVariables", "maxIterations", "timeoutMs", "inputBindings", "body"],
+      properties: {
+        mode: { type: "string", enum: ["while", "until"] },
+        condition: { type: "string" },
+        initialVariables: { type: "array" },
+        maxIterations: { type: "integer", minimum: 1, maximum: 1_000 },
+        timeoutMs: { type: "integer", minimum: 1, maximum: DAY_MS },
+        inputBindings: { type: "array" },
+        body: { type: "object" },
+      },
+    },
+    createDefaultConfig: () => ({
+      mode: "while",
+      condition: "true",
+      initialVariables: [],
+      maxIterations: 100,
+      timeoutMs: DAY_MS,
+      inputBindings: [],
+      body: emptySubgraph("loop-body"),
+    }),
+    createPorts: (config) => ({
+      inputs: [input("in", "输入"), ...config.body.inputs.map((field) => input(`input:${field.id}`, field.name, field.dataType, field.required))],
+      outputs: config.body.outputs.length > 0
+        ? config.body.outputs.map((field) => output(`output:${field.id}`, field.name, field.dataType))
+        : [output("result", "循环结果")],
+    }),
+    validate: (config, nodeId) => [
+      ...requiredText(nodeId, "condition", config.condition, "循环条件"),
+      ...requiredText(nodeId, "body.id", config.body.id, "子图 id"),
+      ...uniqueIds(nodeId, "initialVariables", config.initialVariables, "循环变量"),
+      ...numberRange(nodeId, "maxIterations", config.maxIterations, 1, 1_000, "最大循环次数"),
+      ...numberRange(nodeId, "timeoutMs", config.timeoutMs, 1, DAY_MS, "循环总时长"),
+    ],
+  },
+  subworkflow: {
+    type: "subworkflow",
+    version: 1,
+    category: "container",
+    label: "子流程",
+    description: "执行固定不可变版本的嵌套 Workflow",
+    icon: "Workflow",
+    color: "#0f766e",
+    inspectorId: "subworkflow",
+    executor: { id: "workflow.subworkflow", version: 1 },
+    configSchema: {
+      type: "object",
+      required: ["workflowId", "versionId", "contentHash", "inputBindings", "outputBindings"],
+      properties: {
+        workflowId: { type: "string" },
+        versionId: { type: "string" },
+        contentHash: { type: "string" },
+        inputBindings: { type: "array" },
+        outputBindings: { type: "array" },
+      },
+    },
+    createDefaultConfig: () => ({ workflowId: "", versionId: "", contentHash: "", inputBindings: [], outputBindings: [] }),
+    createPorts: (config) => ({
+      inputs: config.inputBindings.length > 0
+        ? config.inputBindings.map((binding) => input(`input:${binding.inputId}`, binding.inputId))
+        : [input("in", "输入")],
+      outputs: config.outputBindings.length > 0
+        ? config.outputBindings.map((binding) => output(`output:${binding.outputId}`, binding.name, binding.dataType))
+        : [output("result", "子流程结果")],
+    }),
+    validate: (config, nodeId) => [
+      ...requiredText(nodeId, "workflowId", config.workflowId, "Workflow"),
+      ...requiredText(nodeId, "versionId", config.versionId, "Workflow 版本"),
+      ...requiredText(nodeId, "contentHash", config.contentHash, "内容哈希"),
+    ],
+  },
+  agent: {
+    type: "agent",
+    version: 1,
+    category: "ai",
+    label: "Agent",
+    description: "通过 AgentRuntimePort 执行固定发布版本",
+    icon: "Bot",
+    color: "#7c3aed",
+    inspectorId: "agent",
+    executor: { id: "workflow.agent", version: 1 },
+    configSchema: {
+      type: "object",
+      required: ["agentProfileId", "agentVersionId", "inputBindings", "outputSchema", "memory"],
+      properties: {
+        agentProfileId: { type: "string" },
+        agentVersionId: { type: "string" },
+        inputBindings: { type: "object" },
+        outputSchema: { type: "object" },
+        memory: { type: "object" },
+      },
+    },
+    createDefaultConfig: () => ({
+      agentProfileId: "",
+      agentVersionId: "",
+      inputBindings: {},
+      outputSchema: { type: "object" },
+      memory: { isolation: "node-run", shareThread: false },
+    }),
+    createPorts: () => ({ inputs: [input("in", "输入")], outputs: [output("result", "Agent 输出", "object")] }),
+    validate: (config, nodeId) => [
+      ...requiredText(nodeId, "agentProfileId", config.agentProfileId, "Agent profile"),
+      ...requiredText(nodeId, "agentVersionId", config.agentVersionId, "Agent 版本"),
+    ],
+  },
+  "human-approval": {
+    type: "human-approval",
+    version: 1,
+    category: "human",
+    label: "人工审批",
+    description: "暂停当前 Workflow，并在当前运行上下文等待人工决定",
+    icon: "UserCheck",
+    color: "#be123c",
+    inspectorId: "human-approval",
+    executor: { id: "workflow.human-approval", version: 1 },
+    configSchema: {
+      type: "object",
+      required: ["policyId", "displayFields", "decisionSchema", "deadlineMs", "timeoutPolicy"],
+      properties: {
+        policyId: { type: "string" },
+        displayFields: { type: "array" },
+        decisionSchema: { type: "object" },
+        deadlineMs: { type: "integer", minimum: 1, maximum: 30 * DAY_MS },
+        timeoutPolicy: { type: "string", enum: ["reject", "fail", "error-route"] },
+      },
+    },
+    createDefaultConfig: () => ({
+      policyId: "",
+      displayFields: [],
+      decisionSchema: { type: "object" },
+      deadlineMs: 7 * DAY_MS,
+      timeoutPolicy: "fail",
+    }),
+    createPorts: () => ({
+      inputs: [input("in", "审批内容", "object", true)],
+      outputs: [output("approved", "已批准", "object"), output("rejected", "已拒绝", "object"), output("error", "审批异常", "object")],
+    }),
+    validate: (config, nodeId) => [
+      ...requiredText(nodeId, "policyId", config.policyId, "审批策略"),
+      ...uniqueIds(nodeId, "displayFields", config.displayFields, "展示字段"),
+      ...numberRange(nodeId, "deadlineMs", config.deadlineMs, 1, 30 * DAY_MS, "审批期限"),
+    ],
+  },
 };
 
 /** 读取一个内置节点定义。 */
@@ -232,6 +531,13 @@ export function refreshNodePorts(node: WorkflowNode): WorkflowNode {
     case "template": return { ...node, ports: definitions.template.createPorts(node.config) };
     case "variable": return { ...node, ports: definitions.variable.createPorts(node.config) };
     case "knowledge": return { ...node, ports: definitions.knowledge.createPorts(node.config) };
+    case "parallel": return { ...node, ports: definitions.parallel.createPorts(node.config) };
+    case "merge": return { ...node, ports: definitions.merge.createPorts(node.config) };
+    case "iteration": return { ...node, ports: definitions.iteration.createPorts(node.config) };
+    case "loop": return { ...node, ports: definitions.loop.createPorts(node.config) };
+    case "subworkflow": return { ...node, ports: definitions.subworkflow.createPorts(node.config) };
+    case "agent": return { ...node, ports: definitions.agent.createPorts(node.config) };
+    case "human-approval": return { ...node, ports: definitions["human-approval"].createPorts(node.config) };
   }
 }
 
@@ -249,5 +555,12 @@ export function validateNodeConfig(node: WorkflowNode): WorkflowDiagnostic[] {
     case "template": return definitions.template.validate(node.config, node.id);
     case "variable": return definitions.variable.validate(node.config, node.id);
     case "knowledge": return definitions.knowledge.validate(node.config, node.id);
+    case "parallel": return definitions.parallel.validate(node.config, node.id);
+    case "merge": return definitions.merge.validate(node.config, node.id);
+    case "iteration": return definitions.iteration.validate(node.config, node.id);
+    case "loop": return definitions.loop.validate(node.config, node.id);
+    case "subworkflow": return definitions.subworkflow.validate(node.config, node.id);
+    case "agent": return definitions.agent.validate(node.config, node.id);
+    case "human-approval": return definitions["human-approval"].validate(node.config, node.id);
   }
 }

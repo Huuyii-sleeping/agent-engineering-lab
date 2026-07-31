@@ -1,20 +1,9 @@
 import type { BuiltinNodeConfigMap, BuiltinNodeType } from "../contracts/nodes.js";
 import type { NodePorts } from "../contracts/primitives.js";
 import type { WorkflowDiagnostic } from "../contracts/diagnostics.js";
+import type { WorkflowJsonSchema } from "../contracts/json-schema.js";
 
-/** workflow-core 使用的最小 JSON Schema 契约。 */
-export type WorkflowJsonSchema = {
-  type?: string | string[];
-  title?: string;
-  description?: string;
-  properties?: Record<string, WorkflowJsonSchema>;
-  required?: string[];
-  items?: WorkflowJsonSchema;
-  enum?: unknown[];
-  minimum?: number;
-  maximum?: number;
-  additionalProperties?: boolean | WorkflowJsonSchema;
-};
+export type { WorkflowJsonSchema } from "../contracts/json-schema.js";
 
 /** Agent 运行时执行器的稳定身份。 */
 export type ExecutorIdentity = { id: string; version: number };
@@ -23,7 +12,7 @@ export type ExecutorIdentity = { id: string; version: number };
 export type NodeDefinition<T extends BuiltinNodeType = BuiltinNodeType> = {
   type: T;
   version: number;
-  category: "input-output" | "ai" | "integration" | "logic" | "transform" | "knowledge";
+  category: "input-output" | "ai" | "integration" | "logic" | "transform" | "knowledge" | "control" | "container" | "human";
   label: string;
   description: string;
   icon: string;

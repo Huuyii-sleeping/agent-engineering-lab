@@ -1,5 +1,5 @@
 import type { WorkflowDiagnostic } from "../contracts/diagnostics.js";
-import type { WorkflowJsonSchema } from "../registry/types.js";
+import type { WorkflowJsonSchema } from "../contracts/json-schema.js";
 
 function matchesType(value: unknown, type: string): boolean {
   if (type === "array") return Array.isArray(value);

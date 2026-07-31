@@ -68,11 +68,21 @@ export type SecretVariableRef = {
   key?: string;
 };
 
-/** 容器循环上下文变量引用。 */
+/** 容器显式输入引用，只能在所属子图内部使用。 */
+export type ContainerInputRef = {
+  scope: "container-input";
+  containerNodeId: string;
+  inputId: string;
+  path?: string[];
+};
+
+/** Iteration/Loop 容器运行上下文变量引用。 */
 export type LoopVariableRef = {
   scope: "loop";
   containerNodeId: string;
-  key: "item" | "index";
+  key: "item" | "index" | "iteration" | "variable" | "previous-output";
+  variableId?: string;
+  outputId?: string;
   path?: string[];
 };
 
@@ -83,6 +93,7 @@ export type VariableRef =
   | SystemVariableRef
   | EnvironmentVariableRef
   | SecretVariableRef
+  | ContainerInputRef
   | LoopVariableRef;
 
 /** 凭据引用及节点需要的 capability；不包含凭据明文。 */
