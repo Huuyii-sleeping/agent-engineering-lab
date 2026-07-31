@@ -1,6 +1,7 @@
 import {
   Background,
   BackgroundVariant,
+  ConnectionLineType,
   ConnectionMode,
   Controls,
   MiniMap,
@@ -14,8 +15,11 @@ import { SopConnectionLine, SopEdge } from "../../components/SopEdge";
 import { SopNodeView } from "../../components/SopNodeView";
 import { getSopNodeMeta } from "../../lib/sop-catalog";
 import { useSopEditor } from "../use-sop-editor";
+import { useSopWorkflowReferences } from "../use-sop-workflow-references";
+import { useSopAgentReferences } from "../use-sop-agent-references";
 import type { SopFlowData, SopFlowEdgeData } from "../sop-flow-adapter";
 import { SopAlignmentOverlay } from "./SopAlignmentOverlay";
+import { SopContainerScopeBar } from "./SopContainerScopeBar";
 import { SopInspector } from "./SopInspector";
 import { SopPalette } from "./SopPalette";
 import { SopToolbar } from "./SopToolbar";
@@ -36,6 +40,8 @@ export function SopCanvasShell({ initial, legacyBackup, onSave, onAutoSave, onRe
   onOpenLifecycle: () => void;
 }) {
   const editor = useSopEditor(initial);
+  const workflowReferences = useSopWorkflowReferences(editor.selectedNode?.data.node.kind === "builtin" && editor.selectedNode.data.node.type === "subworkflow");
+  const agentReferences = useSopAgentReferences(editor.selectedNode?.data.node.kind === "builtin" && editor.selectedNode.data.node.type === "agent");
   const handleRunEvent = useCallback((event: WorkflowRuntimeEvent) => {
     editor.applyRunEvent(event);
     if (event.type === "node.status" && event.status === "failed") editor.focusNode(event.nodeId);
@@ -150,6 +156,7 @@ export function SopCanvasShell({ initial, legacyBackup, onSave, onAutoSave, onRe
         <div className="sop-workspace">
           <div className="sop-workspace-body">
             <div className="sop-main">
+              <SopContainerScopeBar crumbs={editor.scopeCrumbs} onNavigate={editor.navigateToScope} onExit={editor.exitContainer} />
               <div ref={canvasRef} className={interactionMode === "pan" ? "sop-canvas is-pan-mode" : "sop-canvas"} onDragOver={editor.onDragOver} onDrop={editor.onDrop}>
                 <ReactFlow<Node<SopFlowData>, Edge<SopFlowEdgeData>>
                 nodes={editor.nodes}
@@ -175,6 +182,10 @@ export function SopCanvasShell({ initial, legacyBackup, onSave, onAutoSave, onRe
                 onNodeDrag={editor.onNodeDrag}
                 onNodeDragStart={editor.onNodeDragStart}
                 onNodeDragStop={editor.onNodeDragStop}
+                onNodeDoubleClick={(_event, node) => {
+                  const workflowNode = node.data.node;
+                  if (workflowNode.kind === "builtin" && (workflowNode.type === "iteration" || workflowNode.type === "loop")) editor.enterContainer(node.id);
+                }}
                 multiSelectionKeyCode="Shift"
                 selectionOnDrag={interactionMode === "select"}
                 panOnDrag={interactionMode === "pan" ? true : [1, 2]}
@@ -185,7 +196,7 @@ export function SopCanvasShell({ initial, legacyBackup, onSave, onAutoSave, onRe
                 fitView
                 defaultEdgeOptions={{ type: "sop" }}
                 connectionRadius={40}
-                connectionLineType="smoothstep"
+                connectionLineType={ConnectionLineType.SmoothStep}
                 connectionLineComponent={SopConnectionLine}
                 connectionLineStyle={{ stroke: "#22c55e", strokeWidth: 2.2, strokeDasharray: "6 4" }}
                 proOptions={{ hideAttribution: true }}
@@ -208,6 +219,11 @@ export function SopCanvasShell({ initial, legacyBackup, onSave, onAutoSave, onRe
               selectedNodeIds={editor.selectedNodeIds}
               selectedNode={editor.selectedNode}
               selectedEdge={editor.selectedEdge}
+              scopeNodes={editor.nodes.map((node) => node.data.node)}
+              currentWorkflowId={initial.id}
+              scopeDepth={editor.scopePath.length}
+              workflowReferences={workflowReferences}
+              agentReferences={agentReferences}
               validation={editor.validation}
               availableVariables={editor.availableVariables}
               selectedDiagnostics={editor.selectedDiagnostics}
@@ -221,6 +237,7 @@ export function SopCanvasShell({ initial, legacyBackup, onSave, onAutoSave, onRe
               onClearValidation={editor.clearValidation}
               onFocusNode={editor.focusNode}
               onToggleCollapsed={editor.toggleSelectedCollapsed}
+              onEnterContainer={(nodeId) => { editor.enterContainer(nodeId); setOpenPanel(null); }}
               onClose={() => setOpenPanel(null)}
             />
           </div>
@@ -234,8 +251,10 @@ export function SopCanvasShell({ initial, legacyBackup, onSave, onAutoSave, onRe
             events={run.events}
             versions={run.versions}
             message={run.message}
+            decisionPending={run.decisionPending}
             onStart={(input) => { void run.start(input); }}
             onCancel={() => { void run.cancel(); }}
+            onResume={(decision) => { void run.resume(decision); }}
             onClose={run.close}
           />
         </div>

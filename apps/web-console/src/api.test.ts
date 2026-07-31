@@ -13,6 +13,8 @@ import {
   downloadSkill,
   exportSopDraft,
   fetchAgents,
+  fetchAgentVersion,
+  fetchAgentVersions,
   fetchHealth,
   fetchProfile,
   fetchSkillHubReadiness,
@@ -28,7 +30,9 @@ import {
   installSkill,
   previewSopImport,
   publishSopDraft,
+  publishAgentVersion,
   cancelWorkflowRun,
+  resumeWorkflowRun,
   rollbackSkill,
   resolveAgentSkills,
   saveSopDraftRemote,
@@ -274,6 +278,7 @@ describe("web-console api client", () => {
       const url = new URL(String(input), "http://localhost");
       if (init?.method === "POST" && url.pathname === "/api/workflow-runs") return jsonResponse({ ok: true, data: run }, 201);
       if (init?.method === "POST" && url.pathname === "/api/workflow-runs/run-1/cancel") return jsonResponse({ ok: true, data: run }, 202);
+      if (init?.method === "POST" && url.pathname === "/api/workflow-runs/run-1/resume") return jsonResponse({ ok: true, data: { ...run, status: "succeeded" } });
       if ((init?.method ?? "GET") === "GET" && url.pathname === "/api/workflow-runs/run-1") return jsonResponse({ ok: true, data: run });
       return jsonResponse({ ok: false }, 404);
     });
@@ -282,10 +287,26 @@ describe("web-console api client", () => {
     await expect(startWorkflowRun({ workflowId: draft.id, mode: "draft", draft })).resolves.toMatchObject({ id: "run-1", mode: "draft" });
     await expect(fetchWorkflowRun("run-1")).resolves.toMatchObject({ id: "run-1" });
     await expect(cancelWorkflowRun("run-1")).resolves.toMatchObject({ id: "run-1" });
+    await expect(resumeWorkflowRun("run-1", {
+      interruptId: "interrupt-1",
+      action: "approve",
+      data: { comment: "ok" },
+      idempotencyKey: "decision-1",
+    })).resolves.toMatchObject({ id: "run-1", status: "succeeded" });
     expect(fetchMock).toHaveBeenCalledWith("/api/workflow-runs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ workflowId: draft.id, mode: "draft", draft }),
+    });
+    expect(fetchMock).toHaveBeenCalledWith("/api/workflow-runs/run-1/resume", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        interruptId: "interrupt-1",
+        action: "approve",
+        data: { comment: "ok" },
+        idempotencyKey: "decision-1",
+      }),
     });
   });
 
@@ -419,6 +440,56 @@ describe("web-console api client", () => {
     await expect(deleteAgentProfile("a1")).resolves.toBeUndefined();
 
     expect(fetchMock).toHaveBeenLastCalledWith("/api/agents/a1", { method: "DELETE" });
+  });
+
+  it("publishes and normalizes the read-only AgentVersion catalog", async () => {
+    const version = {
+      id: "version-1",
+      agentProfileId: "profile-1",
+      version: 1,
+      contentHash: "a".repeat(64),
+      name: "  发布 Agent  ",
+      description: "  固定版本  ",
+      instructions: ["  instruction  "],
+      toolPolicy: { allowedToolIds: [" read_file ", "read_file"] },
+      skillPolicy: {
+        bindings: [{ skillId: " quality-gate ", version: " 1.0.0 ", sourceType: "builtin", registrySource: "local" }],
+      },
+      outputSchema: { type: "object" },
+      createdBy: " publisher ",
+      releaseNotes: " release ",
+      createdAt: 123,
+    };
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(String(input), "http://localhost");
+      const method = init?.method ?? "GET";
+      if (method === "POST" && url.pathname === "/api/agents/profile-1/versions") {
+        return jsonResponse({ ok: true, version }, 201);
+      }
+      if (method === "GET" && url.pathname === "/api/agent-versions" && url.searchParams.get("agentProfileId") === "profile-1") {
+        return jsonResponse({ ok: true, versions: [version] });
+      }
+      if (method === "GET" && url.pathname === "/api/agent-versions/version-1") {
+        return jsonResponse({ ok: true, version });
+      }
+      return jsonResponse({ ok: false, error: { code: "NOT_FOUND", message: url.pathname } }, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(publishAgentVersion("profile-1", { createdBy: " publisher ", releaseNotes: " release " })).resolves.toMatchObject({
+      id: "version-1",
+      name: "发布 Agent",
+      instructions: ["instruction"],
+      toolPolicy: { allowedToolIds: ["read_file"] },
+    });
+    await expect(fetchAgentVersions("profile-1")).resolves.toMatchObject([
+      { id: "version-1", skillPolicy: { bindings: [{ skillId: "quality-gate", version: "1.0.0" }] } },
+    ]);
+    await expect(fetchAgentVersion("version-1")).resolves.toMatchObject({
+      id: "version-1",
+      createdBy: "publisher",
+      releaseNotes: "release",
+    });
   });
 
   it("checks agent runtime skill bindings through the BFF preflight API", async () => {

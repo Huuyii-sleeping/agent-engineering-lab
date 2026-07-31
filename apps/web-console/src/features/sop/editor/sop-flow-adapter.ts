@@ -27,12 +27,22 @@ export type SopFlowEdgeData = Record<string, unknown> & {
 
 /** 将持久化节点映射为 React Flow 展示节点。 */
 export function toFlowNodes(draft: WorkflowDraft): Node<SopFlowData>[] {
-  return draft.nodes.map((node) => ({ id: node.id, type: "sop", position: node.position, data: { node } }));
+  return toFlowGraphNodes(draft.nodes);
 }
 
 /** 将持久化连边映射为 React Flow 展示边。 */
 export function toFlowEdges(draft: WorkflowDraft): Edge<SopFlowEdgeData>[] {
-  return draft.edges.map((edge) => ({
+  return toFlowGraphEdges(draft.edges);
+}
+
+/** 将任意 Workflow 图节点映射为 React Flow 展示节点。 */
+export function toFlowGraphNodes(nodes: readonly WorkflowNode[]): Node<SopFlowData>[] {
+  return nodes.map((node) => ({ id: node.id, type: "sop", position: node.position, data: { node } }));
+}
+
+/** 将任意 Workflow 图连边映射为 React Flow 展示边。 */
+export function toFlowGraphEdges(edges: readonly WorkflowEdge[]): Edge<SopFlowEdgeData>[] {
+  return edges.map((edge) => ({
     id: edge.id,
     type: "sop",
     source: edge.source.nodeId,
@@ -44,15 +54,9 @@ export function toFlowEdges(draft: WorkflowDraft): Edge<SopFlowEdgeData>[] {
   }));
 }
 
-/** 从 React Flow 状态构建可持久化 workflow v2 草稿。 */
-export function buildWorkflowDraft(base: WorkflowDraft, name: string, summary: string, nodes: Node<SopFlowData>[], edges: Edge<SopFlowEdgeData>[]): WorkflowDraft {
+/** 将 React Flow 展示状态还原为框架无关 Workflow 图。 */
+export function toWorkflowGraph(nodes: Node<SopFlowData>[], edges: Edge<SopFlowEdgeData>[]) {
   return {
-    ...base,
-    schemaVersion: WORKFLOW_SCHEMA_VERSION,
-    name: name.trim() || "未命名流程",
-    summary: summary.trim(),
-    revision: base.revision + 1,
-    updatedAt: Date.now(),
     nodes: nodes.map(({ position, data }) => ({ ...data.node, position })),
     edges: edges.map((edge): WorkflowEdge => ({
       id: edge.id,
@@ -62,6 +66,21 @@ export function buildWorkflowDraft(base: WorkflowDraft, name: string, summary: s
       status: edge.data?.status ?? "valid",
       issue: edge.data?.issue,
     })),
+  };
+}
+
+/** 从 React Flow 状态构建可持久化 workflow v2 草稿。 */
+export function buildWorkflowDraft(base: WorkflowDraft, name: string, summary: string, nodes: Node<SopFlowData>[], edges: Edge<SopFlowEdgeData>[]): WorkflowDraft {
+  const graph = toWorkflowGraph(nodes, edges);
+  return {
+    ...base,
+    schemaVersion: WORKFLOW_SCHEMA_VERSION,
+    name: name.trim() || "未命名流程",
+    summary: summary.trim(),
+    revision: base.revision + 1,
+    updatedAt: Date.now(),
+    nodes: graph.nodes,
+    edges: graph.edges,
   };
 }
 

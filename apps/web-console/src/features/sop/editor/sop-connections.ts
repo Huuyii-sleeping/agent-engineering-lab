@@ -2,8 +2,15 @@ import type { Connection, Edge, Node } from "@xyflow/react";
 import { checkPortConnection } from "@orbit/workflow-core";
 import type { SopFlowData, SopFlowEdgeData } from "./sop-flow-adapter";
 
-/** 检查 React Flow Connection 是否满足 workflow 端口契约。 */
-export function validateFlowConnection(nodes: readonly Node<SopFlowData>[], connection: Connection) {
+type FlowConnectionCandidate = {
+  source?: string | null;
+  target?: string | null;
+  sourceHandle?: string | null;
+  targetHandle?: string | null;
+};
+
+/** 检查 React Flow Connection 或既有 Edge 是否满足 workflow 端口契约。 */
+export function validateFlowConnection(nodes: readonly Node<SopFlowData>[], connection: FlowConnectionCandidate) {
   if (!connection.source || !connection.target || !connection.sourceHandle || !connection.targetHandle) return { valid: false as const, reason: "请从输出端口连接到输入端口。" };
   return checkPortConnection(nodes.map((node) => node.data.node), { nodeId: connection.source, portId: connection.sourceHandle }, { nodeId: connection.target, portId: connection.targetHandle });
 }

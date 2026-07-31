@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { WorkflowDraft, WorkflowRunMode, WorkflowRunSnapshot, WorkflowRuntimeEvent } from "@orbit/workflow-core";
+import {
+  isTerminalWorkflowRunStatus,
+  type WorkflowDraft,
+  type WorkflowRunMode,
+  type WorkflowRunSnapshot,
+  type WorkflowRuntimeEvent,
+} from "@orbit/workflow-core";
 import {
   cancelWorkflowRun,
   createWorkflowRunEventStream,
   fetchSopVersions,
   fetchWorkflowRun,
+  resumeWorkflowRun,
   startWorkflowRun,
   type SopVersionSummary,
   type WorkflowRunEventStream,
@@ -26,6 +33,7 @@ export function useSopRun(input: {
   const [events, setEvents] = useState<WorkflowRuntimeEvent[]>([]);
   const [versions, setVersions] = useState<SopVersionSummary[]>([]);
   const [message, setMessage] = useState("");
+  const [decisionPending, setDecisionPending] = useState(false);
   const streamRef = useRef<WorkflowRunEventStream | null>(null);
 
   const stopStream = useCallback(() => {
@@ -43,6 +51,7 @@ export function useSopRun(input: {
     setRun(null);
     setEvents([]);
     setMessage("");
+    setDecisionPending(false);
     if (nextMode !== "production") {
       setPhase("idle");
       return;
@@ -68,6 +77,7 @@ export function useSopRun(input: {
     setRun(null);
     setEvents([]);
     setMessage("");
+    setDecisionPending(false);
     setPhase("starting");
     try {
       const draft = input.draft();
@@ -114,10 +124,37 @@ export function useSopRun(input: {
     }
   }, [run]);
 
+  const resume = useCallback(async (decision: {
+    interruptId: string;
+    action: "approve" | "reject";
+    data: Record<string, unknown>;
+    idempotencyKey: string;
+  }) => {
+    if (!run || run.status !== "waiting") return;
+    const waiting = run.waiting?.waiting;
+    if (!waiting || (waiting.interruptId !== decision.interruptId && waiting.approvalRequestId !== decision.interruptId)) {
+      setMessage("当前决定不属于正在查看的 Workflow run。");
+      return;
+    }
+    setDecisionPending(true);
+    setMessage(decision.action === "approve" ? "正在恢复同意分支…" : "正在恢复拒绝分支…");
+    try {
+      const resumed = await resumeWorkflowRun(run.id, decision);
+      setRun(resumed);
+      setPhase(isTerminalWorkflowRunStatus(resumed.status) ? "terminal" : "running");
+      setMessage("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDecisionPending(false);
+    }
+  }, [run]);
+
   const close = useCallback(() => {
     stopStream();
+    setDecisionPending(false);
     setOpen(false);
   }, [stopStream]);
 
-  return { open, mode, phase, run, events, versions, message, prepare, start, cancel, close };
+  return { open, mode, phase, run, events, versions, message, decisionPending, prepare, start, cancel, resume, close };
 }

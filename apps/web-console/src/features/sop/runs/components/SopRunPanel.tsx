@@ -11,6 +11,7 @@ import type {
 } from "@orbit/workflow-core";
 import type { SopVersionSummary } from "../../../../api";
 import type { SopRunPhase } from "../use-sop-run";
+import { SopRunInterruptCard, type SopRunInterruptDecision } from "./SopRunInterruptCard";
 
 type InputField = { id: string; name: string; dataType: NodePort["dataType"]; required?: boolean; defaultValue?: unknown };
 
@@ -105,8 +106,10 @@ export function SopRunPanel(props: {
   events: WorkflowRuntimeEvent[];
   versions: SopVersionSummary[];
   message: string;
+  decisionPending: boolean;
   onStart: (input: { inputs: Record<string, unknown>; nodeInputs: Record<string, unknown>; targetNodeId?: string; versionId?: string }) => void;
   onCancel: () => void;
+  onResume: (decision: SopRunInterruptDecision) => void;
   onClose: () => void;
 }) {
   const workflowInputFields = useMemo(() => workflowFields(props.draft), [props.draft]);
@@ -186,6 +189,7 @@ export function SopRunPanel(props: {
 
         <div className="sop-run-events">
           <div className="sop-run-section-title"><ListTree aria-hidden="true" /><span>执行轨道</span><em>{props.events.length}</em></div>
+          <SopRunInterruptCard run={props.run} decisionPending={props.decisionPending} onResume={props.onResume} />
           {props.events.length === 0 ? <div className="sop-run-empty">运行事件会按顺序出现在这里；断线重连时相同事件不会重复。</div> : null}
           <div className="sop-run-event-list">
             {props.events.map((event) => (

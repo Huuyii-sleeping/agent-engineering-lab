@@ -38,6 +38,12 @@ function SopNodeViewComponent({ data, selected }: NodeProps) {
       {issueCount ? <div className="sop-node-issue">{issueCount}</div> : null}
       {!collapsed && node.kind === "builtin" && node.type === "llm" ? <div className="sop-node-tag">{node.config.model}</div> : null}
       {!collapsed && node.kind === "builtin" && node.type === "condition" ? <div className="sop-node-tag">if {node.config.expression}</div> : null}
+      {!collapsed && node.kind === "builtin" && node.type === "parallel" ? <div className="sop-node-tag">{node.config.branches.length} branches · max {node.config.maxConcurrency}</div> : null}
+      {!collapsed && node.kind === "builtin" && node.type === "iteration" ? <div className="sop-node-tag">foreach · max {node.config.maxConcurrency}</div> : null}
+      {!collapsed && node.kind === "builtin" && node.type === "loop" ? <div className="sop-node-tag">{node.config.mode} · {node.config.maxIterations} 次</div> : null}
+      {!collapsed && node.kind === "builtin" && node.type === "subworkflow" ? <div className="sop-node-tag">{node.config.versionId || "未选择版本"}</div> : null}
+      {!collapsed && node.kind === "builtin" && node.type === "agent" ? <div className="sop-node-tag">{node.config.agentVersionId || "未选择 Agent"}</div> : null}
+      {!collapsed && node.kind === "builtin" && node.type === "human-approval" ? <div className="sop-node-tag">{node.config.policyId || "未选择审批策略"}</div> : null}
       {!collapsed && node.description ? <div className="sop-node-note">{node.description}</div> : null}
       {node.kind === "unknown" ? <div className="sop-node-tag">未安装节点</div> : null}
 

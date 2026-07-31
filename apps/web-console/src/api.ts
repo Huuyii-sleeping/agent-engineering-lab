@@ -2,6 +2,7 @@ import {
   isTerminalWorkflowRunStatus,
   isWorkflowDraft,
   normalizeWorkflowDraft,
+  type AgentVersion,
   type WorkflowDiagnostic,
   type WorkflowDraft,
   type WorkflowRunMode,
@@ -9,9 +10,6 @@ import {
   type WorkflowRuntimeEvent,
   type WorkflowVersion,
 } from "@orbit/workflow-core";
-
-/** Dev-only mock data for the Skill Hub view (no live BFF needed). */
-import { mockSkills, mockSkillAuditEvents } from "./mockSkillHub";
 
 /** Role names returned by the agent service transcript API. */
 export type ChatRole = "system" | "user" | "assistant" | "tool";
@@ -164,6 +162,15 @@ export type AgentProfileInput = Pick<
   AgentProfile,
   "avatarId" | "name" | "description" | "scenario" | "skillIds" | "skills" | "actions" | "systemPrompt" | "color"
 >;
+
+/** Web 只读展示和选择使用的不可变 AgentVersion。 */
+export type AgentVersionCatalogItem = AgentVersion;
+
+/** AgentVersion 发布只接受审计元数据。 */
+export type PublishAgentVersionInput = {
+  createdBy?: string;
+  releaseNotes?: string;
+};
 
 /** Local skill registry item returned by the BFF Skill Hub APIs. */
 export type SkillStatus = "available" | "downloaded" | "installed" | "updateAvailable" | "invalid";
@@ -522,6 +529,28 @@ export function normalizeAgentProfileInput(value: unknown): AgentProfileInput {
   };
 }
 
+/** Normalize an immutable AgentVersion returned by the BFF catalog. */
+export function normalizeAgentVersion(value: unknown): AgentVersionCatalogItem {
+  const record = asObject(value);
+  const toolPolicy = asObject(record.toolPolicy);
+  const skillPolicy = asObject(record.skillPolicy);
+  return {
+    id: cleanText(record.id, "").slice(0, 80),
+    agentProfileId: cleanText(record.agentProfileId, "").slice(0, 80),
+    version: Math.max(0, Math.trunc(asNumber(record.version) ?? 0)),
+    contentHash: cleanText(record.contentHash, "").slice(0, 64),
+    name: cleanText(record.name, "未命名 Agent 版本").slice(0, 120),
+    description: cleanOptionalText(record.description, 500),
+    instructions: cleanStringList(record.instructions, 32, 4000),
+    toolPolicy: { allowedToolIds: cleanStringList(toolPolicy.allowedToolIds, 128, 160) },
+    skillPolicy: { bindings: normalizeAgentSkillBindings(skillPolicy.bindings, []) },
+    outputSchema: asObject(record.outputSchema),
+    createdBy: cleanText(record.createdBy, "local-user").slice(0, 80),
+    releaseNotes: cleanOptionalText(record.releaseNotes, 500),
+    createdAt: asNumber(record.createdAt) ?? 0,
+  };
+}
+
 /** Normalize a Skill Hub registry item before it is displayed in the Web console. */
 export function normalizeSkillRegistryItem(value: unknown): SkillRegistryItem {
   const record = asObject(value);
@@ -808,6 +837,20 @@ export async function cancelWorkflowRun(runId: string): Promise<WorkflowRunSnaps
   return workflowRun(response.data);
 }
 
+/** 向具体 Workflow run 提交当前 waiting interrupt 的决定。 */
+export async function resumeWorkflowRun(runId: string, input: {
+  interruptId: string;
+  action: "approve" | "reject";
+  data: Record<string, unknown>;
+  idempotencyKey: string;
+}): Promise<WorkflowRunSnapshot> {
+  const response = await requestJson<{ data?: unknown }>(
+    `/api/workflow-runs/${encodeURIComponent(runId)}/resume`,
+    jsonRequest("POST", input),
+  );
+  return workflowRun(response.data);
+}
+
 const workflowEventTypes = ["run.status", "node.status", "node.log", "node.output", "run.output", "run.waiting"];
 
 /** 建立可自动重连的 EventSource，并在客户端按 event id 去重。 */
@@ -1030,6 +1073,36 @@ export async function deleteAgentProfile(agentId: string): Promise<void> {
   await requestJson<JsonObject>(`/api/agents/${encodeURIComponent(agentId)}`, { method: "DELETE" });
 }
 
+/** Publishes the current AgentProfile as a new immutable version. */
+export async function publishAgentVersion(
+  agentProfileId: string,
+  input: PublishAgentVersionInput = {},
+): Promise<AgentVersionCatalogItem> {
+  const response = await requestJson<{ version?: unknown }>(
+    `/api/agents/${encodeURIComponent(agentProfileId)}/versions`,
+    jsonRequest("POST", {
+      createdBy: cleanOptionalText(input.createdBy, 80),
+      releaseNotes: cleanOptionalText(input.releaseNotes, 500),
+    }),
+  );
+  return normalizeAgentVersion(response.version);
+}
+
+/** Fetches the read-only AgentVersion catalog, optionally filtered by profile. */
+export async function fetchAgentVersions(agentProfileId?: string): Promise<AgentVersionCatalogItem[]> {
+  const query = agentProfileId ? `?agentProfileId=${encodeURIComponent(agentProfileId)}` : "";
+  const response = await requestJson<{ versions?: unknown }>(`/api/agent-versions${query}`);
+  return (Array.isArray(response.versions) ? response.versions : [])
+    .map(normalizeAgentVersion)
+    .filter((version) => version.id && version.agentProfileId && version.version > 0);
+}
+
+/** Fetches one immutable AgentVersion by its stable id. */
+export async function fetchAgentVersion(agentVersionId: string): Promise<AgentVersionCatalogItem> {
+  const response = await requestJson<{ version?: unknown }>(`/api/agent-versions/${encodeURIComponent(agentVersionId)}`);
+  return normalizeAgentVersion(response.version);
+}
+
 /** Checks whether an Agent profile's version-bound skills can be loaded by the runtime. */
 export async function resolveAgentSkills(agent: AgentRuntimeContext): Promise<AgentSkillPreflightResult> {
   const response = await fetch("/api/agent-skills/resolve", {
@@ -1044,10 +1117,6 @@ export async function resolveAgentSkills(agent: AgentRuntimeContext): Promise<Ag
 
 /** Fetches local skill registry items through the BFF business API. */
 export async function fetchSkills(): Promise<SkillRegistryItem[]> {
-  if (process.env.NODE_ENV !== "production") {
-    // Dev preview: show mock skills so the Skill Hub layout can be reviewed without a live BFF.
-    return mockSkills.map(normalizeSkillRegistryItem).filter((skill) => skill.id);
-  }
   const response = await requestJson<JsonObject>("/api/skills");
   const skills = Array.isArray(response.skills) ? response.skills : [];
   return skills.map(normalizeSkillRegistryItem).filter((skill) => skill.id);
@@ -1055,9 +1124,6 @@ export async function fetchSkills(): Promise<SkillRegistryItem[]> {
 
 /** Fetches recent Skill lifecycle audit events through the BFF business API. */
 export async function fetchSkillAuditEvents(): Promise<SkillAuditEvent[]> {
-  if (process.env.NODE_ENV !== "production") {
-    return mockSkillAuditEvents.map(normalizeSkillAuditEvent).filter((event) => event.skillId);
-  }
   const response = await requestJson<JsonObject>("/api/skills/audit");
   const events = Array.isArray(response.events) ? response.events : [];
   return events.map(normalizeSkillAuditEvent).filter((event) => event.skillId);

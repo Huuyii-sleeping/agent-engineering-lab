@@ -1,13 +1,20 @@
 import {
   BookOpenText,
+  Bot,
   Braces,
   Code2,
   Flag,
   GitBranch,
+  GitFork,
+  GitMerge,
   Globe2,
+  ListRestart,
   Play,
+  Repeat2,
   Sparkles,
+  UserCheck,
   Variable,
+  Workflow,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
@@ -15,14 +22,21 @@ import { builtinNodeRegistry, type BuiltinNodeType, type NodeDefinition } from "
 
 const ICONS: Record<string, LucideIcon> = {
   BookOpenText,
+  Bot,
   Braces,
   Code2,
   Flag,
   GitBranch,
+  GitFork,
+  GitMerge,
   Globe2,
+  ListRestart,
   Play,
+  Repeat2,
   Sparkles,
+  UserCheck,
   Variable,
+  Workflow,
   Wrench,
 };
 
