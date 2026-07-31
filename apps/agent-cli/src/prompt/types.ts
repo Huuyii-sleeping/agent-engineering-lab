@@ -1,4 +1,4 @@
-export type StablePromptSectionId = "core" | "append" | "tools" | "skills" | "rules" | "agent_memory";
+export type StablePromptSectionId = "core" | "append" | "tools" | "skills" | "rules";
 export type DynamicPromptSectionId = "user_context" | "memory" | "compact_summary" | "runtime_reminder";
 export type PromptSectionId = StablePromptSectionId | DynamicPromptSectionId;
 export type PromptSectionKind =
@@ -6,7 +6,6 @@ export type PromptSectionKind =
   | "tool_manifest"
   | "skill_manifest"
   | "rule"
-  | "agent_memory"
   | "user_context"
   | "memory"
   | "compact_summary"
@@ -30,14 +29,6 @@ export type StaticPromptSource = {
   tools: string[];
   skills: string[];
   rules: string[];
-  agentMemory?: {
-    agentType: string;
-    scope: "user" | "project" | "local";
-    mode: "read_write" | "read_only" | "disabled";
-    memoryDir: string;
-    entrypoint: string;
-    currentIndex?: string;
-  };
 };
 
 export type PromptBuilderInput = StaticPromptSource & {

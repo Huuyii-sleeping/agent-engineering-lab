@@ -1,7 +1,6 @@
 import type OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { describe, expect, it, vi } from "vitest";
-import { createAgentRuntimeState } from "../../../src/bootstrap/app-runtime.js";
 import { createInkRuntimeController } from "../../../src/entrypoints/tui-ink.js";
 import type { AgentAppRuntimeDeps } from "../../../src/bootstrap/app-runtime.js";
 import type { TerminalTuiServiceLike } from "../../../src/entrypoints/tui.js";
@@ -13,13 +12,15 @@ const PROMPT_SOURCE = {
   rules: [],
 };
 
-function createService(history: ChatCompletionMessageParam[]): TerminalTuiServiceLike {
+function createService(
+  history: ChatCompletionMessageParam[],
+  assistant = "chat reply",
+): TerminalTuiServiceLike {
   const sessions = [
     {
       id: "s01",
       busy: false,
       history,
-      runtimeState: createAgentRuntimeState("s01"),
     },
   ];
 
@@ -28,14 +29,18 @@ function createService(history: ChatCompletionMessageParam[]): TerminalTuiServic
     createSession: vi.fn(() => sessions[0]),
     listSessions: vi.fn(() => sessions),
     toolsMetadata: vi.fn(async () => []),
-    chat: vi.fn(async () => ({ ok: true, session: { id: "s01" }, assistant: "chat reply" })),
+    chat: vi.fn(async (input) => {
+      history.push({ role: "user", content: String(input.message) });
+      history.push({ role: "assistant", content: assistant });
+      return { ok: true, session: { id: "s01" }, assistant };
+    }),
   };
 }
 
 describe("entrypoints/tui-ink", () => {
   it("runs due scheduled prompts through the Ink runtime controller", async () => {
     const history: ChatCompletionMessageParam[] = [];
-    const service = createService(history);
+    const service = createService(history, "喝水提醒到了");
     const app = {
       client: {} as OpenAI,
       model: "test-model",
@@ -45,18 +50,17 @@ describe("entrypoints/tui-ink", () => {
         tickScheduler: vi.fn(async () => undefined),
         peekScheduledPromptCount: vi.fn(async () => 1),
       },
-      queryEngine: {
-        run: vi.fn(async ({ messages }: { messages: ChatCompletionMessageParam[] }) => {
-          messages.push({ role: "assistant", content: "喝水提醒到了" });
-        }),
-      },
     } as unknown as AgentAppRuntimeDeps;
 
     const controller = createInkRuntimeController({ service, app, startupIssue: null });
     const messages = await controller.runScheduledTick();
 
     expect(app.runtimeCoordinationService.tickScheduler).toHaveBeenCalledTimes(1);
-    expect(app.queryEngine.run).toHaveBeenCalledTimes(1);
+    expect(service.chat).toHaveBeenCalledWith({
+      session_id: "s01",
+      message: "Handle any scheduled prompts that are due now.",
+      include_scheduled_notifications: true,
+    });
     expect(history).toEqual([
       { role: "user", content: "Handle any scheduled prompts that are due now." },
       { role: "assistant", content: "喝水提醒到了" },

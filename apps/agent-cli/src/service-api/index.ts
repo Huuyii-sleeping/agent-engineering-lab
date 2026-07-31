@@ -1,8 +1,13 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { readAuditEvents, recordAuditEvent, type AuditCategory } from "../audit/runtime.js";
+import {
+  RuntimePortError,
+  type AgentRunResult,
+  type AgentRuntimePort,
+  type GenerateAgentCommand,
+  type RuntimeGateway,
+} from "@orbit/runtime-contracts";
+import { recordAuditEvent } from "../audit/runtime.js";
 import type { AgentAppRuntimeDeps } from "../bootstrap/app-runtime.js";
 import { AgentHost } from "../host/agent-host.js";
-import { readTrackedWorkspaceFindings } from "../security/secret-scanning.js";
 import type { AgentHostEvent } from "../host/events.js";
 import type { AgentHostEventSubscriber } from "../host/events.js";
 import { createAgentBridgeManifest, type AgentBridgeState } from "./bridge.js";
@@ -12,13 +17,14 @@ import {
   summarizeSessionTranscript,
   type AgentSessionRecord,
 } from "./sessions.js";
-import { runUserQuery } from "../runtime/query-runtime.js";
-import type { NotificationServiceLike, RuntimeCoordinationServiceLike } from "../services/index.js";
-import { resolveBoundSkills, toPromptSkillBlocks } from "../skills/loader.js";
-import { handleWorkflowHttpRequest } from "../workflows/http-handler.js";
-import { WorkflowRuntimeService } from "../workflows/service.js";
+import { resolveBoundSkills } from "../skills/loader.js";
 
 export type AgentServiceDeps = AgentAppRuntimeDeps;
+
+export type AgentServiceRuntimeOptions = {
+  runtimeGateway: RuntimeGateway;
+  runtimeInfo?: () => Promise<Record<string, unknown>> | Record<string, unknown>;
+};
 
 type ChatRequest = {
   session_id?: string;
@@ -35,139 +41,43 @@ export type AgentServiceEvent = AgentHostEvent;
 
 export type AgentServiceEventSubscriber = AgentHostEventSubscriber;
 
-type ParsedEventCursor =
-  | { ok: true; value: number | null }
-  | { ok: false; source: "since_id" | "Last-Event-ID"; raw: string };
-
-function json(res: ServerResponse, statusCode: number, payload: unknown): void {
-  res.statusCode = statusCode;
-  res.setHeader("Content-Type", "application/json; charset=utf-8");
-  res.setHeader("Cache-Control", "no-store");
-  res.end(`${JSON.stringify(payload, null, 2)}\n`);
-}
-
-function parseBody<T>(req: IncomingMessage): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    req.on("data", (chunk) =>
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk))),
-    );
-    req.on("error", reject);
-    req.on("end", () => {
-      const raw = Buffer.concat(chunks).toString("utf8").trim();
-      if (!raw) {
-        resolve({} as T);
-        return;
-      }
-      try {
-        resolve(JSON.parse(raw) as T);
-      } catch (error) {
-        reject(error);
-      }
-    });
-  });
-}
-
-function parseEventCursor(raw: string | null): number | null | undefined {
-  if (raw === null) {
-    return null;
-  }
-  const normalized = raw.trim();
-  if (!normalized) {
-    return null;
-  }
-  const parsed = Number(normalized);
-  return Number.isInteger(parsed) ? parsed : undefined;
-}
-
-function getHeaderValue(headers: IncomingMessage["headers"], name: string): string | null {
-  const value = headers[name.toLowerCase()];
-  if (Array.isArray(value)) {
-    return typeof value[0] === "string" ? value[0] : null;
-  }
-  return typeof value === "string" ? value : null;
-}
-
-function resolveReplayCursor(url: URL | null, req: IncomingMessage): ParsedEventCursor {
-  const queryValue = url?.searchParams.get("since_id") ?? null;
-  const parsedQuery = parseEventCursor(queryValue);
-  if (parsedQuery === undefined) {
-    return { ok: false, source: "since_id", raw: queryValue ?? "" };
-  }
-  const headerValue = getHeaderValue(req.headers, "last-event-id");
-  const parsedHeader = parseEventCursor(headerValue);
-  if (parsedHeader === undefined) {
-    return { ok: false, source: "Last-Event-ID", raw: headerValue ?? "" };
-  }
-  return { ok: true, value: parsedHeader ?? parsedQuery };
-}
-
-function parseAuditCategory(raw: string | null): AuditCategory | undefined {
-  if (raw === "session" || raw === "tool" || raw === "security" || raw === "retention") {
-    return raw;
-  }
-  return undefined;
-}
-
-function parseLimit(raw: string | null): number | undefined {
-  if (!raw) {
-    return undefined;
-  }
-  const parsed = Number(raw);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
-}
-
-function writeSseEvent(
-  res: ServerResponse,
-  input: { event: string; data: unknown; id?: number },
-): void {
-  if (typeof input.id === "number") {
-    res.write(`id: ${input.id}\n`);
-  }
-  res.write(`event: ${input.event}\n`);
-  res.write(`data: ${JSON.stringify(input.data)}\n\n`);
-}
-
 export class AgentService {
   private readonly host: AgentHost;
-  private readonly client: AgentServiceDeps["client"];
-  private readonly model: AgentServiceDeps["model"];
-  private readonly promptSource: AgentServiceDeps["promptSource"];
   private readonly toolService: AgentServiceDeps["toolService"];
-  private readonly deliveryService: AgentServiceDeps["deliveryService"];
-  private readonly hookService: AgentServiceDeps["hookService"];
-  private readonly memoryService: AgentServiceDeps["memoryService"];
-  private readonly notificationService: NotificationServiceLike;
-  private readonly modelPolicyService: AgentServiceDeps["modelPolicyService"];
-  private readonly observabilityService: AgentServiceDeps["observabilityService"];
-  private readonly runtimeCoordinationService: RuntimeCoordinationServiceLike;
-  private readonly runtimeServices: AgentServiceDeps["runtimeServices"];
-  private readonly queryEngine: AgentServiceDeps["queryEngine"];
   /** 工作流执行由 Agent runtime 负责，BFF 只消费此控制面。 */
-  readonly workflowRuntime: WorkflowRuntimeService;
+  readonly workflowRuntime: RuntimeGateway["workflow"];
+  /** 四个领域 Port 的进程内组合入口，生产路径唯一指向 Mastra。 */
+  readonly runtimeGateway: RuntimeGateway;
+  private readonly runtimeInfoProvider?: AgentServiceRuntimeOptions["runtimeInfo"];
 
-  constructor(deps: AgentServiceDeps, host?: AgentHost) {
+  constructor(deps: AgentServiceDeps, host: AgentHost | undefined, runtimeOptions: AgentServiceRuntimeOptions) {
     this.host = host ?? new AgentHost(deps);
-    this.client = deps.client;
-    this.model = deps.model;
-    this.promptSource = deps.promptSource;
     this.toolService = deps.toolService;
-    this.deliveryService = deps.deliveryService;
-    this.hookService = deps.hookService;
-    this.memoryService = deps.memoryService;
-    this.notificationService = deps.notificationService;
-    this.modelPolicyService = deps.modelPolicyService;
-    this.observabilityService = deps.observabilityService;
-    this.runtimeCoordinationService = deps.runtimeCoordinationService;
-    this.runtimeServices = deps.runtimeServices;
-    this.queryEngine = deps.queryEngine;
-    this.workflowRuntime = new WorkflowRuntimeService(deps);
+    this.runtimeGateway = runtimeOptions.runtimeGateway;
+    this.runtimeInfoProvider = runtimeOptions.runtimeInfo;
+    this.workflowRuntime = this.runtimeGateway.workflow;
   }
 
   createSession(agent?: unknown): AgentSessionRecord {
-    const record = this.host.createSessionSync(normalizeAgentRuntimeContext(agent));
+    const normalizedAgent = normalizeAgentRuntimeContext(agent);
+    const record = this.host.createSessionSync(normalizedAgent);
     void this.host.persistSession(record);
     return record;
+  }
+
+  async runtimeInfo(): Promise<Record<string, unknown>> {
+    if (this.runtimeInfoProvider) return this.runtimeInfoProvider();
+    const [agent, workflow] = await Promise.all([
+      this.runtimeGateway.agent.capabilities(),
+      this.runtimeGateway.workflow.capabilities(),
+    ]);
+    return {
+      mode: "mastra-only",
+      backends: {
+        agent: { backend: "mastra", capabilities: agent },
+        workflow: { backend: "mastra", capabilities: workflow },
+      },
+    };
   }
 
   listSessions(): AgentSessionRecord[] {
@@ -183,7 +93,27 @@ export class AgentService {
   }
 
   async runToolByName(name: string, argumentsJson: string): Promise<string> {
-    return this.toolService.runToolByName(name, argumentsJson);
+    let input: unknown = {};
+    try {
+      input = JSON.parse(argumentsJson || "{}") as unknown;
+    } catch {
+      input = {};
+    }
+    try {
+      const result = await this.runtimeGateway.tools.execute({
+        toolId: name,
+        input,
+        ownerId: "local-direct-api",
+        executor: { kind: "direct" },
+        requestContext: { argumentsJson },
+      });
+      return typeof result.output === "string" ? result.output : JSON.stringify(result.output);
+    } catch (error) {
+      if (error instanceof RuntimePortError && typeof error.details.rawOutput === "string") {
+        return error.details.rawOutput;
+      }
+      throw error;
+    }
   }
 
   resolveAgentSkills(input: unknown): Record<string, unknown> {
@@ -256,7 +186,11 @@ export class AgentService {
     return this.host.subscribeEvents(subscriber);
   }
 
-  async chat(input: ChatRequest, callbacks: ChatCallbacks = {}): Promise<Record<string, unknown>> {
+  async chat(
+    input: ChatRequest,
+    callbacks: ChatCallbacks = {},
+    agentRuntime: AgentRuntimePort = this.runtimeGateway.agent,
+  ): Promise<Record<string, unknown>> {
     const prompt = String(input.message ?? "").trim();
     if (!prompt) {
       return {
@@ -293,25 +227,44 @@ export class AgentService {
     if (agent) {
       session.agent = agent;
     }
-    const promptSource = { ...this.promptSource };
-    if (session.agent) {
-      const resolvedSkills = resolveBoundSkills(session.agent);
-      if (!resolvedSkills.ok) {
-        return {
-          ok: false,
-          error: {
-            code: "AGENT_SKILL_LOAD_FAILED",
-            message: "agent skill binding could not be loaded",
-            details: resolvedSkills.issues,
-          },
-          session: summarizeSession(session),
-        };
-      }
-      promptSource.skills = toPromptSkillBlocks(resolvedSkills.skills, { sessionId: session.id });
-    }
+    const ownerId = session.memoryBinding?.ownerId ?? "local-owner";
+    const resourceId = session.memoryBinding?.resourceId ?? `session:${session.id}`;
+    session.memoryBinding ??= {
+      ownerId,
+      resourceId,
+      metadata: { source: "agent-session" },
+    };
+    await this.runtimeGateway.memory.createThread({
+      id: session.id,
+      ownerId,
+      resourceId,
+      metadata: { source: "agent-session" },
+    });
+    const allowedToolIds = (await this.toolService.listToolRegistrations()).map((tool) => tool.name);
+    const command: GenerateAgentCommand = {
+      agentId: session.agent?.id ?? "orbit-agent",
+      agentVersion: session.agent?.skills.map((skill) => skill.version).filter(Boolean).join(",") || "default",
+      sessionId: session.id,
+      resourceId,
+      threadId: session.id,
+      messages: [{ role: "user", content: prompt }],
+      requestContext: {
+        ownerId,
+        resourceId,
+        threadId: session.id,
+        includeScheduledNotifications: input.include_scheduled_notifications === true,
+      },
+      runtimeBinding: session.runtimeBinding,
+      policy: {
+        allowedToolIds,
+        allowedSkillIds: session.agent?.skills.map((skill) => skill.skillId) ?? [],
+      },
+    };
 
     session.busy = true;
     session.updatedAt = Date.now();
+    session.rounds += 1;
+    session.history.push({ role: "user", content: prompt });
     await recordAuditEvent({
       category: "session",
       action: "chat",
@@ -321,7 +274,7 @@ export class AgentService {
       sessionId: session.id,
       metadata: {
         messageLength: prompt.length,
-        rounds: session.runtimeState.roundCounter,
+        rounds: session.rounds,
       },
     });
     this.host.emitEvent("chat.started", {
@@ -329,51 +282,44 @@ export class AgentService {
       message: prompt,
     });
     try {
-      const result = await runUserQuery({
-        app: {
-          client: this.client,
-          model: this.model,
-          promptSource,
-          toolService: this.toolService,
-          deliveryService: this.deliveryService,
-          hookService: this.hookService,
-          memoryService: this.memoryService,
-          notificationService: this.notificationService,
-          modelPolicyService: this.modelPolicyService,
-          observabilityService: this.observabilityService,
-          runtimeCoordinationService: this.runtimeCoordinationService,
-          runtimeServices: this.runtimeServices,
-          queryEngine: this.queryEngine,
-        },
-        history: session.history,
-        runtimeState: session.runtimeState,
-        prompt,
-        includeScheduledNotifications: input.include_scheduled_notifications === true,
-        onAssistantDelta: callbacks.onAssistantDelta,
-      });
-      if (!result.ok) {
+      let result: AgentRunResult | null = null;
+      if (callbacks.onAssistantDelta) {
+        for await (const event of agentRuntime.stream(command)) {
+          if (event.type === "text.delta") await callbacks.onAssistantDelta(event.delta);
+          if (event.type === "run.final") result = event.result;
+        }
+      } else {
+        result = await agentRuntime.generate(command);
+      }
+      if (!result) throw new Error("Mastra Agent stream 未返回 run.final。");
+      if (result.status !== "succeeded") {
+        const error = result.error ?? {
+          code: "MASTRA_AGENT_EXECUTION_FAILED",
+          message: "Mastra Agent 执行失败。",
+        };
         await recordAuditEvent({
           category: "session",
           action: "chat",
           outcome: "failed",
           subject: session.id,
-          summary: result.error.message,
+          summary: error.message,
           sessionId: session.id,
           metadata: {
-            errorCode: result.error.code,
-            rounds: session.runtimeState.roundCounter,
+            errorCode: error.code,
+            rounds: session.rounds,
           },
         });
         this.host.emitEvent("chat.failed", {
           session: summarizeSession(session),
-          error: result.error,
+          error,
         });
         return {
           ok: false,
-          error: result.error,
+          error,
           session: summarizeSession(session),
         };
       }
+      session.history.push({ role: "assistant", content: result.text });
       session.updatedAt = Date.now();
       await recordAuditEvent({
         category: "session",
@@ -384,230 +330,37 @@ export class AgentService {
         sessionId: session.id,
         metadata: {
           messageCount: session.history.length,
-          rounds: session.runtimeState.roundCounter,
+          rounds: session.rounds,
         },
       });
       this.host.emitEvent("chat.completed", {
         session: summarizeSession(session),
-        assistant: result.assistant,
+        assistant: result.text,
       });
       return {
         ok: true,
         session: summarizeSession(session),
-        assistant: result.assistant,
+        assistant: result.text,
       };
+    } catch (error) {
+      await recordAuditEvent({
+        category: "session",
+        action: "chat",
+        outcome: "failed",
+        subject: session.id,
+        summary: error instanceof Error ? error.message : String(error),
+        sessionId: session.id,
+        metadata: { rounds: session.rounds },
+      });
+      this.host.emitEvent("chat.failed", {
+        session: summarizeSession(session),
+        error: { code: "AGENT_EXECUTION_FAILED", message: error instanceof Error ? error.message : String(error) },
+      });
+      throw error;
     } finally {
       session.busy = false;
       session.updatedAt = Date.now();
       await this.host.persistSession(session);
     }
   }
-}
-
-export function createAgentHttpServer(service: AgentService): Server {
-  return createServer(async (req, res) => {
-    try {
-      const url = req.url ? new URL(req.url, "http://127.0.0.1") : null;
-      const pathname = url?.pathname ?? "/";
-      const method = req.method ?? "GET";
-
-      if (url && pathname.startsWith("/workflow-runs") && await handleWorkflowHttpRequest(service.workflowRuntime, req, res, url)) {
-        return;
-      }
-
-      if (method === "GET" && pathname === "/health") {
-        json(res, 200, { ok: true, status: "ok" });
-        return;
-      }
-      if (method === "GET" && pathname === "/bridge") {
-        json(res, 200, service.bridgeManifest());
-        return;
-      }
-      if (method === "GET" && pathname === "/bridge/state") {
-        json(res, 200, service.bridgeState());
-        return;
-      }
-      if (method === "GET" && pathname === "/tools") {
-        json(res, 200, { ok: true, tools: await service.toolsMetadata() });
-        return;
-      }
-      if (method === "POST" && pathname === "/skills/resolve") {
-        const body = await parseBody<{ agent?: unknown }>(req);
-        const result = service.resolveAgentSkills(body.agent);
-        json(res, result.ok === false ? 400 : 200, result);
-        return;
-      }
-      if (method === "GET" && pathname === "/audit/events") {
-        json(res, 200, {
-          ok: true,
-          events: await readAuditEvents({
-            limit: parseLimit(url?.searchParams.get("limit") ?? null),
-            sessionId: url?.searchParams.get("session_id") ?? undefined,
-            traceId: url?.searchParams.get("trace_id") ?? undefined,
-            category: parseAuditCategory(url?.searchParams.get("category") ?? null),
-          }),
-        });
-        return;
-      }
-      if (method === "GET" && pathname === "/security/findings") {
-        json(res, 200, {
-          ok: true,
-          findings: await readTrackedWorkspaceFindings(),
-        });
-        return;
-      }
-      if (method === "POST" && pathname === "/tools/call") {
-        const body = await parseBody<{ name?: string; arguments_json?: string }>(req);
-        const toolName = String(body.name ?? "").trim();
-        if (!toolName) {
-          json(res, 400, {
-            ok: false,
-            error: {
-              code: "INVALID_REQUEST",
-              message: "tool name is required",
-            },
-          });
-          return;
-        }
-        const output = await service.runToolByName(toolName, String(body.arguments_json ?? ""));
-        json(res, 200, { ok: true, output });
-        return;
-      }
-      if (method === "GET" && pathname === "/events") {
-        const cursor = resolveReplayCursor(url, req);
-        if (!cursor.ok) {
-          json(res, 400, {
-            ok: false,
-            error: {
-              code: "INVALID_CURSOR",
-              message: `${cursor.source} must be an integer cursor`,
-              value: cursor.raw,
-            },
-          });
-          return;
-        }
-        res.statusCode = 200;
-        res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-        res.setHeader("Cache-Control", "no-store");
-        res.setHeader("Connection", "keep-alive");
-        writeSseEvent(res, {
-          event: "bridge.ready",
-          data: {
-            ok: true,
-            replay_from: cursor.value,
-            bridge: service.bridgeState(),
-          },
-        });
-        for (const event of service.replayEventsSince(cursor.value)) {
-          writeSseEvent(res, {
-            id: event.id,
-            event: event.type,
-            data: event,
-          });
-        }
-        const unsubscribe = service.subscribeEvents((event) => {
-          writeSseEvent(res, {
-            id: event.id,
-            event: event.type,
-            data: event,
-          });
-        });
-        req.on("close", unsubscribe);
-        return;
-      }
-      if (method === "GET" && pathname === "/sessions") {
-        json(res, 200, {
-          ok: true,
-          sessions: service.listSessions().map((item) => summarizeSession(item)),
-        });
-        return;
-      }
-      if (method === "POST" && pathname === "/sessions") {
-        const body = await parseBody<{ agent?: unknown }>(req);
-        const session = service.createSession(body.agent);
-        json(res, 201, { ok: true, session: summarizeSession(session) });
-        return;
-      }
-      if (method === "GET" && pathname.startsWith("/sessions/")) {
-        const sessionId = decodeURIComponent(pathname.slice("/sessions/".length));
-        const session = service.getSessionDetail(sessionId);
-        if (!session) {
-          json(res, 404, {
-            ok: false,
-            error: {
-              code: "SESSION_NOT_FOUND",
-              message: `session not found: ${sessionId}`,
-            },
-          });
-          return;
-        }
-        json(res, 200, { ok: true, session });
-        return;
-      }
-      if (method === "POST" && pathname === "/chat") {
-        const body = await parseBody<ChatRequest>(req);
-        const result = await service.chat(body);
-        json(res, result.ok === false ? 400 : 200, result);
-        return;
-      }
-      if (method === "POST" && pathname === "/chat/stream") {
-        const body = await parseBody<ChatRequest>(req);
-        res.statusCode = 200;
-        res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-        res.setHeader("Cache-Control", "no-store");
-        res.setHeader("Connection", "keep-alive");
-        res.flushHeaders?.();
-        writeSseEvent(res, {
-          event: "message.start",
-          data: { session_id: body.session_id },
-        });
-        const result = await service.chat(body, {
-          onAssistantDelta: async (delta) => {
-            if (!res.write(`event: message.delta\ndata: ${JSON.stringify({ delta })}\n\n`)) {
-              await new Promise<void>((resolve) => res.once("drain", resolve));
-            }
-          },
-        });
-        if (result.ok === false) {
-          const error = result.error as { code?: unknown; message?: unknown } | undefined;
-          writeSseEvent(res, {
-            event: "message.error",
-            data: {
-              code: String(error?.code ?? "CHAT_STREAM_FAILED"),
-              message: String(error?.message ?? "chat stream failed"),
-              session: result.session,
-            },
-          });
-          res.end();
-          return;
-        }
-        writeSseEvent(res, {
-          event: "message.done",
-          data: {
-            ok: true,
-            assistant: result.assistant,
-            session: result.session,
-          },
-        });
-        res.end();
-        return;
-      }
-
-      json(res, 404, {
-        ok: false,
-        error: {
-          code: "NOT_FOUND",
-          message: `${method} ${pathname} is not implemented`,
-        },
-      });
-    } catch (error) {
-      json(res, 500, {
-        ok: false,
-        error: {
-          code: "INTERNAL_ERROR",
-          message: error instanceof Error ? error.message : String(error),
-        },
-      });
-    }
-  });
 }

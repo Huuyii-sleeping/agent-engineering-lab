@@ -4,8 +4,6 @@ export type LocalArtifactKind =
   | "session"
   | "transcript_snapshot"
   | "prompt_dump"
-  | "memory_short_term"
-  | "memory_long_term"
   | "observability_event"
   | "security_record"
   | "audit_event";
@@ -13,8 +11,6 @@ export type LocalArtifactKind =
 export type LocalRetentionClass =
   | "protected_runtime_state"
   | "protected_snapshot"
-  | "knowledge_short_term"
-  | "knowledge_long_term"
   | "operational_telemetry"
   | "security_audit";
 
@@ -61,22 +57,6 @@ export const LOCAL_ARTIFACT_CONTRACTS: Record<LocalArtifactKind, LocalArtifactCo
     cleanupTriggers: ["on_write", "on_read", "manual"],
     auditEventType: "artifact_export",
     exportMode: "protected_export",
-    deleteMode: "explicit_delete",
-  },
-  memory_short_term: {
-    retentionClass: "knowledge_short_term",
-    retentionDays: RUNTIME_CONFIG.memoryShortTermRetentionDays,
-    cleanupTriggers: ["on_write", "on_read", "manual"],
-    auditEventType: "retention_cleanup",
-    exportMode: "query_only",
-    deleteMode: "explicit_delete",
-  },
-  memory_long_term: {
-    retentionClass: "knowledge_long_term",
-    retentionDays: RUNTIME_CONFIG.memoryLongTermRetentionDays,
-    cleanupTriggers: ["on_write", "on_read", "manual"],
-    auditEventType: "retention_cleanup",
-    exportMode: "query_only",
     deleteMode: "explicit_delete",
   },
   observability_event: {

@@ -36,6 +36,15 @@ export class WorkflowVariableContext {
     system?: Record<string, unknown>;
     environment?: Record<string, unknown>;
     secretProvider?: WorkflowSecretProvider;
+    containers?: Record<string, {
+      inputs: Record<string, unknown>;
+      item?: unknown;
+      index?: number;
+      iteration?: number;
+      startedAt?: number;
+      variables?: Record<string, unknown>;
+      previousOutputs?: Record<string, unknown>;
+    }>;
   }) {}
 
   setNodeOutput(nodeId: string, output: Record<string, unknown>): void {
@@ -56,7 +65,20 @@ export class WorkflowVariableContext {
         if (!this.options.secretProvider) throw new Error(`未配置 Secret Provider：${ref.credentialId}。`);
         return this.options.secretProvider.read(ref.credentialId, ref.key);
       }
-      case "loop": throw new Error("Loop 变量将在阶段 E 容器 runtime 中提供。 ");
+      case "container-input": return getPath(
+        this.options.containers?.[ref.containerNodeId]?.inputs[ref.inputId],
+        ref.path,
+      );
+      case "loop": {
+        const container = this.options.containers?.[ref.containerNodeId];
+        const value = ref.key === "item" ? container?.item
+          : ref.key === "index" ? container?.index
+            : ref.key === "iteration" ? container?.iteration
+              : ref.key === "variable" && ref.variableId ? container?.variables?.[ref.variableId]
+                : ref.key === "previous-output" && ref.outputId ? container?.previousOutputs?.[ref.outputId]
+                  : undefined;
+        return getPath(value, ref.path);
+      }
     }
   }
 

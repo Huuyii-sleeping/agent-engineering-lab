@@ -44,7 +44,19 @@ describe("service-api/session-store", () => {
     const store = new SessionStore(path.join(tempDir, ".sessions"));
     const session = createAgentSessionRecord("session_1", 1000);
     session.history.push({ role: "user", content: "hello daemon" });
-    session.runtimeState.roundCounter = 3;
+    session.rounds = 3;
+    session.memoryBinding = {
+      ownerId: "owner-1",
+      resourceId: "resource-1",
+      title: "Thread 1",
+      metadata: { source: "test" },
+    };
+    session.runtimeBinding = {
+      backend: "mastra",
+      adapterVersion: "mastra-agent-v1",
+      runtimeVersion: "1.52.1",
+      selectionReason: "explicit canary",
+    };
 
     await store.save(session);
 
@@ -60,7 +72,19 @@ describe("service-api/session-store", () => {
       messages: [{ role: "user", content: "hello daemon" }],
     });
     expect(list.map((item) => item.id)).toEqual(["session_1"]);
-    expect(list[0]?.runtimeState.roundCounter).toBe(3);
+    expect(list[0]?.rounds).toBe(3);
+    expect(loaded?.memoryBinding).toEqual({
+      ownerId: "owner-1",
+      resourceId: "resource-1",
+      title: "Thread 1",
+      metadata: { source: "test" },
+    });
+    expect(loaded?.runtimeBinding).toEqual({
+      backend: "mastra",
+      adapterVersion: "mastra-agent-v1",
+      runtimeVersion: "1.52.1",
+      selectionReason: "explicit canary",
+    });
   });
 
   it("appends session journal rows on every save", async () => {
@@ -82,12 +106,12 @@ describe("service-api/session-store", () => {
     expect(rows[1]?.session.history).toHaveLength(2);
   });
 
-  it("restores sessions from journal when the legacy snapshot is absent", async () => {
+  it("restores sessions from journal when the snapshot is absent", async () => {
     tempDir = await mkdtemp(path.join(tmpdir(), "agent-session-store-"));
     const store = new SessionStore(path.join(tempDir, ".sessions"));
     const session = createAgentSessionRecord("session_resume", 1000);
     session.history.push({ role: "user", content: "before restart" });
-    session.runtimeState.roundCounter = 4;
+    session.rounds = 4;
 
     await store.save(session);
     await rm(path.join(tempDir, ".sessions", "session_session_resume.json"), { force: true });
@@ -95,10 +119,10 @@ describe("service-api/session-store", () => {
     const loaded = await store.load(session.id);
 
     expect(loaded?.history).toEqual([{ role: "user", content: "before restart" }]);
-    expect(loaded?.runtimeState.roundCounter).toBe(4);
+    expect(loaded?.rounds).toBe(4);
   });
 
-  it("prefers journal data over stale legacy snapshots while listing sessions", async () => {
+  it("prefers journal data over stale snapshots while listing sessions", async () => {
     tempDir = await mkdtemp(path.join(tmpdir(), "agent-session-store-"));
     const store = new SessionStore(path.join(tempDir, ".sessions"));
     const session = createAgentSessionRecord("session_prefer_journal", 1000);
@@ -120,12 +144,16 @@ describe("service-api/session-store", () => {
     ]);
   });
 
-  it("redacts secret-like history and runtime state before persistence", async () => {
+  it("redacts secret-like session history and metadata before persistence", async () => {
     tempDir = await mkdtemp(path.join(tmpdir(), "agent-session-store-"));
     const store = new SessionStore(path.join(tempDir, ".sessions"));
     const session = createAgentSessionRecord("session_secret", 1000);
     session.history.push({ role: "user", content: "token=sk-12345678901234567890" });
-    session.runtimeState.lastMemoryInput = "password=hunter2";
+    session.memoryBinding = {
+      ownerId: "owner-1",
+      resourceId: "resource-1",
+      metadata: { note: "password=hunter2" },
+    };
 
     await store.save(session);
 

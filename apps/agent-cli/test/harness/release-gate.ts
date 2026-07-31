@@ -23,14 +23,19 @@ export const RELEASE_ARTIFACT_PATHS = [
   ".observability",
   ".security",
   ".runtime",
+  ".sessions",
 ] as const;
 
 const APP_DIR = "apps/agent-cli";
+const OPEN_SPEC_CHANGE = "migrate-agent-runtime-to-mastra";
+const commandSuffix = process.platform === "win32" ? ".cmd" : "";
+const pnpmCommand = `pnpm${commandSuffix}`;
+const openspecCommand = `openspec${commandSuffix}`;
 
 function appScriptStage(name: string, script: string): ReleaseGateStage {
   return {
     name,
-    command: ["pnpm.cmd", "--dir", APP_DIR, "run", script],
+    command: [pnpmCommand, "--dir", APP_DIR, "run", script],
   };
 }
 
@@ -39,7 +44,7 @@ export function getReleaseGateStages(): ReleaseGateStage[] {
     appScriptStage("lint", "lint"),
     appScriptStage("harness", "test:harness"),
     appScriptStage("unit", "test"),
-    { name: "build", command: ["pnpm.cmd", "build"] },
+    { name: "build", command: [pnpmCommand, "build"] },
     appScriptStage("security-smoke", "test:security"),
     appScriptStage("memory-smoke", "test:memory"),
     appScriptStage("observability-smoke", "test:observability"),
@@ -51,9 +56,13 @@ export function getReleaseGateStages(): ReleaseGateStage[] {
     appScriptStage("hooks-smoke", "test:hooks"),
     appScriptStage("recovery-smoke", "test:recovery"),
     appScriptStage("scheduler-smoke", "test:scheduler"),
+    appScriptStage("workflow-smoke", "test:workflow"),
     appScriptStage("worktree-closeout-smoke", "test:worktree-closeout"),
     appScriptStage("mcp-smoke", "test:mcp"),
-    { name: "openspec-validate", command: ["openspec.cmd", "validate", "--all"] },
+    {
+      name: "openspec-validate",
+      command: [openspecCommand, "validate", OPEN_SPEC_CHANGE, "--type", "change"],
+    },
     { name: "artifact-residue-check", kind: "artifact-residue-check" },
   ];
 }

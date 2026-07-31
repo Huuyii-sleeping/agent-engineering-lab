@@ -1,8 +1,8 @@
 import { stdin, stdout } from "node:process";
-import { AgentService } from "../service-api/index.js";
 import { resolveRunningDaemonServiceClient } from "../service-api/daemon-client.js";
 import { createAgentAppRuntime } from "../bootstrap/app-runtime.js";
 import { AgentHost } from "../host/agent-host.js";
+import { createMastraAgentService } from "../runtime/mastra-default-service.js";
 import { writeFrame } from "../tools/mcp-protocol.js";
 
 type JsonRpcId = string | number | null;
@@ -248,7 +248,7 @@ export async function runAgentMcpServer(opts: AgentMcpServerOptions = {}): Promi
     if (!service) {
       const host = opts.host ?? new AgentHost(createAgentAppRuntime());
       await host.initialize();
-      service = new AgentService(host.runtime(), host as AgentHost);
+      service = await createMastraAgentService(host.runtime(), host as AgentHost);
     }
   }
   const reader = new StdioFrameReader();

@@ -1,7 +1,6 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { executeProtectedToolHandler } from "../runtime/tool-runtime.js";
 import { DEFAULT_DELIVERY_SERVICE } from "../services/delivery-service.js";
-import { DEFAULT_MEMORY_SERVICE } from "../services/memory-service.js";
 import {
   runAutonomyMarkActive,
   runAutonomySetOwner,
@@ -112,21 +111,6 @@ const BASE_HANDLERS: Record<string, ToolHandler> = {
   delivery_validate: async (args) =>
     DEFAULT_DELIVERY_SERVICE.runValidateTool(args.changed_paths, args.mode),
   delivery_report: async () => DEFAULT_DELIVERY_SERVICE.runReportTool(),
-  memory_add: async (args) =>
-    DEFAULT_MEMORY_SERVICE.runAdd(args.source, args.type, args.tags, args.content, args.confidence),
-  memory_search: async (args) =>
-    DEFAULT_MEMORY_SERVICE.runSearch(args.query, args.limit, args.layer, args.type),
-  memory_list: async (args) => DEFAULT_MEMORY_SERVICE.runList(args.layer, args.limit),
-  memory_explain: async (args) =>
-    DEFAULT_MEMORY_SERVICE.runExplain(args.query, args.limit, args.layer, args.type),
-  memory_doctor: async () => DEFAULT_MEMORY_SERVICE.runDoctor(),
-  memory_rebuild_index: async () => DEFAULT_MEMORY_SERVICE.runRebuildIndex(),
-  agent_memory_snapshot: async (args) =>
-    DEFAULT_MEMORY_SERVICE.runAgentSnapshot(args.agent_type, args.scope, args.action),
-  memory_migrate_jsonl: async (args) => DEFAULT_MEMORY_SERVICE.runMigrateJsonl(args.mode),
-  team_memory_sync: async (args) => DEFAULT_MEMORY_SERVICE.runTeamSync(args.action, args.content),
-  memory_session_summarize: async (args) =>
-    DEFAULT_MEMORY_SERVICE.runSessionSummarize(args.session_id, args.summary),
   list_skills: async () => runListSkills(),
   load_skill: async (args) => runLoadSkill(args.name, args.session_id),
   todo: async (args) => runTodo(args.items),

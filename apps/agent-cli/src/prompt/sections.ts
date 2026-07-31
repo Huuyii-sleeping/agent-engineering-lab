@@ -18,47 +18,12 @@ function joinLines(values: string[]): string {
   return normalizeList(values).join("\n");
 }
 
-const AGENT_MEMORY_INDEX_MAX_LINES = 120;
-const AGENT_MEMORY_INDEX_MAX_CHARS = 12_000;
-
 function estimateTokens(value: string): number {
   const normalized = normalizeText(value);
   if (!normalized) {
     return 0;
   }
   return Math.max(1, Math.ceil(normalized.length / 4));
-}
-
-function boundAgentMemoryIndex(value: string): {
-  content: string;
-  notice: string | null;
-} {
-  const normalized = normalizeText(value);
-  if (!normalized) {
-    return { content: "", notice: null };
-  }
-  const lines = normalized.split(/\r?\n/);
-  let content = lines.slice(0, AGENT_MEMORY_INDEX_MAX_LINES).join("\n");
-  if (content.length > AGENT_MEMORY_INDEX_MAX_CHARS) {
-    content = content.slice(0, AGENT_MEMORY_INDEX_MAX_CHARS).trimEnd();
-  }
-  const truncated = lines.length > AGENT_MEMORY_INDEX_MAX_LINES || normalized.length > content.length;
-  if (!truncated) {
-    return { content: normalized, notice: null };
-  }
-  const retainedLines = Math.min(lines.length, AGENT_MEMORY_INDEX_MAX_LINES);
-  return {
-    content,
-    notice: [
-      "Agent memory index truncated:",
-      `originalLines=${lines.length}`,
-      `originalChars=${normalized.length}`,
-      `retainedLines=${retainedLines}`,
-      `retainedChars=${content.length}`,
-      `lineLimit=${AGENT_MEMORY_INDEX_MAX_LINES}`,
-      `charLimit=${AGENT_MEMORY_INDEX_MAX_CHARS}`,
-    ].join(" "),
-  };
 }
 
 function createPromptSection(input: {
@@ -168,43 +133,6 @@ export function buildStablePromptSections(
     }),
   );
 
-  const agentMemory = source.agentMemory;
-  if (agentMemory && agentMemory.mode !== "disabled") {
-    const lines = [
-      `agentType=${agentMemory.agentType}`,
-      `scope=${agentMemory.scope}`,
-      `mode=${agentMemory.mode}`,
-      `memoryDir=${agentMemory.memoryDir}`,
-      `entrypoint=${agentMemory.entrypoint}`,
-      "",
-      "Use this agent memory as durable role-specific guidance. Read it before making role-specific decisions.",
-      agentMemory.mode === "read_write"
-        ? "When durable role knowledge changes, update files only under memoryDir."
-        : "Treat this memory as read-only; do not modify files under memoryDir.",
-    ];
-    const currentIndex = normalizeText(agentMemory.currentIndex ?? "");
-    if (currentIndex) {
-      const boundedIndex = boundAgentMemoryIndex(currentIndex);
-      lines.push("", "Current index:", boundedIndex.content);
-      if (boundedIndex.notice) {
-        lines.push("", boundedIndex.notice);
-      }
-    }
-    pushSection(
-      sections,
-      createPromptSection({
-        id: "agent_memory",
-        title: "Agent Memory",
-        content: joinLines(lines),
-        kind: "agent_memory",
-        source: "agent_memory",
-        cachePolicy: "cacheable",
-        priority: 60,
-        inclusionReason: "agent definition declares durable memory",
-      }),
-    );
-  }
-
   return sections;
 }
 
@@ -261,28 +189,19 @@ export function createRuntimeReminderSection(message: string): PromptSection | n
 }
 
 export function buildDynamicPromptSections(
-  input:
-    | {
-        userContext?: string | null;
-        memoryContext?: string | null;
-        compactSummary?: string | null;
-        dynamicMessages?: string[];
-      }
-    | string
-    | null = {},
-  legacyDynamicMessages?: string[],
+  input: {
+    userContext?: string | null;
+    memoryContext?: string | null;
+    compactSummary?: string | null;
+    dynamicMessages?: string[];
+  } = {},
 ): PromptSection[] {
   const sections: PromptSection[] = [];
-  const normalizedInput =
-    typeof input === "string" || input === null
-      ? { memoryContext: input, dynamicMessages: legacyDynamicMessages }
-      : input;
+  pushSection(sections, createUserContextSection(input.userContext));
+  pushSection(sections, createMemoryContextSection(input.memoryContext));
+  pushSection(sections, createCompactSummarySection(input.compactSummary));
 
-  pushSection(sections, createUserContextSection(normalizedInput.userContext));
-  pushSection(sections, createMemoryContextSection(normalizedInput.memoryContext));
-  pushSection(sections, createCompactSummarySection(normalizedInput.compactSummary));
-
-  for (const message of normalizeList(normalizedInput.dynamicMessages ?? [])) {
+  for (const message of normalizeList(input.dynamicMessages ?? [])) {
     pushSection(sections, createRuntimeReminderSection(message));
   }
 

@@ -240,12 +240,12 @@ export class SecurityManager {
   async consumeApproval(toolName: string, args: Record<string, unknown>): Promise<boolean> {
     const all = await this.loadApprovals();
     const scopeHash = stableScopeHash(toolName, args);
-    const legacyScope = JSON.stringify({ toolName, args });
+    const unhashedScope = JSON.stringify({ toolName, args });
     const nowMs = Date.now();
     const item = all.find(
       (row) =>
         row.action === toolName &&
-        ((row.scopeHash && row.scopeHash === scopeHash) || (!row.scopeHash && row.scope === legacyScope)) &&
+        ((row.scopeHash && row.scopeHash === scopeHash) || (!row.scopeHash && row.scope === unhashedScope)) &&
         row.status === "approved" &&
         row.expiresAt > nowMs,
     );

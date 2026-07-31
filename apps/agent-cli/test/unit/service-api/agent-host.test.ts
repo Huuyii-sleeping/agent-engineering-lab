@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import { createAgentAppRuntime, type AgentAppRuntimeDeps } from "../../../src/bootstrap/app-runtime.js";
 import { AgentHost } from "../../../src/host/agent-host.js";
 import { createAgentSessionRecord } from "../../../src/service-api/sessions.js";
 import { SessionStore } from "../../../src/service-api/session-store.js";
@@ -11,12 +11,9 @@ import type { StaticPromptSource } from "../../../src/prompt/types.js";
 import type { ToolServiceLike } from "../../../src/tools/service.js";
 import type { DeliveryServiceLike } from "../../../src/services/delivery-service.js";
 import type { HookServiceLike } from "../../../src/services/hook-service.js";
-import type { MemoryServiceLike } from "../../../src/services/memory-service.js";
 import type { ModelPolicyServiceLike } from "../../../src/services/model-policy-service.js";
 import type { ObservabilityServiceLike } from "../../../src/services/observability-service.js";
 import type { NotificationServiceLike, RuntimeCoordinationServiceLike } from "../../../src/services/index.js";
-import type { AgentRuntimeState, QueryEngineLike } from "../../../src/runtime/query-types.js";
-import type { AgentAppRuntimeDeps } from "../../../src/bootstrap/app-runtime.js";
 
 const PROMPT_SOURCE: StaticPromptSource = {
   core: "test-core",
@@ -58,20 +55,6 @@ function createHookService(): HookServiceLike {
       executed: 0,
       errors: [],
     }),
-  };
-}
-
-function createMemoryService(): MemoryServiceLike {
-  return {
-    autoExtract: async () => undefined,
-    buildInjectionForQuery: async () => ({
-      content: null,
-      usedEntries: 0,
-      estimatedTokens: 0,
-    }),
-    runAdd: async () => "",
-    runSearch: async () => "",
-    runList: async () => "",
   };
 }
 
@@ -119,17 +102,7 @@ function createRuntimeCoordinationService(): RuntimeCoordinationServiceLike {
   return {
     runAutonomyTick: async () => ({ ok: true, action: "idle" }),
     tickScheduler: async () => undefined,
-  };
-}
-
-function createQueryEngine(): QueryEngineLike {
-  return {
-    run: async ({ messages, runtimeState }: {
-      messages: ChatCompletionMessageParam[];
-      runtimeState: AgentRuntimeState;
-    }) => {
-      messages.push({ role: "assistant", content: `reply:${runtimeState.sessionId}` });
-    },
+    peekScheduledPromptCount: async () => 0,
   };
 }
 
@@ -137,36 +110,22 @@ function createDeps(): AgentAppRuntimeDeps {
   const toolService = createToolService();
   const deliveryService = createDeliveryService();
   const hookService = createHookService();
-  const memoryService = createMemoryService();
   const notificationService = createNotificationService();
   const modelPolicyService = createModelPolicyService();
   const observabilityService = createObservabilityService();
   const runtimeCoordinationService = createRuntimeCoordinationService();
-  const queryEngine = createQueryEngine();
-  return {
+  return createAgentAppRuntime({
     client: {} as OpenAI,
     model: "fake-model",
     promptSource: PROMPT_SOURCE,
     toolService,
     deliveryService,
     hookService,
-    memoryService,
     notificationService,
     modelPolicyService,
     observabilityService,
     runtimeCoordinationService,
-    runtimeServices: {
-      toolService,
-      deliveryService,
-      hookService,
-      memoryService,
-      notificationService,
-      modelPolicyService,
-      observabilityService,
-      runtimeCoordinationService,
-    },
-    queryEngine,
-  };
+  });
 }
 
 afterEach(async () => {

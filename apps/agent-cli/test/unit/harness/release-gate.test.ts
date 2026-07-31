@@ -12,6 +12,8 @@ import {
 describe("harness/release-gate", () => {
   it("defines named local production validation stages", () => {
     const stages = getReleaseGateStages();
+    const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+    const openspecCommand = process.platform === "win32" ? "openspec.cmd" : "openspec";
 
     expect(stages.map((stage) => stage.name)).toEqual([
       "lint",
@@ -29,6 +31,7 @@ describe("harness/release-gate", () => {
       "hooks-smoke",
       "recovery-smoke",
       "scheduler-smoke",
+      "workflow-smoke",
       "worktree-closeout-smoke",
       "mcp-smoke",
       "openspec-validate",
@@ -36,20 +39,22 @@ describe("harness/release-gate", () => {
     ]);
 
     expect(stages.find((stage) => stage.name === "harness")?.command).toEqual([
-      "pnpm.cmd",
+      pnpmCommand,
       "--dir",
       "apps/agent-cli",
       "run",
       "test:harness",
     ]);
     expect(stages.find((stage) => stage.name === "build")?.command).toEqual([
-      "pnpm.cmd",
+      pnpmCommand,
       "build",
     ]);
     expect(stages.find((stage) => stage.name === "openspec-validate")?.command).toEqual([
-      "openspec.cmd",
+      openspecCommand,
       "validate",
-      "--all",
+      "migrate-agent-runtime-to-mastra",
+      "--type",
+      "change",
     ]);
   });
 
@@ -65,6 +70,7 @@ describe("harness/release-gate", () => {
       ".observability",
       ".security",
       ".runtime",
+      ".sessions",
     ]);
   });
 

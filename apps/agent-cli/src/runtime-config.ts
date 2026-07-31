@@ -27,12 +27,6 @@ type RuntimeConfig = {
   sessionRetentionDays: number;
   transcriptRetentionDays: number;
   promptDumpRetentionDays: number;
-  memoryShortTermLimit: number;
-  memoryShortTermRetentionDays: number;
-  memoryLongTermRetentionDays: number;
-  memorySearchDefaultLimit: number;
-  memoryInjectTopK: number;
-  memoryInjectMaxTokens: number;
   observabilityFieldMaxChars: number;
   hookTimeoutMs: number;
   mcpStartupTimeoutMs: number;
@@ -138,12 +132,6 @@ export const RUNTIME_CONFIG: RuntimeConfig = {
   sessionRetentionDays: readInt("AGENT_SESSION_RETENTION_DAYS", 14, 1),
   transcriptRetentionDays: readInt("AGENT_TRANSCRIPT_RETENTION_DAYS", 7, 1),
   promptDumpRetentionDays: readInt("AGENT_PROMPT_DUMP_RETENTION_DAYS", 7, 1),
-  memoryShortTermLimit: readInt("AGENT_MEMORY_SHORT_TERM_LIMIT", 40, 1),
-  memoryShortTermRetentionDays: readInt("AGENT_MEMORY_SHORT_TERM_RETENTION_DAYS", 14, 1),
-  memoryLongTermRetentionDays: readInt("AGENT_MEMORY_LONG_TERM_RETENTION_DAYS", 90, 1),
-  memorySearchDefaultLimit: readInt("AGENT_MEMORY_SEARCH_DEFAULT_LIMIT", 8, 1),
-  memoryInjectTopK: readInt("AGENT_MEMORY_INJECT_TOP_K", 5, 1),
-  memoryInjectMaxTokens: readInt("AGENT_MEMORY_INJECT_MAX_TOKENS", 700, 100),
   observabilityFieldMaxChars: readInt("AGENT_OBSERVABILITY_FIELD_MAX_CHARS", 400, 40),
   hookTimeoutMs: readInt("AGENT_HOOK_TIMEOUT_MS", 10_000, 100),
   mcpStartupTimeoutMs: readInt("AGENT_MCP_STARTUP_TIMEOUT_MS", 10_000, 100),

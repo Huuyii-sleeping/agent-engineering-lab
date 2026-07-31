@@ -8,7 +8,6 @@ import {
 import {
   type DeliveryServiceLike,
   type HookServiceLike,
-  type MemoryServiceLike,
   type ModelPolicyServiceLike,
   type NotificationServiceLike,
   type ObservabilityServiceLike,
@@ -19,12 +18,6 @@ import {
   type RuntimeServices,
 } from "../services/runtime-services.js";
 import type { StaticPromptSource } from "../prompt/types.js";
-import { QueryEngine } from "../runtime/query-engine.js";
-import type {
-  AgentRuntimeState,
-  PendingApprovalReplay,
-  QueryEngineLike,
-} from "../runtime/query-types.js";
 import type { ToolServiceLike } from "../tools/service.js";
 
 export type AgentAppRuntimeDeps = {
@@ -34,30 +27,14 @@ export type AgentAppRuntimeDeps = {
   toolService: ToolServiceLike;
   deliveryService: DeliveryServiceLike;
   hookService: HookServiceLike;
-  memoryService: MemoryServiceLike;
   notificationService: NotificationServiceLike;
   modelPolicyService: ModelPolicyServiceLike;
   observabilityService: ObservabilityServiceLike;
   runtimeCoordinationService: RuntimeCoordinationServiceLike;
   runtimeServices: RuntimeServices;
-  queryEngine: QueryEngineLike;
 };
 
 type AgentAppRuntimeOverrides = Partial<AgentAppRuntimeDeps>;
-
-export function createAgentRuntimeState(sessionId: string): AgentRuntimeState {
-  return {
-    sessionId,
-    roundsWithoutTodo: 0,
-    activeTaskId: null,
-    lastMemoryInput: null,
-    roundCounter: 0,
-    touchedPaths: new Set<string>(),
-    wroteWorkspaceFiles: false,
-    pendingApprovalCandidate: null,
-    pendingApprovalReplays: new Map<string, PendingApprovalReplay>(),
-  };
-}
 
 export function createAgentAppRuntime(
   overrides: AgentAppRuntimeOverrides = {},
@@ -73,7 +50,6 @@ export function createAgentAppRuntime(
     toolService: overrides.toolService ?? overrides.runtimeServices?.toolService,
     deliveryService: overrides.deliveryService ?? overrides.runtimeServices?.deliveryService,
     hookService: overrides.hookService ?? overrides.runtimeServices?.hookService,
-    memoryService: overrides.memoryService ?? overrides.runtimeServices?.memoryService,
     notificationService:
       overrides.notificationService ?? overrides.runtimeServices?.notificationService,
     modelPolicyService:
@@ -90,13 +66,5 @@ export function createAgentAppRuntime(
     promptSource,
     ...runtimeServices,
     runtimeServices,
-    queryEngine:
-      overrides.queryEngine ??
-      new QueryEngine({
-        client,
-        model,
-        promptSource,
-        runtimeServices,
-      }),
   };
 }

@@ -40,7 +40,7 @@ async function withWorkspace(): Promise<void> {
 }
 
 describe("config", () => {
-  it("binds configured agent memory into the static prompt source", async () => {
+  it("does not bind legacy Agent Memory files into the static prompt source", async () => {
     await withWorkspace();
     process.env.AGENT_MEMORY_AGENT_TYPE = "Reviewer";
     process.env.AGENT_MEMORY_SCOPE = "project";
@@ -51,14 +51,8 @@ describe("config", () => {
 
     const source = getStaticPromptSource();
 
-    expect(source.agentMemory).toMatchObject({
-      agentType: "reviewer",
-      scope: "project",
-      mode: "read_only",
-      entrypoint: "MEMORY.md",
-    });
-    expect(source.agentMemory?.memoryDir).toContain(".agent");
-    expect(source.agentMemory?.currentIndex).toContain("prefer strict reviews");
+    expect("agentMemory" in source).toBe(false);
+    expect(JSON.stringify(source)).not.toContain("prefer strict reviews");
   });
 
   it("resolves the OpenAI-compatible base URL with legacy alias support", () => {

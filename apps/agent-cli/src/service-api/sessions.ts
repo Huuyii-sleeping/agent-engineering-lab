@@ -1,7 +1,6 @@
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { randomUUID } from "node:crypto";
-import { createAgentRuntimeState } from "../bootstrap/app-runtime.js";
-import type { AgentRuntimeState } from "../runtime/query-types.js";
+import type { RuntimeBinding } from "@orbit/runtime-contracts";
 
 export type AgentSkillBinding = {
   skillId: string;
@@ -16,14 +15,24 @@ export type AgentRuntimeContext = {
   skills: AgentSkillBinding[];
 };
 
+/** Session 内部持久化的 Memory thread 所有权，不进入现有 session HTTP 摘要。 */
+export type AgentSessionMemoryBinding = {
+  ownerId: string;
+  resourceId: string;
+  title?: string;
+  metadata: Record<string, unknown>;
+};
+
 export type AgentSessionRecord = {
   id: string;
   createdAt: number;
   updatedAt: number;
   busy: boolean;
   history: ChatCompletionMessageParam[];
-  runtimeState: AgentRuntimeState;
+  rounds: number;
   agent: AgentRuntimeContext | null;
+  memoryBinding?: AgentSessionMemoryBinding;
+  runtimeBinding?: RuntimeBinding;
 };
 
 export function nowMs(): number {
@@ -89,9 +98,16 @@ export function normalizeAgentRuntimeContext(value: unknown): AgentRuntimeContex
 }
 
 export function createAgentSessionRecord(
-  id = randomUUID(),
+  id: string = randomUUID(),
   timestamp = nowMs(),
   agent: AgentRuntimeContext | null = null,
+  runtimeBinding: RuntimeBinding = {
+    backend: "mastra",
+    adapterVersion: "mastra-agent-v1",
+    runtimeVersion: "1.52.1",
+    selectionReason: "mastra-only runtime",
+    verifiedCapabilities: ["generate", "stream", "sessionMemory"],
+  },
 ): AgentSessionRecord {
   return {
     id,
@@ -99,8 +115,9 @@ export function createAgentSessionRecord(
     updatedAt: timestamp,
     busy: false,
     history: [],
-    runtimeState: createAgentRuntimeState(id),
+    rounds: 0,
     agent,
+    runtimeBinding,
   };
 }
 
@@ -117,8 +134,10 @@ export function summarizeSession(session: AgentSessionRecord): Record<string, un
     updatedAt: session.updatedAt,
     busy: session.busy,
     messageCount: session.history.length,
-    rounds: session.runtimeState.roundCounter,
+    rounds: session.rounds,
     agent: session.agent,
+    runtimeBackend: session.runtimeBinding?.backend,
+    adapterVersion: session.runtimeBinding?.adapterVersion,
   };
 }
 

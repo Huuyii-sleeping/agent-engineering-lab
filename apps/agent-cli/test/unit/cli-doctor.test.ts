@@ -33,7 +33,7 @@ describe("cli-doctor", () => {
     expect(memoryCheck).toMatchObject({
       severity: "pass",
     });
-    expect(memoryCheck?.reason).toContain("reserved_gaps=");
+    expect(memoryCheck?.reason).toBe("Mastra MemoryRuntimePort is the only Agent memory write path");
   });
 
   it("collects runtime status using provided tool metadata", async () => {

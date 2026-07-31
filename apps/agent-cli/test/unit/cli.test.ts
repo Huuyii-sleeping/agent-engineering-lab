@@ -5,7 +5,6 @@ import { describe, expect, it, vi } from "vitest";
 import { renderAsyncCliEvent, runCli, runScheduledRound } from "../../src/cli/index.js";
 import type { InteractiveCliServiceLike } from "../../src/cli/service-adapter.js";
 import { resetCliUiForTest, setCliUiColorEnabled } from "../../src/cli/ui.js";
-import type { AgentRuntimeState } from "../../src/agent-loop.js";
 import type { StaticPromptSource } from "../../src/prompt/types.js";
 
 const PROMPT_SOURCE: StaticPromptSource = {
@@ -14,18 +13,6 @@ const PROMPT_SOURCE: StaticPromptSource = {
   skills: [],
   rules: [],
 };
-
-function createRuntimeState(): AgentRuntimeState {
-  return {
-    sessionId: "test-session",
-    roundsWithoutTodo: 0,
-    activeTaskId: null,
-    lastMemoryInput: null,
-    roundCounter: 0,
-    touchedPaths: new Set<string>(),
-    wroteWorkspaceFiles: false,
-  };
-}
 
 function createOutputCapture(chunks: string[]): Writable {
   return new Writable({
@@ -141,15 +128,18 @@ describe("runScheduledRound", () => {
     let busy = false;
 
     const triggered = await runScheduledRound({
+      service: {
+        chat: vi.fn(async (input) => {
+          history.push({ role: "user", content: String(input.message) });
+          history.push({ role: "assistant", content: "scheduled reply" });
+          return { ok: true, assistant: "scheduled reply" };
+        }),
+      },
+      sessionId: "test-session",
       isAgentBusy: () => busy,
       setAgentBusy: (next) => {
         busy = next;
       },
-      history,
-      runtimeState: createRuntimeState(),
-      client: {} as OpenAI,
-      model: "test-model",
-      promptSource: PROMPT_SOURCE,
       printAsyncEvent: (label, content) => {
         notices.push(`${label}:${content}`);
       },
@@ -157,11 +147,6 @@ describe("runScheduledRound", () => {
         runAutonomyTick: async () => ({}),
         tickScheduler: async () => {},
         peekScheduledPromptCount: async () => 1,
-      },
-      queryEngine: {
-        run: async ({ messages }) => {
-          messages.push({ role: "assistant", content: "scheduled reply" });
-        },
       },
     });
 
@@ -181,13 +166,10 @@ describe("runScheduledRound", () => {
     const notices: string[] = [];
 
     await runScheduledRound({
+      service: { chat: vi.fn(async () => ({ ok: true, assistant: "" })) },
+      sessionId: "test-session",
       isAgentBusy: () => false,
       setAgentBusy: () => {},
-      history: [{ role: "tool", content: "{}" }],
-      runtimeState: createRuntimeState(),
-      client: {} as OpenAI,
-      model: "test-model",
-      promptSource: PROMPT_SOURCE,
       printAsyncEvent: (label, content) => {
         notices.push(`${label}:${content}`);
       },
@@ -195,9 +177,6 @@ describe("runScheduledRound", () => {
         runAutonomyTick: async () => ({}),
         tickScheduler: async () => {},
         peekScheduledPromptCount: async () => 1,
-      },
-      queryEngine: {
-        run: async () => {},
       },
     });
 
@@ -209,15 +188,16 @@ describe("runScheduledRound", () => {
     let busy = false;
 
     const triggered = await runScheduledRound({
+      service: {
+        chat: vi.fn(async () => {
+          throw new Error("scheduler loop failed");
+        }),
+      },
+      sessionId: "test-session",
       isAgentBusy: () => busy,
       setAgentBusy: (next) => {
         busy = next;
       },
-      history: [],
-      runtimeState: createRuntimeState(),
-      client: {} as OpenAI,
-      model: "test-model",
-      promptSource: PROMPT_SOURCE,
       printAsyncEvent: (label, content) => {
         notices.push(`${label}:${content}`);
       },
@@ -225,11 +205,6 @@ describe("runScheduledRound", () => {
         runAutonomyTick: async () => ({}),
         tickScheduler: async () => {},
         peekScheduledPromptCount: async () => 1,
-      },
-      queryEngine: {
-        run: async () => {
-          throw new Error("scheduler loop failed");
-        },
       },
     });
 
@@ -248,7 +223,7 @@ describe("runCli", () => {
     const service = createDaemonCliService();
 
     await runCli({
-      input: Readable.from(["hello daemon\n", "exit\n"]),
+      input: Readable.from(["hello daemon\nexit\n"]),
       output: createOutputCapture(chunks),
       resolveDaemonService: async () => ({
         service,
@@ -269,7 +244,7 @@ describe("runCli", () => {
     const chunks: string[] = [];
 
     await runCli({
-      input: Readable.from(["/sessions\n", "exit\n"]),
+      input: Readable.from(["/sessions\nexit\n"]),
       output: createOutputCapture(chunks),
       resolveDaemonService: async () => {
         throw new Error("boom");

@@ -9,7 +9,7 @@ describe("agent-service-sessions", () => {
   it("creates isolated session records with stable summary shape", () => {
     const session = createAgentSessionRecord("session_1", 1000);
     session.history.push({ role: "user", content: "hello" });
-    session.runtimeState.roundCounter = 2;
+    session.rounds = 2;
 
     expect(session).toMatchObject({
       id: "session_1",
@@ -18,7 +18,6 @@ describe("agent-service-sessions", () => {
       busy: false,
       history: [{ role: "user", content: "hello" }],
     });
-    expect(session.runtimeState.sessionId).toBe("session_1");
     expect(summarizeSession(session)).toEqual({
       id: "session_1",
       createdAt: 1000,
@@ -26,6 +25,9 @@ describe("agent-service-sessions", () => {
       busy: false,
       messageCount: 1,
       rounds: 2,
+      agent: null,
+      runtimeBackend: "mastra",
+      adapterVersion: "mastra-agent-v1",
     });
   });
 

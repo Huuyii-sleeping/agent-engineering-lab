@@ -1,14 +1,17 @@
-import type { Server } from "node:http";
+import { Mastra } from "@mastra/core/mastra";
+import type { RuntimeGateway } from "@orbit/runtime-contracts";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import * as process from "node:process";
 import { afterEach, describe, expect, it } from "vitest";
-import { createAgentHttpServer, type AgentService } from "../../../src/service-api/index.js";
+import { createNestAgentHttpServer } from "../../../src/nest/server.js";
+import type { AgentService } from "../../../src/service-api/index.js";
+import type { AgentServerLike } from "../../../src/service-api/server.js";
 
 let tempDir = "";
 let previousCwd = "";
-const servers: Server[] = [];
+const servers: AgentServerLike[] = [];
 
 async function enterWorkspace(): Promise<void> {
   tempDir = path.join(tmpdir(), `agent-service-governance-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -17,7 +20,7 @@ async function enterWorkspace(): Promise<void> {
   process.chdir(tempDir);
 }
 
-async function listen(server: Server): Promise<string> {
+async function listen(server: AgentServerLike): Promise<string> {
   servers.push(server);
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
@@ -104,7 +107,19 @@ describe("service-api governance endpoints", () => {
       "utf8",
     );
 
-    const baseUrl = await listen(createAgentHttpServer({} as AgentService));
+    const runtimeGateway = {
+      agent: {},
+      workflow: {},
+      tools: {},
+      memory: {},
+    } as RuntimeGateway;
+    const service = {
+      runtimeGateway,
+      workflowRuntime: runtimeGateway.workflow,
+      runtimeInfo: async () => ({ mode: "mastra-only" }),
+      bridgeManifest: () => ({ name: "agent-cli-bridge" }),
+    } as unknown as AgentService;
+    const baseUrl = await listen(await createNestAgentHttpServer(service, { mastra: new Mastra({}) }));
 
     await expect(requestJson(baseUrl, "/audit/events?limit=1&session_id=session_1&category=security")).resolves.toMatchObject({
       status: 200,

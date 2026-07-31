@@ -20,7 +20,7 @@ export class DefaultWorkflowCodeRunner implements WorkflowCodeRunner {
       "const source=Buffer.from(process.argv[1],'base64').toString()",
       "const input=JSON.parse(Buffer.from(process.argv[2],'base64').toString())",
       "const context=vm.createContext({input:structuredClone(input),JSON,Math},{codeGeneration:{strings:false,wasm:false}})",
-      `const result=new vm.Script('(function(input){\"use strict\"; '+source+'\\n})(input)').runInContext(context,{timeout:${Math.max(100, Math.trunc(input.timeoutMs))}})`,
+      `const result=new vm.Script('(function(input){"use strict"; '+source+'\\n})(input)').runInContext(context,{timeout:${Math.max(100, Math.trunc(input.timeoutMs))}})`,
       "process.stdout.write('__ORBIT_RESULT__'+JSON.stringify(result))",
     ].join(";") : [
       "import base64,json,sys",

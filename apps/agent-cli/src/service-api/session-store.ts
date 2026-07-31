@@ -1,25 +1,15 @@
 import { appendFile, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { createAgentRuntimeState } from "../bootstrap/app-runtime.js";
 import { isLocalPersistenceEnabled } from "../runtime-config.js";
-import type { PendingApprovalReplay } from "../runtime/query-types.js";
 import { buildArtifactMetadata, isExpired } from "../security/local-retention.js";
 import { sanitizeAndRedactValue } from "../security/data-hygiene.js";
-import type { AgentRuntimeContext, AgentSessionRecord } from "./sessions.js";
+import type {
+  AgentRuntimeContext,
+  AgentSessionMemoryBinding,
+  AgentSessionRecord,
+} from "./sessions.js";
 import { normalizeAgentRuntimeContext } from "./sessions.js";
-
-type PersistedRuntimeState = {
-  sessionId: string;
-  roundsWithoutTodo: number;
-  activeTaskId: number | null;
-  lastMemoryInput: string | null;
-  roundCounter: number;
-  touchedPaths: string[];
-  wroteWorkspaceFiles: boolean;
-  pendingApprovalCandidate: PendingApprovalReplay | null;
-  pendingApprovalReplays: PendingApprovalReplay[];
-};
 
 type PersistedSessionRecord = {
   id: string;
@@ -27,8 +17,11 @@ type PersistedSessionRecord = {
   updatedAt: number;
   busy: boolean;
   history: AgentSessionRecord["history"];
-  runtimeState: PersistedRuntimeState;
+  rounds?: number;
+  runtimeState?: { roundCounter?: number };
   agent?: AgentRuntimeContext | null;
+  memoryBinding?: AgentSessionMemoryBinding;
+  runtimeBinding?: AgentSessionRecord["runtimeBinding"];
 };
 
 type PersistedSessionEnvelope = {
@@ -54,42 +47,6 @@ function sessionIdFromFilename(fileName: string, extension: ".json" | ".jsonl"):
   return fileName.slice("session_".length, -extension.length);
 }
 
-function toPersistedRuntimeState(session: AgentSessionRecord): PersistedRuntimeState {
-  return {
-    sessionId: session.runtimeState.sessionId,
-    roundsWithoutTodo: session.runtimeState.roundsWithoutTodo,
-    activeTaskId: session.runtimeState.activeTaskId,
-    lastMemoryInput: session.runtimeState.lastMemoryInput,
-    roundCounter: session.runtimeState.roundCounter,
-    touchedPaths: [...session.runtimeState.touchedPaths],
-    wroteWorkspaceFiles: session.runtimeState.wroteWorkspaceFiles,
-    pendingApprovalCandidate: session.runtimeState.pendingApprovalCandidate ?? null,
-    pendingApprovalReplays: [...(session.runtimeState.pendingApprovalReplays?.values() ?? [])],
-  };
-}
-
-function fromPersistedRuntimeState(input: PersistedRuntimeState): AgentSessionRecord["runtimeState"] {
-  const runtimeState = createAgentRuntimeState(input.sessionId);
-  runtimeState.roundsWithoutTodo = Number(input.roundsWithoutTodo ?? 0);
-  runtimeState.activeTaskId =
-    typeof input.activeTaskId === "number" ? input.activeTaskId : null;
-  runtimeState.lastMemoryInput =
-    typeof input.lastMemoryInput === "string" ? input.lastMemoryInput : null;
-  runtimeState.roundCounter = Number(input.roundCounter ?? 0);
-  runtimeState.touchedPaths = new Set(
-    Array.isArray(input.touchedPaths) ? input.touchedPaths.map((item) => String(item)) : [],
-  );
-  runtimeState.wroteWorkspaceFiles = Boolean(input.wroteWorkspaceFiles);
-  runtimeState.pendingApprovalCandidate = input.pendingApprovalCandidate ?? null;
-  runtimeState.pendingApprovalReplays = new Map(
-    (Array.isArray(input.pendingApprovalReplays) ? input.pendingApprovalReplays : []).map((item) => [
-      item.requestId ?? `${item.toolName}:${item.createdAt}`,
-      item,
-    ]),
-  );
-  return runtimeState;
-}
-
 function toPersistedSessionRecord(session: AgentSessionRecord): PersistedSessionRecord {
   return {
     id: session.id,
@@ -97,8 +54,10 @@ function toPersistedSessionRecord(session: AgentSessionRecord): PersistedSession
     updatedAt: session.updatedAt,
     busy: session.busy,
     history: session.history,
-    runtimeState: toPersistedRuntimeState(session),
+    rounds: session.rounds,
     agent: session.agent,
+    memoryBinding: session.memoryBinding,
+    runtimeBinding: session.runtimeBinding,
   };
 }
 
@@ -124,8 +83,15 @@ function fromPersistedSessionRecord(input: PersistedSessionRecord): AgentSession
     updatedAt: input.updatedAt,
     busy: input.busy,
     history: input.history,
-    runtimeState: fromPersistedRuntimeState(input.runtimeState),
+    rounds: Number(input.rounds ?? input.runtimeState?.roundCounter ?? 0),
     agent: normalizeAgentRuntimeContext(input.agent),
+    memoryBinding: input.memoryBinding,
+    runtimeBinding: input.runtimeBinding ?? {
+      backend: "mastra",
+      adapterVersion: "mastra-agent-v1",
+      runtimeVersion: "1.52.1",
+      selectionReason: "mastra-only session restored",
+    },
   };
 }
 

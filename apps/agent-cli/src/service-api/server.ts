@@ -1,21 +1,28 @@
 import * as process from "node:process";
 import { pathToFileURL } from "node:url";
-import type { Server } from "node:http";
-import { AgentService, createAgentHttpServer } from "./index.js";
+import type { AddressInfo } from "node:net";
+import { AgentService } from "./index.js";
 import { createAgentAppRuntime } from "../bootstrap/app-runtime.js";
 import { AgentHost } from "../host/agent-host.js";
 import { resolveAgentHttpPort } from "./config.js";
+import { createNestAgentHttpServer } from "../nest/server.js";
+import { createMastraAgentService } from "../runtime/mastra-default-service.js";
 
-export type AgentServerLike = Pick<
-  Server,
-  "once" | "listen" | "close"
-> &
-  Partial<Pick<Server, "closeAllConnections" | "closeIdleConnections">>;
+/** CLI/daemon 宿主真正需要的最小 HTTP server 生命周期接口。 */
+export type AgentServerLike = {
+  once(event: "error", listener: (error: Error) => void): unknown;
+  once(event: "close", listener: () => void): unknown;
+  listen(port: number, host: string, callback: () => void): unknown;
+  close(callback?: (error?: Error) => void): unknown;
+  closeAllConnections?(): void;
+  closeIdleConnections?(): void;
+  address?(): AddressInfo | string | null;
+};
 
 export type RunServerOptions = {
   service?: AgentService;
   host?: Pick<AgentHost, "initialize" | "runtime">;
-  serverFactory?: (service: AgentService) => AgentServerLike;
+  serverFactory?: (service: AgentService) => AgentServerLike | Promise<AgentServerLike>;
   port?: number;
   output?: NodeJS.WritableStream;
 };
@@ -25,9 +32,11 @@ export async function runServer(options: RunServerOptions = {}): Promise<AgentSe
   if (!service) {
     const host = options.host ?? new AgentHost(createAgentAppRuntime());
     await host.initialize();
-    service = new AgentService(host.runtime(), host as AgentHost);
+    service = await createMastraAgentService(host.runtime(), host as AgentHost);
   }
-  const server = (options.serverFactory ?? createAgentHttpServer)(service);
+  const server = options.serverFactory
+    ? await options.serverFactory(service)
+    : await createNestAgentHttpServer(service, { enableShutdownHooks: true });
   const targetPort = options.port ?? resolveAgentHttpPort();
   const output = options.output ?? process.stdout;
   await new Promise<void>((resolve, reject) => {

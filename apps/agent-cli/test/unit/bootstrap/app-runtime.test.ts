@@ -1,24 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import type OpenAI from "openai";
-import { createAgentAppRuntime, createAgentRuntimeState } from "../../../src/bootstrap/app-runtime.js";
+import { createAgentAppRuntime } from "../../../src/bootstrap/app-runtime.js";
 import type { DeliveryServiceLike } from "../../../src/services/delivery-service.js";
 import type { HookServiceLike } from "../../../src/services/hook-service.js";
-import type { MemoryServiceLike } from "../../../src/services/memory-service.js";
 import type { ModelPolicyServiceLike } from "../../../src/services/model-policy-service.js";
 import type { ObservabilityServiceLike } from "../../../src/services/observability-service.js";
 import type { StaticPromptSource } from "../../../src/prompt/types.js";
 
 describe("bootstrap/app-runtime", () => {
-  it("creates a fresh runtime state for each session", () => {
-    const state = createAgentRuntimeState("session-1");
-
-    expect(state.sessionId).toBe("session-1");
-    expect(state.roundCounter).toBe(0);
-    expect(state.touchedPaths.size).toBe(0);
-    expect(state.wroteWorkspaceFiles).toBe(false);
-  });
-
   it("uses explicit overrides when building app runtime deps", () => {
     const tools = [{ type: "function", function: { name: "echo", parameters: { type: "object", properties: {} } } }] as ChatCompletionTool[];
     const toolService = {
@@ -47,17 +37,6 @@ describe("bootstrap/app-runtime", () => {
         errors: [],
       })),
     };
-    const memoryService: MemoryServiceLike = {
-      autoExtract: vi.fn(async () => undefined),
-      buildInjectionForQuery: vi.fn(async () => ({
-        content: null,
-        usedEntries: 0,
-        estimatedTokens: 0,
-      })),
-      runAdd: vi.fn(async () => ""),
-      runSearch: vi.fn(async () => ""),
-      runList: vi.fn(async () => ""),
-    };
     const modelPolicyService: ModelPolicyServiceLike = {
       selectModel: vi.fn(async () => ({
         role: "coding",
@@ -85,8 +64,6 @@ describe("bootstrap/app-runtime", () => {
         payload: {},
       })),
     };
-    const queryEngine = { run: vi.fn() };
-
     const runtime = createAgentAppRuntime({
       client: {} as OpenAI,
       model: "test-model",
@@ -94,10 +71,8 @@ describe("bootstrap/app-runtime", () => {
       toolService,
       deliveryService,
       hookService,
-      memoryService,
       modelPolicyService,
       observabilityService,
-      queryEngine,
     });
 
     expect(runtime.model).toBe("test-model");
@@ -105,9 +80,7 @@ describe("bootstrap/app-runtime", () => {
     expect(runtime.toolService).toBe(toolService);
     expect(runtime.deliveryService).toBe(deliveryService);
     expect(runtime.hookService).toBe(hookService);
-    expect(runtime.memoryService).toBe(memoryService);
     expect(runtime.modelPolicyService).toBe(modelPolicyService);
     expect(runtime.observabilityService).toBe(observabilityService);
-    expect(runtime.queryEngine).toBe(queryEngine);
   });
 });

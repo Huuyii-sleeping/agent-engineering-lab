@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compileWorkflow, type WorkflowIRNode } from "@orbit/workflow-core";
+import type { WorkflowIRNode } from "@orbit/workflow-core";
 import { createBasicWorkflowExecutors } from "../../../../src/workflows/executors/basic.js";
 import { WorkflowVariableContext } from "../../../../src/workflows/context.js";
 import type { WorkflowExecutorContext } from "../../../../src/workflows/executor-registry.js";

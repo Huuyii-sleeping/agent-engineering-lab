@@ -79,73 +79,19 @@ describe("buildPromptEnvelope", () => {
     ]);
   });
 
-  it("adds agent memory guidance when an agent definition declares memory", () => {
+  it("keeps Agent memory out of the static prompt boundary", () => {
     const result = buildPromptEnvelope({
       core: "core prompt",
       tools: [],
       skills: [],
       rules: [],
-      memoryContext: null,
-      dynamicMessages: [],
-      agentMemory: {
-        agentType: "reviewer",
-        scope: "project",
-        mode: "read_write",
-        memoryDir: ".agent/agent-memory/reviewer",
-        entrypoint: "MEMORY.md",
-        currentIndex: "# Memory Index\n\n- prefer strict reviews",
-      },
+      memoryContext: "<memory_context>thread history belongs to Mastra Memory</memory_context>",
     });
 
-    expect(result.primarySystemPrompt).toContain("## Agent Memory");
-    expect(result.primarySystemPrompt).toContain("agentType=reviewer");
-    expect(result.primarySystemPrompt).toContain("scope=project");
-    expect(result.primarySystemPrompt).toContain(".agent/agent-memory/reviewer");
-    expect(result.primarySystemPrompt).toContain("prefer strict reviews");
-    expect(result.stableSections.map((section) => section.id)).toContain("agent_memory");
-  });
-
-  it("bounds long agent memory indexes in the stable prompt", () => {
-    const longIndex = Array.from({ length: 140 }, (_, index) => `line-${index + 1}`).join("\n");
-
-    const result = buildPromptEnvelope({
-      core: "core prompt",
-      tools: [],
-      skills: [],
-      rules: [],
-      agentMemory: {
-        agentType: "reviewer",
-        scope: "project",
-        mode: "read_only",
-        memoryDir: ".agent/agent-memory/reviewer",
-        entrypoint: "MEMORY.md",
-        currentIndex: longIndex,
-      },
-    });
-
-    expect(result.primarySystemPrompt).toContain("line-120");
-    expect(result.primarySystemPrompt).not.toContain("line-121");
-    expect(result.primarySystemPrompt).toContain("Agent memory index truncated");
-    expect(result.primarySystemPrompt).toContain("retainedLines=120");
-  });
-
-  it("keeps short agent memory indexes unchanged", () => {
-    const result = buildPromptEnvelope({
-      core: "core prompt",
-      tools: [],
-      skills: [],
-      rules: [],
-      agentMemory: {
-        agentType: "reviewer",
-        scope: "project",
-        mode: "read_only",
-        memoryDir: ".agent/agent-memory/reviewer",
-        entrypoint: "MEMORY.md",
-        currentIndex: "# Memory Index\n\n- prefer strict reviews",
-      },
-    });
-
-    expect(result.primarySystemPrompt).toContain("# Memory Index\n\n- prefer strict reviews");
-    expect(result.primarySystemPrompt).not.toContain("Agent memory index truncated");
+    expect(result.primarySystemPrompt).toBe("## Core\ncore prompt");
+    expect(result.primarySystemPrompt).not.toContain("Agent Memory");
+    expect(result.supplementalSystemMessages).toEqual([
+      "<memory_context>thread history belongs to Mastra Memory</memory_context>",
+    ]);
   });
 });

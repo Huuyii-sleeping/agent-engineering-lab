@@ -4,6 +4,7 @@ import { WorkflowExecutorRegistry } from "../executor-registry.js";
 import { createBasicWorkflowExecutors, type WorkflowKnowledgeService } from "./basic.js";
 import { CodeWorkflowExecutor, type WorkflowCodeRunner } from "./code.js";
 import { HttpWorkflowExecutor, type WorkflowHttpClient } from "./http.js";
+import { HumanApprovalWorkflowExecutor } from "./human-approval.js";
 import { LlmWorkflowExecutor, type WorkflowLlmService } from "./llm.js";
 import { ToolWorkflowExecutor } from "./tool.js";
 
@@ -23,6 +24,7 @@ export function createBuiltinWorkflowExecutorRegistry(dependencies: BuiltinWorkf
   createBasicWorkflowExecutors(dependencies.knowledgeService).forEach((executor) => registry.register(executor));
   if (dependencies.llmService) registry.register(new LlmWorkflowExecutor(dependencies.llmService));
   if (dependencies.toolService) registry.register(new ToolWorkflowExecutor(dependencies.toolService));
+  registry.register(new HumanApprovalWorkflowExecutor());
   registry.register(new HttpWorkflowExecutor(dependencies.httpClient));
   registry.register(new CodeWorkflowExecutor(dependencies.codeRunner));
   return registry;

@@ -45,7 +45,7 @@ async function main(): Promise<void> {
     const { runDeliveryValidation } = await import("../../src/delivery/index.js");
     const report = await runDeliveryValidation({
       mode: "auto",
-      changedPaths: ["apps/agent-cli/src/agent-loop.ts"],
+      changedPaths: ["apps/agent-cli/src/runtime/mastra-default-service.ts"],
     });
 
     assert(report.summary.status === "passed", "delivery validation should pass");

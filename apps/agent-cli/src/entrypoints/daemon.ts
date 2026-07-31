@@ -3,6 +3,7 @@ import { createAgentAppRuntime } from "../bootstrap/app-runtime.js";
 import { AgentHost } from "../host/agent-host.js";
 import { AgentService } from "../service-api/index.js";
 import { runServer, type AgentServerLike } from "../service-api/server.js";
+import { createMastraAgentService } from "../runtime/mastra-default-service.js";
 import { DaemonLock } from "./daemon-lock.js";
 
 type DaemonHost = {
@@ -148,7 +149,10 @@ export async function runDaemon(
         if (!activeHost.runtime) {
           throw new Error("daemon host runtime is required to start the HTTP service");
         }
-        const service = new AgentService(activeHost.runtime(), activeHost as AgentHost);
+        const service = await createMastraAgentService(
+          activeHost.runtime(),
+          activeHost as AgentHost,
+        );
         return runServer({ service, output: activeOutput });
       });
     const server = await startHttpServer({ host, output, errorOutput });

@@ -116,19 +116,19 @@ export function buildUserDataGovernanceReport(): UserDataGovernanceReport {
         boundary: "local_only",
         defaultState: "default_on",
         summary:
-          "Requests combine user input, session history, tool results, memory context, dynamic system messages, and compact summaries through one local runtime pipeline.",
+          "Requests combine user input, Mastra thread history, Tool results, and stable system instructions through one runtime pipeline.",
         sources: [
           "latest user prompt",
           "session history",
           "tool results",
-          "memory_context",
+          "Mastra Memory thread history",
           "dynamic system messages",
           "compact transcript summaries",
         ],
         uses: [
           "assemble model requests",
           "keep multi-round context coherent",
-          "inject relevant runtime reminders and memory context",
+          "reuse isolated resource/thread history",
         ],
         retention:
           "Primarily in-memory during the active session; if session persistence or compact snapshots are used, the local retention contracts apply.",
@@ -174,23 +174,20 @@ export function buildUserDataGovernanceReport(): UserDataGovernanceReport {
         boundary: "local_only",
         defaultState: "default_on",
         summary:
-          "Short-term and long-term local memory exist, and the runtime can auto-extract and auto-inject memory unless the privacy posture suppresses that automation.",
+          "Agent history is stored by Mastra Memory under an ownership-checked resource/thread mapping.",
         sources: [
-          ".memory/short_term.jsonl",
-          ".memory/long_term.jsonl",
+          "Mastra storage namespace",
+          "MemoryRuntimePort thread/message APIs",
           "memory_search / memory_list / memory_add",
         ],
         uses: [
-          "recover preferences and prior decisions across sessions",
-          "inject relevant memory_context before model requests",
+          "continue conversations within the same owned thread",
+          "query and append messages through the same runtime port",
         ],
-        retention: [
-          formatContract("memory_short_term", "short_term"),
-          formatContract("memory_long_term", "long_term"),
-        ].join(" | "),
-        exportDelete: "Memory is local query-only storage with explicit delete semantics and no team sync.",
+        retention: "Memory follows the configured Mastra storage provider and runtime-root cleanup policy.",
+        exportDelete: "MemoryRuntimePort provides owned thread query and explicit delete semantics.",
         notes: [
-          "Shared team memory and team memory sync remain reserved gaps.",
+          "Observational Memory remains disabled in the first production release.",
         ],
       },
       {

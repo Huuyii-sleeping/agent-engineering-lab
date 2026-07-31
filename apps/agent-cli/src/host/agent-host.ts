@@ -97,6 +97,17 @@ export class AgentHost {
     return session;
   }
 
+  /** 使用产品指定的 thread/session id 创建 session。 */
+  createSessionWithId(sessionId: string, agent: AgentRuntimeContext | null = null): AgentSessionRecord {
+    if (this.sessions.has(sessionId)) {
+      throw new Error(`session already exists: ${sessionId}`);
+    }
+    const session = createAgentSessionRecord(sessionId, undefined, agent);
+    this.sessions.set(session.id, session);
+    this.emitEvent("session.created", { session: summarizeSession(session) });
+    return session;
+  }
+
   async createSession(agent: AgentRuntimeContext | null = null): Promise<AgentSessionRecord> {
     const session = this.createSessionSync(agent);
     await this.sessionStore.save(session);
@@ -106,5 +117,12 @@ export class AgentHost {
   async persistSession(session: AgentSessionRecord): Promise<void> {
     this.sessions.set(session.id, session);
     await this.sessionStore.save(session);
+  }
+
+  /** 删除 Memory thread 对应的 session 及持久化记录。 */
+  async deleteSession(sessionId: string): Promise<boolean> {
+    const existed = this.sessions.delete(sessionId);
+    const persisted = await this.sessionStore.delete(sessionId);
+    return existed || persisted;
   }
 }

@@ -6,8 +6,9 @@ import type OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { AgentService } from "../service-api/index.js";
 import { resolveRunningDaemonServiceClient } from "../service-api/daemon-client.js";
-import { createAgentAppRuntime, type AgentAppRuntimeDeps } from "../bootstrap/app-runtime.js";
+import { createAgentAppRuntime } from "../bootstrap/app-runtime.js";
 import { AgentHost } from "../host/agent-host.js";
+import { createMastraAgentService } from "../runtime/mastra-default-service.js";
 import { dispatchCliCommand } from "../cli/commands.js";
 import { completeCliLine } from "../cli/completion.js";
 import { CliComposerStore } from "../cli/composer.js";
@@ -515,27 +516,6 @@ export function renderTerminalTuiDashboard(state: TerminalTuiState): string {
   ].join("\n");
 }
 
-function replaceAgentServiceRuntime(
-  service: TerminalTuiServiceLike,
-  runtime: AgentAppRuntimeDeps,
-): void {
-  Object.assign(service as Record<string, unknown>, {
-    client: runtime.client,
-    model: runtime.model,
-    promptSource: runtime.promptSource,
-    toolService: runtime.toolService,
-    deliveryService: runtime.deliveryService,
-    hookService: runtime.hookService,
-    memoryService: runtime.memoryService,
-    notificationService: runtime.notificationService,
-    modelPolicyService: runtime.modelPolicyService,
-    observabilityService: runtime.observabilityService,
-    runtimeCoordinationService: runtime.runtimeCoordinationService,
-    runtimeServices: runtime.runtimeServices,
-    queryEngine: runtime.queryEngine,
-  });
-}
-
 async function captureConsoleOutput<T>(
   fn: () => Promise<T>,
 ): Promise<{ result: T; logs: string[] }> {
@@ -948,6 +928,7 @@ export type TerminalTuiOptions = {
 
 export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<void> {
   let service = opts.service;
+  let embeddedHost: AgentHost | null = null;
   let startupIssue: Error | null = null;
   let attachNotice: string | null = null;
   if (!service) {
@@ -969,23 +950,30 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
     }
     if (opts.host && !service) {
       await opts.host.initialize();
-      service = new AgentService(opts.host.runtime(), opts.host as AgentHost);
+      const runtime = opts.host.runtime();
+      embeddedHost = opts.host instanceof AgentHost ? opts.host : new AgentHost(runtime);
+      if (embeddedHost !== opts.host) await embeddedHost.initialize();
+      service = await createMastraAgentService(runtime, embeddedHost);
     } else if (!service) {
       try {
-        service = new AgentService(createAgentAppRuntime());
+        const runtime = createAgentAppRuntime();
+        embeddedHost = new AgentHost(runtime);
+        await embeddedHost.initialize();
+        service = await createMastraAgentService(runtime, embeddedHost);
       } catch (error) {
         if (
           error instanceof Error &&
           error.message.includes("Missing environment variable: MODEL_ID")
         ) {
           startupIssue = error;
-          service = new AgentService(
-            createAgentAppRuntime({
-              client: {} as OpenAI,
-              model: "unset-model",
-              promptSource: getStaticPromptSource(),
-            }),
-          );
+          const runtime = createAgentAppRuntime({
+            client: {} as OpenAI,
+            model: "unset-model",
+            promptSource: getStaticPromptSource(),
+          });
+          embeddedHost = new AgentHost(runtime);
+          await embeddedHost.initialize();
+          service = await createMastraAgentService(runtime, embeddedHost);
         } else {
           throw error;
         }
@@ -995,6 +983,10 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
   if (!service) {
     throw new Error("terminal tui service unavailable");
   }
+  const currentService = (): TerminalTuiServiceLike => {
+    if (!service) throw new Error("terminal tui service unavailable");
+    return service;
+  };
   const input = opts.input ?? stdin;
   const output = opts.output ?? stdout;
   const composer = new CliComposerStore();
@@ -1017,21 +1009,19 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
   let shortcutBusy = false;
 
   const setModel = async (model: string): Promise<boolean> => {
-    if (!(service instanceof AgentService)) {
+    if (!(service instanceof AgentService) || !embeddedHost) {
       return false;
     }
     try {
       process.env.MODEL_ID = model;
       currentModel = model;
       startupIssue = null;
-      replaceAgentServiceRuntime(
-        service,
-        createAgentAppRuntime({
-          client: createClient(),
-          model,
-          promptSource: getStaticPromptSource(),
-        }),
-      );
+      const runtime = createAgentAppRuntime({
+        client: createClient(),
+        model,
+        promptSource: getStaticPromptSource(),
+      });
+      service = await createMastraAgentService(runtime, embeddedHost);
       return true;
     } catch {
       return false;
@@ -1054,7 +1044,7 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
   const buildPaletteContext = async (): Promise<CliPaletteContext> => {
     const permissions = await collectCliPermissionSnapshot();
     return {
-      sessions: service.listSessions().map((session) => ({
+      sessions: currentService().listSessions().map((session) => ({
         id: session.id,
         messageCount: session.history.length,
         busy: session.busy,
@@ -1092,12 +1082,12 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
     preservePrompt = false,
     lineEditor?: { line?: string; write(input: string): void },
   ) => {
-    const sessions = service.listSessions();
+    const sessions = currentService().listSessions();
     const activeSessionIndex = Math.max(
       0,
       sessions.findIndex((session) => session.id === activeSessionId),
     );
-    const tools = await service.toolsMetadata();
+    const tools = await currentService().toolsMetadata();
     const draftPreview = composer.preview(activeSessionId);
     const activeTranscriptSession =
       sessions.find((session) => session.id === activeSessionId) ?? sessions.at(-1);
@@ -1110,7 +1100,7 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
       activeSessionId,
       sessionCount: sessions.length,
       bridgeEndpoint: String(
-        (service.bridgeManifest().endpoints as { events?: unknown } | undefined)?.events ??
+        (currentService().bridgeManifest().endpoints as { events?: unknown } | undefined)?.events ??
           "/events",
       ),
       toolMetadata: tools,
@@ -1227,7 +1217,7 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
     output,
     completer: (line: string) =>
       completeCliLine(line, {
-        sessions: service.listSessions().map((session) => ({
+        sessions: currentService().listSessions().map((session) => ({
           id: session.id,
           messageCount: session.history.length,
           busy: session.busy,
@@ -1236,8 +1226,8 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
         helpTopics: listCliHelpTopics(),
         transcriptEntryCount:
           (
-            service.listSessions().find((session) => session.id === activeSessionId) ??
-            service.listSessions().at(-1)
+            currentService().listSessions().find((session) => session.id === activeSessionId) ??
+            currentService().listSessions().at(-1)
           )?.history.length ?? 0,
         paletteEntryCount: paletteStore.lastCount(activeSessionId),
         model: currentModel,
@@ -1327,7 +1317,7 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
           }
           const result = await handleTerminalTuiCommand({
             line: shortcut.command,
-            service,
+            service: currentService(),
             activeSessionId,
             model: currentModel,
             workflow: currentWorkflow,
@@ -1369,7 +1359,7 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
         }
         const result = await handleTerminalTuiCommand({
           line: selected.command,
-          service,
+          service: currentService(),
           activeSessionId,
           model: currentModel,
           workflow: currentWorkflow,
@@ -1400,7 +1390,7 @@ export async function runTerminalTui(opts: TerminalTuiOptions = {}): Promise<voi
       }
       const result = await handleTerminalTuiCommand({
         line,
-        service,
+        service: currentService(),
         activeSessionId,
         model: currentModel,
         workflow: currentWorkflow,
